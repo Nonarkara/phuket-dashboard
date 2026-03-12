@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: geopolitics-dashboard
+    name: phuket-dashboard
     runtime: node
     plan: free
     region: oregon
