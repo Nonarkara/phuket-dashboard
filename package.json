@@ -1,0 +1,50 @@
+{
+  "name": "phuket-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@deck.gl/aggregation-layers": "^9.2.11",
+    "@deck.gl/core": "^9.2.11",
+    "@deck.gl/geo-layers": "^9.2.11",
+    "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/mapbox": "^9.2.11",
+    "@deck.gl/react": "^9.2.11",
+    "@luma.gl/core": "9.2.6",
+    "@luma.gl/engine": "9.2.6",
+    "@luma.gl/webgl": "9.2.6",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/mapbox-gl": "^3.4.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "axios": "^1.13.6",
+    "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
+    "deck.gl": "^9.2.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "framer-motion": "^12.35.2",
+    "lucide-react": "^0.577.0",
+    "mapbox-gl": "^3.19.1",
+    "next": "16.1.6",
+    "pg": "^8.20.0",
+    "postcss": "^8.5.8",
+    "react": "19.2.3",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "19.2.3",
+    "react-map-gl": "^8.1.0",
+    "redis": "^5.11.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
