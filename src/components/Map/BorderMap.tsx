@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import dynamic from "next/dynamic";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DeckGL = dynamic(() => (import("@deck.gl/react") as any).then((m: any) => m.default || m.DeckGL), { ssr: false }) as any;
 import {
   CloudRain,
@@ -224,7 +225,7 @@ export default function BorderMap({
   const hotspotCount = fires.length;
   const rainCount = rainfall.length;
   const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
-  const totalActiveLayers = Object.entries(enabledOverlays).filter(
+  const _totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
   ).length;
   const mapStyle = isDetailedMap
@@ -251,8 +252,9 @@ export default function BorderMap({
     .map((overlay) => createRasterOverlayLayer(overlay, overlay.defaultOpacity))
     .filter(Boolean);
 
+  useEffect(() => { setMounted(true) }, []); // eslint-disable-line react-hooks/set-state-in-effect
+
   useEffect(() => {
-    setMounted(true);
     const loadData = async () => {
       const [
         incidentData,
@@ -572,6 +574,7 @@ export default function BorderMap({
       <DeckGL
         id="phuket-deck"
         viewState={viewState}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
           const next = nextViewState as MapViewState;
           setViewState(next);

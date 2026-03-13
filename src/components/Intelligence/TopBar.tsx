@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { BookOpen, Database, Network } from "lucide-react";
 
 const TOP_MARKETS = [
@@ -108,7 +107,7 @@ function formatMainClock() {
   });
 }
 
-function aqiColor(aqi: number | null): string {
+function _aqiColor(aqi: number | null): string {
   if (aqi === null) return "text-[var(--dim)]";
   if (aqi <= 50) return "text-[#22c55e]";   // Good
   if (aqi <= 100) return "text-[#f59e0b]";  // Moderate
@@ -124,7 +123,7 @@ export default function TopBar({
 }: TopBarProps) {
   const [time, setTime] = useState("");
   const [marketTimes, setMarketTimes] = useState<string[]>([]);
-  const [phuketEnv, setPhuketEnv] = useState<EnvData | null>(null);
+  const [, setPhuketEnv] = useState<EnvData | null>(null);
 
   useEffect(() => {
     const tick = () => {
