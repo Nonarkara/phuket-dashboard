@@ -54,30 +54,20 @@ export default function Dashboard() {
       />
 
       <div className="flex min-h-0 flex-1 border-t border-[var(--line)] overflow-hidden">
-        {/* Left Command Column - Tactical Slim */}
-        <aside className="hidden w-[240px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--bg-raised)] xl:flex">
-          <div className="border-b border-[var(--line)] px-3 py-1.5">
-            <Sidebar />
-          </div>
+        {/* ─── Left Command Column ─── */}
+        <aside className="hidden w-[280px] shrink-0 flex-col overflow-hidden border-r border-[var(--line)] bg-[var(--bg-raised)] lg:flex">
           <div className="flex-1 overflow-y-auto no-scrollbar">
-            <section className="border-b border-[var(--line)] p-2">
-              <div className="eyebrow mb-1 opacity-50 px-1">Tactical Brief</div>
-              <BriefingPanel />
-            </section>
-            <section className="p-2">
-              <div className="eyebrow mb-1 opacity-50 px-1">Feeds</div>
-              <LiveTVPanel />
-            </section>
+            <Sidebar />
           </div>
         </aside>
 
-        {/* Central Operations Surface (Extreme Dominance) */}
+        {/* ─── Central Operations Surface ─── */}
         <div className="flex flex-1 flex-col min-w-0 bg-[var(--bg)]">
           <section className="relative flex-1 overflow-hidden">
             <BorderMap onProvinceSelect={setSelectedProvince} />
           </section>
 
-          {/* Minimal Bottom Strip */}
+          {/* Bottom Analytics Strip */}
           <section className="grid h-[120px] shrink-0 border-t border-[var(--line)] md:grid-cols-2 lg:grid-cols-4 divide-x divide-[var(--line)] overflow-hidden bg-[var(--bg-raised)]">
             <div className="overflow-hidden p-2">
               <div className="eyebrow mb-1 opacity-50 px-1">Economy</div>
@@ -98,12 +88,27 @@ export default function Dashboard() {
           </section>
         </div>
 
-        {/* Right Information Column - Slim */}
-        <aside className="hidden w-[260px] shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--bg-raised)] 2xl:flex">
-          <section className="flex-1 overflow-y-auto p-2 no-scrollbar">
-            <div className="eyebrow mb-2 opacity-50 px-1">Analysis</div>
-            <NewsDesk />
-          </section>
+        {/* ─── Right Information Column ─── */}
+        <aside className="hidden w-[300px] shrink-0 flex-col overflow-hidden border-l border-[var(--line)] bg-[var(--bg-raised)] xl:flex">
+          <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-[var(--line)]">
+            {/* Intelligence Briefing */}
+            <section className="p-2">
+              <div className="eyebrow mb-1 opacity-50 px-1">Tactical brief</div>
+              <BriefingPanel />
+            </section>
+
+            {/* Live News Feed */}
+            <section className="p-2">
+              <div className="eyebrow mb-1 opacity-50 px-1">Analysis</div>
+              <NewsDesk />
+            </section>
+
+            {/* Live TV Feeds */}
+            <section className="p-2">
+              <div className="eyebrow mb-1 opacity-50 px-1">Feeds</div>
+              <LiveTVPanel />
+            </section>
+          </div>
         </aside>
       </div>
 

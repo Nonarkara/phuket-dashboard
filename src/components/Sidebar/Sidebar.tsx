@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Info, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import AseanEconomicsPanel from "./AseanEconomicsPanel";
 import ConvergenceAlerts from "./ConvergenceAlerts";
+import SatelliteStatusPanel from "./SatelliteStatusPanel";
 import type { IncidentFeature } from "../../types/dashboard";
 
 interface Incident {
@@ -42,52 +43,38 @@ export default function Sidebar() {
       }
     };
     load();
-    const interval = setInterval(load, 2 * 60 * 1000); // Refresh every 2 min
+    const interval = setInterval(load, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <aside className="flex h-full w-full flex-col text-[var(--ink)] select-none">
-      <div className="border-b border-[var(--line)] p-5">
+      {/* Header — compact */}
+      <div className="border-b border-[var(--line)] px-3 py-2">
         <div className="flex items-center justify-between">
-            <div>
-              <div className="eyebrow">Command</div>
-              <h1 className="pt-2 text-[22px] font-bold tracking-[-0.03em] text-[var(--ink)]">
-                Phuket Ops
-              </h1>
-            </div>
+          <div>
+            <div className="eyebrow">Command</div>
+            <h1 className="pt-1 text-[16px] font-bold tracking-[-0.03em] text-[var(--ink)]">
+              Phuket Ops
+            </h1>
+          </div>
           <div className="live-badge">LIVE</div>
         </div>
-        <p className="pt-3 text-[12px] leading-5 text-[var(--muted)]">
-          Map-led operating view for Phuket, Phang Nga, Krabi, Ranong, Surat
-          Thani, and Trang. Read weather, tourism, safety, and economy together
-          instead of in isolation.
+        <p className="pt-1 text-[9px] leading-3.5 text-[var(--muted)]">
+          Map-led operating view for Phuket, Phang Nga, Krabi, Ranong, Surat Thani, and Trang.
         </p>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
-        <section className="space-y-4">
-          <div className="space-y-2">
-            <div className="eyebrow">Andaman convergence</div>
-            <div className="h-px w-full bg-[var(--bg-raised)]" />
-          </div>
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Convergence */}
+        <section className="border-b border-[var(--line)] px-3 py-2">
+          <div className="eyebrow mb-1.5 opacity-50">Andaman convergence</div>
           <ConvergenceAlerts />
         </section>
 
-        <section className="space-y-4">
-          <div className="space-y-2">
-            <div className="eyebrow">Regional economics</div>
-            <div className="h-px w-full bg-[var(--bg-raised)]" />
-          </div>
-          <AseanEconomicsPanel />
-        </section>
-
-        <section className="space-y-4">
-          <div className="space-y-2">
-            <div className="eyebrow">Data pipeline</div>
-            <div className="h-px w-full bg-[var(--bg-raised)]" />
-          </div>
-
+        {/* Data Pipeline */}
+        <section className="border-b border-[var(--line)] px-3 py-2">
+          <div className="eyebrow mb-1.5 opacity-50">Data pipeline</div>
           <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
             {[
               { name: "Tourism arrivals", status: "live", interval: "90s", source: "dashboard cache" },
@@ -98,66 +85,53 @@ export default function Sidebar() {
               { name: "NASA GIBS / FIRMS", status: "live", interval: "daily", source: "earthdata.nasa.gov" },
               { name: "Google Trends TH", status: "live", interval: "5 min", source: "trends.google.com" },
             ].map((feed) => (
-              <div
-                key={feed.name}
-                className="flex items-center justify-between px-0 py-2"
-              >
-                <div className="flex items-center gap-2">
+              <div key={feed.name} className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-1.5">
                   <span
                     className={`inline-block h-1.5 w-1.5 rounded-full ${
                       feed.status === "live" ? "bg-[#22c55e] animate-pulse" : "bg-[#ef4444]"
                     }`}
                   />
-                  <span className="text-[10px] font-medium text-[var(--ink)]">
-                    {feed.name}
-                  </span>
+                  <span className="text-[9px] font-medium text-[var(--ink)]">{feed.name}</span>
                 </div>
-                <span className="text-[8px] font-mono tracking-[0.1em] text-[var(--dim)]">
-                  {feed.interval}
-                </span>
+                <span className="text-[7px] font-mono tracking-[0.1em] text-[var(--dim)]">{feed.interval}</span>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="space-y-4">
-          <div className="space-y-2">
-            <div className="eyebrow">Recent signals</div>
-            <div className="h-px w-full bg-[var(--bg-raised)]" />
-          </div>
+        {/* Satellite */}
+        <section className="border-b border-[var(--line)] px-3 py-2">
+          <div className="eyebrow mb-1.5 opacity-50">Satellite constellation</div>
+          <SatelliteStatusPanel />
+        </section>
 
-          <div className="space-y-4">
-            {incidents.slice(0, 4).map((incident, idx) => (
-              <article
-                key={incident.id}
-                className="border-b border-[var(--line)] pb-4 last:border-b-0"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="pt-0.5 text-[10px] font-mono tabular-nums text-[var(--dim)]">
+        {/* Recent Signals */}
+        <section className="border-b border-[var(--line)] px-3 py-2">
+          <div className="eyebrow mb-1.5 opacity-50">Recent signals</div>
+          <div className="space-y-2">
+            {incidents.slice(0, 6).map((incident, idx) => (
+              <article key={incident.id} className="border-b border-[var(--line)] pb-2 last:border-b-0 last:pb-0">
+                <div className="flex items-start gap-2">
+                  <span className="pt-0.5 text-[8px] font-mono tabular-nums text-[var(--dim)]">
                     {String(idx + 1).padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between gap-2">
                       <span
-                        className={`text-[9px] font-semibold uppercase tracking-[0.16em] ${
-                          incident.severity === "high"
-                            ? "text-[#f59e0b]"
-                            : "text-[var(--cool)]"
+                        className={`text-[8px] font-semibold uppercase tracking-[0.14em] ${
+                          incident.severity === "high" ? "text-[#f59e0b]" : "text-[var(--cool)]"
                         }`}
                       >
                         {incident.type}
                       </span>
-                      <span className="text-[9px] font-mono tabular-nums text-[var(--dim)]">
-                        {incident.time}
-                      </span>
+                      <span className="text-[7px] font-mono tabular-nums text-[var(--dim)]">{incident.time}</span>
                     </div>
-                    <p className="pt-2 text-[12px] leading-5 text-[var(--muted)]">
-                      {incident.notes.length > 100
-                        ? `${incident.notes.substring(0, 100)}...`
-                        : incident.notes}
+                    <p className="pt-0.5 text-[9px] leading-3.5 text-[var(--muted)]">
+                      {incident.notes.length > 80 ? `${incident.notes.substring(0, 80)}...` : incident.notes}
                     </p>
-                    <div className="pt-2 flex items-center gap-2 text-[10px] text-[var(--dim)]">
-                      <MapPin size={10} />
+                    <div className="pt-0.5 flex items-center gap-1 text-[8px] text-[var(--dim)]">
+                      <MapPin size={8} />
                       <span>{incident.location}</span>
                     </div>
                   </div>
@@ -166,20 +140,12 @@ export default function Sidebar() {
             ))}
           </div>
         </section>
-      </div>
 
-      <div className="border-t border-[var(--line)] p-5">
-        <div className="flex items-start gap-3">
-          <Info size={14} className="mt-0.5 text-[var(--cool)]" />
-          <div>
-            <div className="text-[11px] font-medium text-[var(--ink)]">
-              Data from weather, air-quality, mapping, mobility, and regional economics feeds
-            </div>
-            <p className="pt-1 text-[11px] leading-4 text-[var(--dim)]">
-              Phuket and Andaman operating starter system
-            </p>
-          </div>
-        </div>
+        {/* Regional Economics */}
+        <section className="px-3 py-2">
+          <div className="eyebrow mb-1.5 opacity-50">Regional economics</div>
+          <AseanEconomicsPanel />
+        </section>
       </div>
     </aside>
   );
