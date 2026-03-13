@@ -162,8 +162,8 @@ function TVSlot({ channel }: { channel: TVChannel }) {
             src={embedUrl}
             title={`${channel.name} Live`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen={false}
-            className="absolute inset-0 h-full w-full origin-center scale-[1.35] transform-gpu pointer-events-none"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full origin-center scale-[1.35] transform-gpu"
             style={{ border: "none" }}
             onLoad={() => {
               setLoaded(true);

@@ -107,13 +107,13 @@ function formatMainClock() {
   });
 }
 
-function _aqiColor(aqi: number | null): string {
+export function aqiColor(aqi: number | null): string {
   if (aqi === null) return "text-[var(--dim)]";
-  if (aqi <= 50) return "text-[#22c55e]";   // Good
-  if (aqi <= 100) return "text-[#f59e0b]";  // Moderate
-  if (aqi <= 150) return "text-[#f97316]";  // Unhealthy for sensitive
-  if (aqi <= 200) return "text-[#ef4444]";  // Unhealthy
-  return "text-[#a855f7]";                   // Very unhealthy / hazardous
+  if (aqi <= 50) return "text-[#22c55e]";
+  if (aqi <= 100) return "text-[#f59e0b]";
+  if (aqi <= 150) return "text-[#f97316]";
+  if (aqi <= 200) return "text-[#ef4444]";
+  return "text-[#a855f7]";
 }
 
 export default function TopBar({

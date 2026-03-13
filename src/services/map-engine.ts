@@ -4,6 +4,7 @@ import {
   ArcLayer,
   BitmapLayer,
   GeoJsonLayer,
+  LineLayer,
   ScatterplotLayer,
   TextLayer,
 } from "@deck.gl/layers";
@@ -477,6 +478,103 @@ export function createProvinceLabelsLayer() {
     pickable: false,
   });
 }
+
+/* ─── 1 × 1 km Grid Layer ──────────────────────────────────────── */
+
+const KM_GRID_BOUNDS = {
+  west: 98.2,
+  east: 98.55,
+  south: 7.7,
+  north: 8.2,
+};
+
+/** Approximate degrees per kilometer at the Phuket latitude (~7.88°N). */
+const DEG_PER_KM_LAT = 1 / 111.32;
+const DEG_PER_KM_LNG = 1 / (111.32 * Math.cos((7.88 * Math.PI) / 180));
+
+interface GridLine {
+  start: [number, number];
+  end: [number, number];
+  kind: "major" | "minor";
+}
+
+function buildKmGridLines(): GridLine[] {
+  const lines: GridLine[] = [];
+  const { west, east, south, north } = KM_GRID_BOUNDS;
+
+  // Snap to km grid origin
+  const lngStart = Math.floor(west / DEG_PER_KM_LNG) * DEG_PER_KM_LNG;
+  const latStart = Math.floor(south / DEG_PER_KM_LAT) * DEG_PER_KM_LAT;
+
+  // Vertical lines (constant longitude)
+  for (let lng = lngStart; lng <= east; lng += DEG_PER_KM_LNG) {
+    const idx = Math.round((lng - lngStart) / DEG_PER_KM_LNG);
+    lines.push({
+      start: [lng, south],
+      end: [lng, north],
+      kind: idx % 5 === 0 ? "major" : "minor",
+    });
+  }
+
+  // Horizontal lines (constant latitude)
+  for (let lat = latStart; lat <= north; lat += DEG_PER_KM_LAT) {
+    const idx = Math.round((lat - latStart) / DEG_PER_KM_LAT);
+    lines.push({
+      start: [west, lat],
+      end: [east, lat],
+      kind: idx % 5 === 0 ? "major" : "minor",
+    });
+  }
+
+  return lines;
+}
+
+const KM_GRID_LINES = buildKmGridLines();
+
+export function createKilometerGridLayer() {
+  return [
+    new LineLayer({
+      id: "km-grid-lines",
+      data: KM_GRID_LINES,
+      getSourcePosition: (d: GridLine) => d.start,
+      getTargetPosition: (d: GridLine) => d.end,
+      getColor: (d: GridLine) =>
+        d.kind === "major"
+          ? [255, 255, 255, 60]
+          : [255, 255, 255, 25],
+      getWidth: (d: GridLine) => (d.kind === "major" ? 1.5 : 0.8),
+      widthUnits: "pixels" as const,
+      pickable: false,
+    }),
+    // 5-km labels at every 5th gridline intersection
+    new TextLayer({
+      id: "km-grid-labels",
+      data: KM_GRID_LINES.filter(
+        (line) =>
+          line.kind === "major" &&
+          line.start[1] === line.end[1], // horizontal majors only
+      ).map((line, i) => ({
+        position: [KM_GRID_BOUNDS.west + DEG_PER_KM_LNG * 0.5, line.start[1]] as [number, number],
+        text: `${Math.round((line.start[1] - KM_GRID_BOUNDS.south) / DEG_PER_KM_LAT)} km`,
+        index: i,
+      })),
+      getPosition: (d: { position: [number, number] }) => d.position,
+      getText: (d: { text: string }) => d.text,
+      getSize: 9,
+      getColor: [255, 255, 255, 90],
+      getTextAnchor: "start" as const,
+      getAlignmentBaseline: "bottom" as const,
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [0, 0, 0, 160],
+      outlineWidth: 1.5,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+/* ─── Flight Layer ─────────────────────────────────────────────── */
 
 const FLIGHT_COUNTRY_COLORS: Record<string, [number, number, number, number]> = {
   Thailand: [56, 189, 248, 200],  // cyan

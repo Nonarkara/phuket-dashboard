@@ -6,7 +6,8 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "WATCHPACK_POLLING=true next dev --webpack -H 127.0.0.1",
+    "dev:3001": "WATCHPACK_POLLING=true next dev --webpack -H 127.0.0.1 -p 3001",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
@@ -46,5 +47,8 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2"
   }
 }

@@ -7,16 +7,21 @@ import dynamic from "next/dynamic";
 const DeckGL = dynamic(() => (import("@deck.gl/react") as any).then((m: any) => m.default || m.DeckGL), { ssr: false }) as any;
 import {
   CloudRain,
+  Droplets,
   Flame,
   Globe,
+  Grid3x3,
   Layers,
   Map as MapIcon,
   MapPinned,
   MoonStar,
   Plane,
   Satellite,
+  Snowflake,
   Tag,
+  Thermometer,
   Users,
+  Waves,
   Wind,
 } from "lucide-react";
 import {
@@ -26,6 +31,7 @@ import {
   createFlightPathsLayer,
   createHeatmapLayer,
   createIncidentLayer,
+  createKilometerGridLayer,
   createProvinceLabelsLayer,
   createRainfallLayer,
   createRasterOverlayLayer,
@@ -77,6 +83,22 @@ const EMPTY_CONFLICT_ZONES: ConflictZoneCollection = {
   type: "FeatureCollection",
   features: [],
 };
+
+function debugLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown> = {},
+  runId: string = "ui",
+) {
+  // #region agent log
+  fetch("/api/debug/ingest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, hypothesisId, location, message, data }),
+  }).catch(() => {});
+  // #endregion
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -194,10 +216,9 @@ export default function BorderMap({
     useState<ConflictZoneCollection>(EMPTY_CONFLICT_ZONES);
 
   const getSafeDate = () => {
-    // NASA GIBS only serves imagery up to the current real-world date.
-    // In this simulated environment (2026), requesting Date.now() returns
-    // a future date against NASA's real calendar, resulting in transparent or black tiles.
-    return "2024-03-01";
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
   };
 
   const safeDate = getSafeDate();
@@ -225,7 +246,7 @@ export default function BorderMap({
   const hotspotCount = fires.length;
   const rainCount = rainfall.length;
   const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
-  const _totalActiveLayers = Object.entries(enabledOverlays).filter(
+  const totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
   ).length;
   const mapStyle = isDetailedMap
@@ -252,7 +273,15 @@ export default function BorderMap({
     .map((overlay) => createRasterOverlayLayer(overlay, overlay.defaultOpacity))
     .filter(Boolean);
 
-  useEffect(() => { setMounted(true) }, []); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    setMounted(true);
+    debugLog("H1", "BorderMap.tsx:useEffect", "mounted effect ran", {
+      safeDate,
+      hasMapboxToken: MAPBOX_TOKEN.length > 0,
+      baseOverlayCount: baseOverlays.length,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -323,6 +352,7 @@ export default function BorderMap({
     enabledOverlays.thermalHotspots ? createFireLayer(fires) : null,
     enabledOverlays.populationMovement ? createRefugeeLayer(refugees) : null,
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
+    ...(enabledOverlays.kmGrid ? createKilometerGridLayer() : []),
     provinceLabelsLayer,
   ].filter(Boolean);
 
@@ -465,7 +495,17 @@ export default function BorderMap({
                 ? Tag
                 : overlay.id === "flightPaths"
                   ? Plane
-                  : Layers,
+                  : overlay.id === "kmGrid"
+                    ? Grid3x3
+                    : overlay.id === "seaSurfaceTemp"
+                      ? Waves
+                      : overlay.id === "soilMoisture"
+                        ? Droplets
+                        : overlay.id === "cloudTop"
+                          ? Snowflake
+                          : overlay.id === "bhuvanLandUse"
+                            ? Thermometer
+                            : Layers,
       onClick: () => toggleOverlay(overlay.id),
     })),
   ];
@@ -557,10 +597,20 @@ export default function BorderMap({
   const allLayers = [aerialLayer, streetsLayer, ...layers].filter(Boolean);
 
   if (!mounted) {
+    debugLog("H2", "BorderMap.tsx:render", "rendered not-mounted placeholder", {
+      mounted,
+    });
     return (
       <div className="relative flex h-full w-full flex-col overflow-hidden bg-[var(--bg-raised)] animate-pulse" />
     );
   }
+
+  debugLog("H3", "BorderMap.tsx:render", "rendered mounted map UI", {
+    mounted,
+    showSatelliteOverlay,
+    satelliteOverlay,
+    hasMapboxToken: MAPBOX_TOKEN.length > 0,
+  });
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
@@ -606,12 +656,14 @@ export default function BorderMap({
                 <span>SIG {signalCount}</span>
                 <span>AQI {airQuality.length}</span>
                 <span>FLT {flights.length}</span>
+                <span>LYR {totalActiveLayers}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1 border-r border-[var(--line)] pr-2 mr-1">
+              <span className="live-badge text-[8px] px-1" title="NASA GIBS latest imagery">LIVE</span>
               {baseOverlays.map((option) => (
                 <button
                   key={option.id}

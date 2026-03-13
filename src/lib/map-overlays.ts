@@ -4,10 +4,12 @@ import type {
   MapOverlayKind,
 } from "../types/dashboard";
 
-const NASA_GIBS_SAFE_DATE = "2024-03-01";
-
-function getSafeDate() {
-  return NASA_GIBS_SAFE_DATE;
+/** Returns yesterday's date (YYYY-MM-DD) for near-real-time NASA GIBS imagery. */
+function getSafeDate(): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 1);
+  const ymd = d.toISOString().slice(0, 10);
+  return ymd;
 }
 
 function rasterOverlay(overlay: Omit<MapOverlay, "kind" | "updatedAt">): MapOverlay {
@@ -260,6 +262,122 @@ export function buildMapOverlayCatalog(
       role: "operational",
       defaultOpacity: 0.85,
       enabledByDefault: true,
+    }),
+    vectorOverlay({
+      id: "kmGrid",
+      label: "1 km Grid",
+      shortLabel: "GRID",
+      description: "1 × 1 kilometer distance grid covering the Phuket operating area. Major lines every 5 km.",
+      source: "Computed",
+      family: "operational",
+      role: "operational",
+      defaultOpacity: 1,
+      enabledByDefault: false,
+    }),
+    rasterOverlay({
+      id: "himawariCloud",
+      label: "Himawari Cloud",
+      shortLabel: "HIM",
+      description: "Himawari-9 geostationary 10-min cloud imagery for SE Asia. Infrared band for all-weather storm tracking.",
+      source: "JAXA Himawari / NASA GIBS",
+      family: "weather",
+      role: "analytic",
+      defaultOpacity: 0.5,
+      enabledByDefault: false,
+      maxZoom: 8,
+      timeMode: "dated",
+      tileTemplate:
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Himawari_AHI_Band13_Clean_Infrared/default/${focusDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+    }),
+    rasterOverlay({
+      id: "gsmapRain",
+      label: "GSMaP Rainfall",
+      shortLabel: "GSMAP",
+      description: "JAXA GSMaP hourly global rainfall estimate for near-real-time precipitation monitoring.",
+      source: "JAXA GSMaP / NASA GIBS",
+      family: "weather",
+      role: "analytic",
+      defaultOpacity: 0.55,
+      enabledByDefault: false,
+      maxZoom: 6,
+      timeMode: "dated",
+      tileTemplate:
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate/default/${focusDate}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
+    }),
+    rasterOverlay({
+      id: "seviriFire",
+      label: "EUMETSAT Fire",
+      shortLabel: "FIRE-EU",
+      description: "EUMETSAT MSG SEVIRI fire radiative power product covering Indian Ocean and SE Asia.",
+      source: "EUMETSAT / NASA GIBS",
+      family: "thermal",
+      role: "analytic",
+      defaultOpacity: 0.6,
+      enabledByDefault: false,
+      maxZoom: 8,
+      timeMode: "default",
+      tileTemplate:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Thermal_Anomalies_Day/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png",
+    }),
+    rasterOverlay({
+      id: "bhuvanLandUse",
+      label: "ISRO Land Use",
+      shortLabel: "LAND",
+      description: "ISRO Bhuvan AWiFS-derived land use/land cover baseline for border terrain analysis.",
+      source: "ISRO Bhuvan WMS",
+      family: "vegetation",
+      role: "analytic",
+      defaultOpacity: 0.5,
+      enabledByDefault: false,
+      maxZoom: 9,
+      timeMode: "default",
+      tileTemplate:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
+    }),
+    rasterOverlay({
+      id: "soilMoisture",
+      label: "Soil Moisture",
+      shortLabel: "SOIL",
+      description: "AMSR-2 soil moisture for flood risk and ground condition monitoring.",
+      source: "JAXA AMSR-2 / NASA GIBS",
+      family: "weather",
+      role: "analytic",
+      defaultOpacity: 0.45,
+      enabledByDefault: false,
+      maxZoom: 6,
+      timeMode: "default",
+      tileTemplate:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Soil_Moisture_Active_Passive_L4_Global_Surface_Soil_Moisture/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png",
+    }),
+    rasterOverlay({
+      id: "seaSurfaceTemp",
+      label: "Sea Surface Temp",
+      shortLabel: "SST",
+      description: "MODIS sea surface temperature for marine and fisheries operations around Phuket.",
+      source: "NASA GIBS / MODIS",
+      family: "weather",
+      role: "analytic",
+      defaultOpacity: 0.5,
+      enabledByDefault: false,
+      maxZoom: 9,
+      timeMode: "dated",
+      tileTemplate:
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Sea_Surface_Temp_Day/default/${focusDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`,
+    }),
+    rasterOverlay({
+      id: "cloudTop",
+      label: "Cloud Top Height",
+      shortLabel: "CLOUD",
+      description: "Cloud top height overlay for storm cell identification and aviation risk assessment.",
+      source: "NASA GIBS",
+      family: "weather",
+      role: "analytic",
+      defaultOpacity: 0.45,
+      enabledByDefault: false,
+      maxZoom: 6,
+      timeMode: "dated",
+      tileTemplate:
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Cloud_Top_Height_Day/default/${focusDate}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
     }),
   ];
 

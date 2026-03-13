@@ -116,7 +116,7 @@ export default function ConflictTrends() {
       legend: { display: false },
       tooltip: {
         backgroundColor: "#0f1628",
-        borderColor: "var(--line-bright)",
+        borderColor: "#d4d0c8",
         borderWidth: 1,
         titleFont: { size: 9, weight: 700 as const },
         bodyFont: { size: 9 },
@@ -129,7 +129,7 @@ export default function ConflictTrends() {
     },
     scales: {
       y: {
-        grid: { color: "var(--line)", drawBorder: false },
+        grid: { color: "#d4d0c8", drawBorder: false },
         ticks: { color: "#475569", font: { size: 8, family: "IBM Plex Mono" } },
       },
       x: {
