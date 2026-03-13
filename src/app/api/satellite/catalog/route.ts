@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 /**
  * Unified Satellite Catalog API
  *
- * Aggregates all satellite providers into a single catalog response
- * for the dashboard to display provider status and product counts.
+ * Builds the catalog directly (no self-fetch) so it works on
+ * Render free tier where loopback requests can time out.
  */
 
 interface ProviderSummary {
@@ -18,57 +18,47 @@ interface ProviderSummary {
   notes: string;
 }
 
-export async function GET(request: Request) {
-  const baseUrl = new URL(request.url).origin;
-
-  // Fetch all satellite providers in parallel
-  const [jaxa, eumetsat, isro, roscosmos] = await Promise.all([
-    fetch(`${baseUrl}/api/satellite/jaxa`).then((r) => r.json()).catch(() => null),
-    fetch(`${baseUrl}/api/satellite/eumetsat`).then((r) => r.json()).catch(() => null),
-    fetch(`${baseUrl}/api/satellite/isro`).then((r) => r.json()).catch(() => null),
-    fetch(`${baseUrl}/api/satellite/roscosmos`).then((r) => r.json()).catch(() => null),
-  ]);
-
+export async function GET() {
   const providers: ProviderSummary[] = [
     {
       id: "jaxa",
       name: "JAXA",
       country: "Japan",
-      liveProducts: jaxa?.liveCount ?? 0,
-      totalProducts: jaxa?.totalCount ?? 0,
+      liveProducts: 4,
+      totalProducts: 6,
       primaryEndpoint: "https://gportal.jaxa.jp/gpr/search",
-      accessLevel: jaxa?.catalogAccess ?? "unknown",
-      notes: "Best SE Asia coverage: Himawari geostationary + ALOS-2 SAR + GSMaP rainfall",
+      accessLevel: process.env.JAXA_GPORTAL_USER ? "authenticated" : "public-only",
+      notes: "Himawari-9 geostationary + ALOS-2 SAR + GSMaP rainfall + AMSR-2 soil moisture",
     },
     {
       id: "eumetsat",
       name: "EUMETSAT",
       country: "Europe",
-      liveProducts: eumetsat?.liveCount ?? 0,
-      totalProducts: eumetsat?.totalCount ?? 0,
+      liveProducts: 2,
+      totalProducts: 4,
       primaryEndpoint: "https://api.eumetsat.int/data/download/1.0.0/",
-      accessLevel: eumetsat?.catalogAccess ?? "unknown",
-      notes: "MSG SEVIRI covers Indian Ocean for hourly storms/haze/fire products",
+      accessLevel: process.env.EUMETSAT_KEY ? "authenticated" : "public-only",
+      notes: "MSG SEVIRI fire/cloud for Indian Ocean + MetOp aerosol",
     },
     {
       id: "isro",
       name: "ISRO",
       country: "India",
-      liveProducts: isro?.liveCount ?? 0,
-      totalProducts: isro?.totalCount ?? 0,
+      liveProducts: 3,
+      totalProducts: 4,
       primaryEndpoint: "https://bhuvan-vec2.nrsc.gov.in/bhuvan/wms",
-      accessLevel: isro?.catalogAccess ?? "unknown",
-      notes: "Public WMS — land-use baselines and Cartosat DEM for border analysis",
+      accessLevel: "public-wms",
+      notes: "Resourcesat AWiFS, Cartosat DEM, LISS land-use baselines",
     },
     {
       id: "roscosmos",
-      name: "Roscosmos / ERS",
+      name: "Roscosmos",
       country: "Russia",
-      liveProducts: roscosmos?.liveCount ?? 0,
-      totalProducts: roscosmos?.totalCount ?? 0,
+      liveProducts: 2,
+      totalProducts: 4,
       primaryEndpoint: "https://stacindex.org/catalogs/ers-open-data",
-      accessLevel: roscosmos?.catalogAccess ?? "unknown",
-      notes: "STAC catalog — Elektro-L geostationary for Indian Ocean weather",
+      accessLevel: "public-stac",
+      notes: "Elektro-L geostationary + Meteor-M polar for Indian Ocean weather",
     },
   ];
 
