@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { BookOpen, Database, Network } from "lucide-react";
 
 const TOP_MARKETS = [
@@ -88,15 +89,6 @@ interface TopBarProps {
   onOpenDataExplorer: () => void;
 }
 
-function formatTime(timezone: string) {
-  return new Date().toLocaleTimeString("en-GB", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 function formatMainClock() {
   return new Date().toLocaleTimeString("en-GB", {
     timeZone: "Asia/Bangkok",
@@ -122,13 +114,11 @@ export default function TopBar({
   onOpenDataExplorer,
 }: TopBarProps) {
   const [time, setTime] = useState("");
-  const [marketTimes, setMarketTimes] = useState<string[]>([]);
   const [, setPhuketEnv] = useState<EnvData | null>(null);
 
   useEffect(() => {
     const tick = () => {
       setTime(formatMainClock());
-      setMarketTimes(TOP_MARKETS.map((market) => formatTime(market.timezone)));
     };
 
     tick();
@@ -177,11 +167,20 @@ export default function TopBar({
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden items-center gap-4 xl:flex">
-            {TOP_MARKETS.slice(0, 5).map((market, idx) => (
-              <div key={market.country} className="flex items-center gap-2 border-r border-[var(--line)] pr-4 last:border-0 last:pr-0">
-                <span className="text-[8px] font-mono text-[var(--dim)]">{market.city.substring(0, 3).toUpperCase()}</span>
-                <span className="text-[11px] font-mono font-semibold">{marketTimes[idx] || "--:--"}</span>
+          <div className="hidden items-center gap-1.5 xl:flex">
+            {TOP_MARKETS.slice(0, 6).map((market) => (
+              <div
+                key={market.country}
+                title={`${market.country} / ${market.city}`}
+                className="flex h-9 w-10 items-center justify-center border border-[var(--line)] bg-[var(--bg)] px-1"
+              >
+                <Image
+                  src={market.logo}
+                  alt={`${market.country} logo`}
+                  width={24}
+                  height={18}
+                  className="h-auto w-6 object-contain"
+                />
               </div>
             ))}
           </div>

@@ -397,6 +397,27 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     fallback: "Returns `fallbackRefugees` as a local visitor-flow stand-in when no live mobility feed is configured.",
   },
   {
+    path: "/api/transit/pksb",
+    category: "Operations",
+    purpose:
+      "Returns Phuket Smart Bus route geometry and stop locations for the PKSB transit overlay.",
+    consumers: ["Map surface"],
+    upstreams: [
+      "smartbus.phuket.cloud route GeoJSON",
+      "smartbus.phuket.cloud stop GeoJSON",
+    ],
+    fallback: "Uses checked-in PKSB GeoJSON snapshots when the public tracker is unavailable.",
+  },
+  {
+    path: "/api/public-cameras",
+    category: "Operations",
+    purpose:
+      "Returns curated Phuket public camera locations and source links for beach, bay, and traffic monitoring.",
+    consumers: ["Map surface"],
+    upstreams: ["Curated public camera source list"],
+    fallback: "Returns the bundled camera catalog.",
+  },
+  {
     path: "/api/flights",
     category: "Operations",
     purpose:

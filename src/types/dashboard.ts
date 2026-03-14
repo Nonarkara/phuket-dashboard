@@ -1,7 +1,9 @@
 import type {
   Feature,
   FeatureCollection,
+  MultiLineString,
   MultiPolygon,
+  Point,
   Polygon,
 } from "geojson";
 
@@ -15,6 +17,8 @@ export interface ProvinceSelection {
   iso?: string;
   location?: string;
   eventDate?: string;
+  externalUrl?: string;
+  source?: string;
 }
 
 export interface IncidentProperties {
@@ -77,6 +81,65 @@ export interface AirQualityPoint {
   category: string;
   observedAt?: string;
   source?: string;
+}
+
+export interface PksbRouteProperties {
+  id: string;
+  routeId: "dragon_line" | "main_line" | "patong_line";
+  routeLabel: string;
+  directionLabel: string;
+  color: string;
+  lengthMeters?: number | null;
+}
+
+export type PksbRouteFeature = Feature<MultiLineString, PksbRouteProperties>;
+
+export type PksbRouteCollection = FeatureCollection<
+  MultiLineString,
+  PksbRouteProperties
+>;
+
+export interface PksbStopProperties {
+  id: string;
+  routeId: "dragon_line" | "main_line" | "patong_line";
+  routeLabel: string;
+  routeColor: string;
+  stopNumber: number;
+  stopNameEn: string;
+  stopNameTh: string;
+  direction: string;
+  routeDirection: string;
+  timetable: string;
+  mapUrl?: string;
+}
+
+export type PksbStopFeature = Feature<Point, PksbStopProperties>;
+
+export type PksbStopCollection = FeatureCollection<Point, PksbStopProperties>;
+
+export interface PksbTransitResponse {
+  generatedAt: string;
+  source: string[];
+  routes: PksbRouteCollection;
+  stops: PksbStopCollection;
+}
+
+export interface PublicCamera {
+  id: string;
+  label: string;
+  location: string;
+  lat: number;
+  lng: number;
+  provider: string;
+  type: "beach" | "traffic" | "bay";
+  notes: string;
+  accessUrl: string;
+}
+
+export interface PublicCameraResponse {
+  generatedAt: string;
+  source: string[];
+  cameras: PublicCamera[];
 }
 
 export interface RegionBorderProperties {

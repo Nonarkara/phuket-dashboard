@@ -1,4 +1,4 @@
-import { Globe, TrendingUp, X } from "lucide-react";
+import { ExternalLink, Globe, TrendingUp, X } from "lucide-react";
 import type { ProvinceSelection } from "../../types/dashboard";
 
 interface ProvinceDashboardProps {
@@ -22,6 +22,9 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
   const guidance = [
     "Read this place against rainfall, AQI, and transport overlays before escalating.",
     "Use the economy and briefing cards to see whether pressure is localized or regional.",
+    province.externalUrl
+      ? "Use the live source link below when you need direct visual confirmation."
+      : "Use the map overlays to cross-check what sits immediately around this point.",
     province.eventDate
       ? `Latest logged signal: ${province.eventDate}.`
       : `Use ${province.name} as a geographic anchor for adjacent Phuket-region signals.`,
@@ -38,6 +41,11 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
           <p className="pt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
             {province.type ?? `Sector: ${province.iso ?? "Regional"}`}
           </p>
+          {province.location ? (
+            <p className="pt-1 text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
+              {province.location}
+            </p>
+          ) : null}
           <p className="pt-3 text-[12px] leading-5 text-[var(--muted)]">{summaryLine}</p>
         </div>
 
@@ -96,8 +104,8 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
         </button>
       </div>
 
-      <div className="grid gap-3 border-t border-[var(--line)] px-4 py-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-3 border-t border-[var(--line)] px-4 py-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="grid gap-2 md:grid-cols-4">
           {guidance.map((item) => (
             <div
               key={item}
@@ -108,13 +116,28 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
           ))}
         </div>
 
-        <div className="flex items-center gap-2 border border-[var(--line)] px-3 py-2">
-          <Globe size={12} className="text-[var(--cool)]" />
-          <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
-            {province.eventDate
-              ? `Event ${province.eventDate}`
-              : `Sector ${province.iso ?? province.name}`}
-          </span>
+        <div className="flex flex-col gap-2 border border-[var(--line)] px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Globe size={12} className="text-[var(--cool)]" />
+            <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
+              {province.source
+                ? `Source ${province.source}`
+                : province.eventDate
+                  ? `Event ${province.eventDate}`
+                  : `Sector ${province.iso ?? province.name}`}
+            </span>
+          </div>
+          {province.externalUrl ? (
+            <a
+              href={province.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 border border-[var(--line-bright)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--cool)] hover:text-[var(--cool)]"
+            >
+              <ExternalLink size={11} />
+              Open Source
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

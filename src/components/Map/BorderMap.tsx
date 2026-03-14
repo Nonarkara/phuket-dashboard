@@ -6,6 +6,8 @@ import dynamic from "next/dynamic";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DeckGL = dynamic(() => (import("@deck.gl/react") as any).then((m: any) => m.default || m.DeckGL), { ssr: false }) as any;
 import {
+  BusFront,
+  Camera,
   CloudRain,
   Droplets,
   Flame,
@@ -32,6 +34,8 @@ import {
   createHeatmapLayer,
   createIncidentLayer,
   createKilometerGridLayer,
+  createPksbRouteLayers,
+  createPublicCameraLayer,
   createProvinceLabelsLayer,
   createRainfallLayer,
   createRasterOverlayLayer,
@@ -54,6 +58,11 @@ import type {
   RefugeeMovement,
   RegionBorderCollection,
   RegionBorderFeature,
+  PksbRouteFeature,
+  PksbStopFeature,
+  PksbTransitResponse,
+  PublicCamera,
+  PublicCameraResponse,
 } from "../../types/dashboard";
 
 const MapboxMap = dynamic(() => import("react-map-gl/mapbox"), { ssr: false });
@@ -83,6 +92,16 @@ const EMPTY_CONFLICT_ZONES: ConflictZoneCollection = {
   type: "FeatureCollection",
   features: [],
 };
+
+const EMPTY_PKSB_ROUTES = {
+  type: "FeatureCollection",
+  features: [],
+} as const satisfies PksbTransitResponse["routes"];
+
+const EMPTY_PKSB_STOPS = {
+  type: "FeatureCollection",
+  features: [],
+} as const satisfies PksbTransitResponse["stops"];
 
 function debugLog(
   hypothesisId: string,
@@ -147,6 +166,37 @@ function isAirQualityPoint(value: unknown): value is AirQualityPoint {
   );
 }
 
+function isPksbRouteFeature(value: unknown): value is PksbRouteFeature {
+  return (
+    isRecord(value) &&
+    isRecord(value.properties) &&
+    typeof value.properties.routeId === "string" &&
+    typeof value.properties.routeLabel === "string" &&
+    typeof value.properties.directionLabel === "string"
+  );
+}
+
+function isPksbStopFeature(value: unknown): value is PksbStopFeature {
+  return (
+    isRecord(value) &&
+    isRecord(value.properties) &&
+    typeof value.properties.routeId === "string" &&
+    typeof value.properties.stopNameEn === "string" &&
+    typeof value.properties.timetable === "string"
+  );
+}
+
+function isPublicCamera(value: unknown): value is PublicCamera {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    typeof value.location === "string" &&
+    typeof value.provider === "string" &&
+    typeof value.accessUrl === "string"
+  );
+}
+
 async function fetchJson<T>(url: string, fallback: T): Promise<T> {
   try {
     const res = await fetch(url);
@@ -175,6 +225,18 @@ function getTooltipText(object: unknown): string | null {
 
   if (isAirQualityPoint(object)) {
     return `${object.label}: AQI ${Math.round(object.aqi)} / PM2.5 ${Math.round(object.pm25)}`;
+  }
+
+  if (isPksbStopFeature(object)) {
+    return `${object.properties.stopNameEn} • ${object.properties.routeLabel}`;
+  }
+
+  if (isPksbRouteFeature(object)) {
+    return `${object.properties.routeLabel} • ${object.properties.directionLabel}`;
+  }
+
+  if (isPublicCamera(object)) {
+    return `${object.label} • ${object.provider}`;
   }
 
   if (hasLabel(object)) {
@@ -214,6 +276,11 @@ export default function BorderMap({
   const [borders, setBorders] = useState<RegionBorderCollection | null>(null);
   const [conflictZones, setConflictZones] =
     useState<ConflictZoneCollection>(EMPTY_CONFLICT_ZONES);
+  const [pksbRoutes, setPksbRoutes] =
+    useState<PksbTransitResponse["routes"]>(EMPTY_PKSB_ROUTES);
+  const [pksbStops, setPksbStops] =
+    useState<PksbTransitResponse["stops"]>(EMPTY_PKSB_STOPS);
+  const [publicCameras, setPublicCameras] = useState<PublicCamera[]>([]);
 
   const getSafeDate = () => {
     const d = new Date();
@@ -245,6 +312,8 @@ export default function BorderMap({
   const signalCount = incidents.length;
   const hotspotCount = fires.length;
   const rainCount = rainfall.length;
+  const busStopCount = pksbStops.features.length;
+  const cameraCount = publicCameras.length;
   const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
   const totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
@@ -294,6 +363,8 @@ export default function BorderMap({
         borderData,
         conflictZoneData,
         flightData,
+        pksbTransitData,
+        publicCameraData,
       ] = await Promise.all([
         fetchJson<IncidentFeature[]>("/api/incidents", []),
         fetchJson<FireEvent[]>("/api/fires", []),
@@ -303,6 +374,17 @@ export default function BorderMap({
         fetchJson<RegionBorderCollection>("/data/region_borders.geojson", EMPTY_BORDERS),
         fetchJson<ConflictZoneCollection>("/data/conflict_zones.geojson", EMPTY_CONFLICT_ZONES),
         fetchJson<FlightData[]>("/api/flights", []),
+        fetchJson<PksbTransitResponse>("/api/transit/pksb", {
+          generatedAt: new Date(0).toISOString(),
+          source: [],
+          routes: EMPTY_PKSB_ROUTES,
+          stops: EMPTY_PKSB_STOPS,
+        }),
+        fetchJson<PublicCameraResponse>("/api/public-cameras", {
+          generatedAt: new Date(0).toISOString(),
+          source: [],
+          cameras: [],
+        }),
       ]);
 
       setIncidents(Array.isArray(incidentData) ? incidentData : []);
@@ -313,6 +395,9 @@ export default function BorderMap({
       setFlights(Array.isArray(flightData) ? flightData : []);
       setBorders(borderData);
       setConflictZones(conflictZoneData);
+      setPksbRoutes(pksbTransitData.routes);
+      setPksbStops(pksbTransitData.stops);
+      setPublicCameras(publicCameraData.cameras);
     };
 
     loadData();
@@ -351,6 +436,12 @@ export default function BorderMap({
         : null,
     enabledOverlays.thermalHotspots ? createFireLayer(fires) : null,
     enabledOverlays.populationMovement ? createRefugeeLayer(refugees) : null,
+    ...(enabledOverlays.pksbRoutes
+      ? createPksbRouteLayers(pksbRoutes, pksbStops)
+      : []),
+    enabledOverlays.publicCameras
+      ? createPublicCameraLayer(publicCameras)
+      : null,
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
     ...(enabledOverlays.kmGrid ? createKilometerGridLayer() : []),
     provinceLabelsLayer,
@@ -477,6 +568,10 @@ export default function BorderMap({
           ? `${formatCompactCount(conflictZones.features.length)} zones`
           : overlay.id === "populationMovement"
             ? `${formatCompactCount(refugees.length)} flows`
+            : overlay.id === "pksbRoutes"
+              ? `${formatCompactCount(busStopCount)} stops`
+              : overlay.id === "publicCameras"
+                ? `${formatCompactCount(cameraCount)} cams`
             : overlay.id === "incidentHeatmap" || overlay.id === "incidentPoints"
               ? `${formatCompactCount(signalCount)} signals`
               : overlay.id === "provinceLabels"
@@ -487,6 +582,10 @@ export default function BorderMap({
       icon:
         overlay.id === "populationMovement"
           ? Users
+          : overlay.id === "pksbRoutes"
+            ? BusFront
+            : overlay.id === "publicCameras"
+              ? Camera
           : overlay.id === "conflictZones"
             ? MapPinned
             : overlay.id === "rainfallAnomalies"
@@ -543,6 +642,40 @@ export default function BorderMap({
         name: object.properties.name,
         type: "Focus zone",
         notes: object.properties.summary,
+      });
+      return;
+    }
+
+    if (isPksbStopFeature(object)) {
+      onProvinceSelect?.({
+        name: object.properties.stopNameEn,
+        type: object.properties.routeLabel,
+        location: object.properties.stopNameTh,
+        notes: `${object.properties.routeDirection}. ${object.properties.direction}. Timetable: ${object.properties.timetable}`,
+        externalUrl: object.properties.mapUrl,
+        source: "Phuket Smart Bus public tracker",
+      });
+      return;
+    }
+
+    if (isPksbRouteFeature(object)) {
+      onProvinceSelect?.({
+        name: object.properties.routeLabel,
+        type: "Transit corridor",
+        notes: object.properties.directionLabel,
+        source: "Phuket Smart Bus public tracker",
+      });
+      return;
+    }
+
+    if (isPublicCamera(object)) {
+      onProvinceSelect?.({
+        name: object.label,
+        type: "Public camera",
+        location: object.location,
+        notes: object.notes,
+        externalUrl: object.accessUrl,
+        source: object.provider,
       });
     }
   };
@@ -645,6 +778,20 @@ export default function BorderMap({
           <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
         )}
       </DeckGL>
+
+      {enabledOverlays.kmGrid && (
+        <div className="pointer-events-none absolute bottom-14 right-3 z-30 border border-[rgba(15,111,136,0.25)] bg-[rgba(248,246,240,0.88)] px-2.5 py-1.5 backdrop-blur-sm xl:right-4 xl:bottom-16">
+          <div className="text-[8px] font-mono font-bold uppercase tracking-[0.24em] text-[var(--cool)]">
+            Distance Grid
+          </div>
+          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)]">
+            1 x 1 km
+          </div>
+          <div className="text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
+            Major lines every 5 km
+          </div>
+        </div>
+      )}
 
       <div className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-[var(--line)] bg-[rgba(248,246,240,0.85)] backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-1.5 xl:px-4">

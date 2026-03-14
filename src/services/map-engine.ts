@@ -17,6 +17,11 @@ import type {
   FlightData,
   IncidentFeature,
   MapOverlay,
+  PksbRouteCollection,
+  PksbRouteProperties,
+  PksbStopCollection,
+  PksbStopProperties,
+  PublicCamera,
   RainfallPoint,
   RefugeeMovement,
   RegionBorderCollection,
@@ -456,6 +461,27 @@ export const createNightlightLayer = () =>
     maxZoom: 8,
   });
 
+function hexToRgba(hex: string, alpha = 255): [number, number, number, number] {
+  const normalized = hex.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((value) => `${value}${value}`)
+          .join("")
+      : normalized;
+
+  if (expanded.length !== 6) {
+    return [148, 163, 184, alpha];
+  }
+
+  const r = Number.parseInt(expanded.slice(0, 2), 16);
+  const g = Number.parseInt(expanded.slice(2, 4), 16);
+  const b = Number.parseInt(expanded.slice(4, 6), 16);
+
+  return [r, g, b, alpha];
+}
+
 export function createProvinceLabelsLayer() {
   const labels = getProvinceLabels() as ProvinceLabel[];
 
@@ -479,99 +505,222 @@ export function createProvinceLabelsLayer() {
   });
 }
 
+function getPksbStopColor(routeId: PksbStopProperties["routeId"]) {
+  if (routeId === "dragon_line") {
+    return [219, 0, 0, 210] as [number, number, number, number];
+  }
+
+  if (routeId === "main_line") {
+    return [53, 198, 243, 210] as [number, number, number, number];
+  }
+
+  return [255, 165, 0, 215] as [number, number, number, number];
+}
+
+export function createPksbRouteLayers(
+  routes: PksbRouteCollection,
+  stops: PksbStopCollection,
+) {
+  if (!routes.features.length && !stops.features.length) {
+    return [];
+  }
+
+  return [
+    new GeoJsonLayer({
+      id: "pksb-route-lines",
+      data: routes.features as never,
+      pickable: true,
+      stroked: true,
+      filled: false,
+      lineCapRounded: true,
+      lineJointRounded: true,
+      lineWidthMinPixels: 2,
+      getLineWidth: (feature) =>
+        ((feature as { properties: PksbRouteProperties }).properties.routeId ===
+        "main_line"
+          ? 6
+          : 4),
+      getLineColor: (feature) =>
+        hexToRgba(
+          (feature as { properties: PksbRouteProperties }).properties.color,
+          210,
+        ),
+    }),
+    new GeoJsonLayer({
+      id: "pksb-route-stops",
+      data: stops.features as never,
+      pickable: true,
+      pointType: "circle",
+      filled: true,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      pointRadiusUnits: "meters",
+      pointRadiusMinPixels: 3,
+      pointRadiusMaxPixels: 8,
+      getPointRadius: 120,
+      getFillColor: (feature) =>
+        getPksbStopColor(
+          (feature as { properties: PksbStopProperties }).properties.routeId,
+        ),
+      getLineColor: [248, 250, 252, 230],
+    }),
+  ];
+}
+
 /* ─── 1 × 1 km Grid Layer ──────────────────────────────────────── */
 
 const KM_GRID_BOUNDS = {
-  west: 98.2,
-  east: 98.55,
-  south: 7.7,
-  north: 8.2,
+  west: 98.16,
+  east: 98.64,
+  south: 7.64,
+  north: 8.24,
 };
 
-/** Approximate degrees per kilometer at the Phuket latitude (~7.88°N). */
+const KM_GRID_MAJOR_INTERVAL = 5;
+
+/** Approximate degrees per kilometer at the Phuket latitude (~7.9°N). */
 const DEG_PER_KM_LAT = 1 / 111.32;
-const DEG_PER_KM_LNG = 1 / (111.32 * Math.cos((7.88 * Math.PI) / 180));
+const DEG_PER_KM_LNG = 1 / (111.32 * Math.cos((7.9 * Math.PI) / 180));
 
 interface GridLine {
   start: [number, number];
   end: [number, number];
   kind: "major" | "minor";
+  axis: "vertical" | "horizontal";
+  indexKm: number;
 }
 
-function buildKmGridLines(): GridLine[] {
-  const lines: GridLine[] = [];
-  const { west, east, south, north } = KM_GRID_BOUNDS;
+interface GridLabel {
+  position: [number, number];
+  text: string;
+  axis: "x" | "y";
+}
 
-  // Snap to km grid origin
+function roundKmIndex(distanceDegrees: number, degreesPerKm: number) {
+  return Math.round(distanceDegrees / degreesPerKm);
+}
+
+function buildKmGridData() {
+  const lines: GridLine[] = [];
+  const labels: GridLabel[] = [];
+  const { west, east, south, north } = KM_GRID_BOUNDS;
   const lngStart = Math.floor(west / DEG_PER_KM_LNG) * DEG_PER_KM_LNG;
   const latStart = Math.floor(south / DEG_PER_KM_LAT) * DEG_PER_KM_LAT;
 
-  // Vertical lines (constant longitude)
-  for (let lng = lngStart; lng <= east; lng += DEG_PER_KM_LNG) {
-    const idx = Math.round((lng - lngStart) / DEG_PER_KM_LNG);
+  for (let lng = lngStart; lng <= east + DEG_PER_KM_LNG / 2; lng += DEG_PER_KM_LNG) {
+    const indexKm = roundKmIndex(lng - lngStart, DEG_PER_KM_LNG);
+    const kind = indexKm % KM_GRID_MAJOR_INTERVAL === 0 ? "major" : "minor";
+
     lines.push({
       start: [lng, south],
       end: [lng, north],
-      kind: idx % 5 === 0 ? "major" : "minor",
+      kind,
+      axis: "vertical",
+      indexKm,
     });
+
+    if (kind === "major" && indexKm > 0) {
+      labels.push({
+        position: [lng, north - DEG_PER_KM_LAT * 0.35],
+        text: `${indexKm} km`,
+        axis: "x",
+      });
+    }
   }
 
-  // Horizontal lines (constant latitude)
-  for (let lat = latStart; lat <= north; lat += DEG_PER_KM_LAT) {
-    const idx = Math.round((lat - latStart) / DEG_PER_KM_LAT);
+  for (let lat = latStart; lat <= north + DEG_PER_KM_LAT / 2; lat += DEG_PER_KM_LAT) {
+    const indexKm = roundKmIndex(lat - latStart, DEG_PER_KM_LAT);
+    const kind = indexKm % KM_GRID_MAJOR_INTERVAL === 0 ? "major" : "minor";
+
     lines.push({
       start: [west, lat],
       end: [east, lat],
-      kind: idx % 5 === 0 ? "major" : "minor",
+      kind,
+      axis: "horizontal",
+      indexKm,
     });
+
+    if (kind === "major" && indexKm > 0) {
+      labels.push({
+        position: [west + DEG_PER_KM_LNG * 0.55, lat],
+        text: `${indexKm} km`,
+        axis: "y",
+      });
+    }
   }
 
-  return lines;
+  return { lines, labels };
 }
 
-const KM_GRID_LINES = buildKmGridLines();
+const KM_GRID_DATA = buildKmGridData();
 
 export function createKilometerGridLayer() {
   return [
     new LineLayer({
       id: "km-grid-lines",
-      data: KM_GRID_LINES,
+      data: KM_GRID_DATA.lines,
       getSourcePosition: (d: GridLine) => d.start,
       getTargetPosition: (d: GridLine) => d.end,
       getColor: (d: GridLine) =>
         d.kind === "major"
-          ? [255, 255, 255, 60]
-          : [255, 255, 255, 25],
-      getWidth: (d: GridLine) => (d.kind === "major" ? 1.5 : 0.8),
+          ? [15, 111, 136, 165]
+          : [15, 111, 136, 78],
+      getWidth: (d: GridLine) => (d.kind === "major" ? 1.4 : 0.75),
       widthUnits: "pixels" as const,
+      widthMinPixels: 1,
       pickable: false,
     }),
-    // 5-km labels at every 5th gridline intersection
     new TextLayer({
       id: "km-grid-labels",
-      data: KM_GRID_LINES.filter(
-        (line) =>
-          line.kind === "major" &&
-          line.start[1] === line.end[1], // horizontal majors only
-      ).map((line, i) => ({
-        position: [KM_GRID_BOUNDS.west + DEG_PER_KM_LNG * 0.5, line.start[1]] as [number, number],
-        text: `${Math.round((line.start[1] - KM_GRID_BOUNDS.south) / DEG_PER_KM_LAT)} km`,
-        index: i,
-      })),
-      getPosition: (d: { position: [number, number] }) => d.position,
-      getText: (d: { text: string }) => d.text,
+      data: KM_GRID_DATA.labels,
+      getPosition: (d: GridLabel) => d.position,
+      getText: (d: GridLabel) => d.text,
       getSize: 9,
-      getColor: [255, 255, 255, 90],
-      getTextAnchor: "start" as const,
-      getAlignmentBaseline: "bottom" as const,
+      getColor: [15, 23, 42, 210],
+      getTextAnchor: (d: GridLabel) => (d.axis === "x" ? "middle" : "start"),
+      getAlignmentBaseline: (d: GridLabel) =>
+        d.axis === "x" ? "bottom" : "center",
+      getPixelOffset: (d: GridLabel) =>
+        d.axis === "x" ? [0, -2] : [3, 0],
       fontFamily: "SF Mono, JetBrains Mono, monospace",
-      outlineColor: [0, 0, 0, 160],
-      outlineWidth: 1.5,
+      outlineColor: [248, 250, 252, 220],
+      outlineWidth: 2,
       sizeUnits: "pixels" as const,
       billboard: false,
       pickable: false,
     }),
   ];
+}
+
+function getPublicCameraColor(
+  type: PublicCamera["type"],
+): [number, number, number, number] {
+  if (type === "traffic") {
+    return [245, 158, 11, 220];
+  }
+
+  if (type === "bay") {
+    return [59, 130, 246, 220];
+  }
+
+  return [14, 165, 233, 220];
+}
+
+export function createPublicCameraLayer(cameras: PublicCamera[]) {
+  return new ScatterplotLayer({
+    id: "public-cameras",
+    data: cameras,
+    getPosition: (camera: PublicCamera) => [camera.lng, camera.lat],
+    getFillColor: (camera: PublicCamera) => getPublicCameraColor(camera.type),
+    getRadius: 420,
+    radiusUnits: "meters",
+    radiusMinPixels: 4,
+    radiusMaxPixels: 10,
+    stroked: true,
+    lineWidthMinPixels: 1,
+    getLineColor: [248, 250, 252, 235],
+    pickable: true,
+  });
 }
 
 /* ─── Flight Layer ─────────────────────────────────────────────── */
