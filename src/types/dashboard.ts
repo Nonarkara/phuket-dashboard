@@ -642,3 +642,19 @@ export interface MediaWatchResponse {
   broadcastWatch: NarrativeSignal[];
   sources: string[];
 }
+
+export interface PhuketVisitorOrigin {
+  rank: number;
+  countryCode: string;
+  country: string;
+  logo: string;
+  gdpPerCapitaUsd: number | null;
+  year: number | null;
+  source: string;
+}
+
+export interface PhuketVisitorOriginsResponse {
+  generatedAt: string;
+  origins: PhuketVisitorOrigin[];
+  sources: string[];
+}

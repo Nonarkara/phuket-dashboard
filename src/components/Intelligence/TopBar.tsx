@@ -1,8 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { BookOpen, Database, Network } from "lucide-react";
-import type { ExecutiveStatus, GovernorBrief } from "../../types/dashboard";
+import type {
+  ExecutiveStatus,
+  GovernorBrief,
+  PhuketVisitorOriginsResponse,
+} from "../../types/dashboard";
 
 interface TopBarProps {
   brief: GovernorBrief | null;
@@ -40,6 +45,8 @@ export default function TopBar({
   onOpenDataExplorer,
 }: TopBarProps) {
   const [time, setTime] = useState("");
+  const [visitorOrigins, setVisitorOrigins] =
+    useState<PhuketVisitorOriginsResponse | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -53,6 +60,40 @@ export default function TopBar({
       clearInterval(clockInterval);
     };
   }, []);
+
+  useEffect(() => {
+    const loadOrigins = async () => {
+      try {
+        const response = await fetch("/api/visitor-origins");
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as PhuketVisitorOriginsResponse;
+        setVisitorOrigins(payload);
+      } catch {
+        setVisitorOrigins(null);
+      }
+    };
+
+    void loadOrigins();
+    const interval = setInterval(() => {
+      void loadOrigins();
+    }, 30 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatCompactUsd = (value: number | null) => {
+    if (value === null) {
+      return "--";
+    }
+
+    return new Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value);
+  };
 
   return (
     <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-2 backdrop-blur-xl sm:px-5">
@@ -157,6 +198,61 @@ export default function TopBar({
                 )}
               </div>
             ))}
+          </div>
+
+          <div className="border border-[var(--line)] bg-[var(--bg)] px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow">Top Visitor Origins</div>
+                <div className="pt-0.5 text-[12px] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+                  Phuket top 5 feeder countries with GDP per capita
+                </div>
+              </div>
+              <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                {visitorOrigins?.sources[0] ?? "Loading"}
+              </div>
+            </div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-5">
+              {(visitorOrigins?.origins ?? Array.from({ length: 5 })).slice(0, 5).map((origin, index) => (
+                <div
+                  key={typeof origin === "object" ? origin.countryCode : `origin-placeholder-${index}`}
+                  className="border border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2"
+                >
+                  {typeof origin === "object" ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center border border-[var(--line)] bg-[var(--bg)]">
+                          <Image
+                            src={origin.logo}
+                            alt={`${origin.country} logo`}
+                            width={18}
+                            height={14}
+                            className="h-auto w-[18px] object-contain"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                            #{origin.rank}
+                          </div>
+                          <div className="truncate text-[11px] font-semibold text-[var(--ink)]">
+                            {origin.country}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2 text-[16px] font-mono font-bold tracking-[-0.03em] text-[var(--ink)]">
+                        ${formatCompactUsd(origin.gdpPerCapitaUsd)}
+                      </div>
+                      <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                        GDP per capita{origin.year ? ` / ${origin.year}` : ""}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-[56px] animate-pulse bg-[rgba(17,17,17,0.04)]" />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
