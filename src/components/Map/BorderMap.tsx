@@ -44,6 +44,7 @@ import {
 } from "../../services/map-engine";
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
+import { GOVERNOR_CORRIDORS, findCorridorById } from "../../lib/governor-config";
 import { getUsableMapboxToken } from "../../lib/mapbox";
 import { buildMapOverlayCatalog } from "../../lib/map-overlays";
 import type {
@@ -192,8 +193,10 @@ function isPublicCamera(value: unknown): value is PublicCamera {
     typeof value.id === "string" &&
     typeof value.label === "string" &&
     typeof value.location === "string" &&
+    typeof value.locationLabel === "string" &&
     typeof value.provider === "string" &&
-    typeof value.accessUrl === "string"
+    typeof value.focusArea === "string" &&
+    typeof value.strategicNote === "string"
   );
 }
 
@@ -236,7 +239,7 @@ function getTooltipText(object: unknown): string | null {
   }
 
   if (isPublicCamera(object)) {
-    return `${object.label} • ${object.provider}`;
+    return `${object.label} • ${object.validationState} • ${object.provider}`;
   }
 
   if (hasLabel(object)) {
@@ -256,10 +259,15 @@ function formatCompactCount(value: number) {
 
 export default function BorderMap({
   onProvinceSelect,
+  selectedCorridorId,
+  onCorridorSelect,
 }: {
   onProvinceSelect?: (province: ProvinceSelection) => void;
+  selectedCorridorId?: string;
+  onCorridorSelect?: (corridorId: string) => void;
 }) {
   const [mounted, setMounted] = useState(false);
+  const [webglSupported, setWebglSupported] = useState(true);
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
   const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(true);
   const [satelliteOpacity, setSatelliteOpacity] = useState(62);
@@ -314,10 +322,19 @@ export default function BorderMap({
   const rainCount = rainfall.length;
   const busStopCount = pksbStops.features.length;
   const cameraCount = publicCameras.length;
+  const verifiedCameraCount = publicCameras.filter(
+    (camera) => camera.validationState === "verified",
+  ).length;
+  const scoutCameraCount = publicCameras.filter(
+    (camera) => camera.validationState === "candidate",
+  ).length;
   const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
   const totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
   ).length;
+  const activeCorridor = selectedCorridorId
+    ? findCorridorById(selectedCorridorId)
+    : GOVERNOR_CORRIDORS[0];
   const mapStyle = isDetailedMap
     ? "mapbox://styles/mapbox/satellite-streets-v12"
     : "mapbox://styles/mapbox/light-v11";
@@ -343,14 +360,36 @@ export default function BorderMap({
     .filter(Boolean);
 
   useEffect(() => {
+    const canvas = document.createElement("canvas");
+    const hasWebgl =
+      Boolean(canvas.getContext("webgl2")) || Boolean(canvas.getContext("webgl"));
+
+    setWebglSupported(hasWebgl);
     setMounted(true);
     debugLog("H1", "BorderMap.tsx:useEffect", "mounted effect ran", {
       safeDate,
       hasMapboxToken: MAPBOX_TOKEN.length > 0,
       baseOverlayCount: baseOverlays.length,
+      hasWebgl,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selectedCorridorId) {
+      return;
+    }
+
+    const corridor = findCorridorById(selectedCorridorId);
+    if (!corridor) {
+      return;
+    }
+
+    setViewState((current) => ({
+      ...current,
+      ...corridor.view,
+    }));
+  }, [selectedCorridorId]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -384,6 +423,7 @@ export default function BorderMap({
           generatedAt: new Date(0).toISOString(),
           source: [],
           cameras: [],
+          scoutTargets: [],
         }),
       ]);
 
@@ -453,50 +493,7 @@ export default function BorderMap({
   const operationalControls = additionalOverlays.filter(
     (overlay) => overlay.role === "operational",
   );
-  const focusPresets = [
-    {
-      id: "phuket-core",
-      label: "Phuket island",
-      summary: "Town, beaches, airport, and east coast",
-      view: INITIAL_VIEW_STATE,
-    },
-    {
-      id: "patong-coast",
-      label: "Patong coast",
-      summary: "Patong, Karon, Kata, and western access",
-      view: {
-        longitude: 98.284,
-        latitude: 7.842,
-        zoom: 11.25,
-        pitch: 46,
-        bearing: -20,
-      },
-    },
-    {
-      id: "airport-link",
-      label: "Airport link",
-      summary: "Airport, bridge, and northern road corridor",
-      view: {
-        longitude: 98.315,
-        latitude: 8.112,
-        zoom: 10.45,
-        pitch: 42,
-        bearing: -8,
-      },
-    },
-    {
-      id: "phang-nga-bay",
-      label: "Phang Nga Bay",
-      summary: "Bay approaches, piers, and marine routes",
-      view: {
-        longitude: 98.53,
-        latitude: 8.085,
-        zoom: 9.75,
-        pitch: 38,
-        bearing: 14,
-      },
-    },
-  ] as const;
+  const focusPresets = GOVERNOR_CORRIDORS;
   const mapModeControls = [
     {
       id: "satellite-overlay",
@@ -671,11 +668,14 @@ export default function BorderMap({
     if (isPublicCamera(object)) {
       onProvinceSelect?.({
         name: object.label,
-        type: "Public camera",
-        location: object.location,
-        notes: object.notes,
-        externalUrl: object.accessUrl,
-        source: object.provider,
+        type:
+          object.validationState === "verified"
+            ? "Verified camera"
+            : "Scout target",
+        location: object.locationLabel,
+        notes: object.strategicNote,
+        externalUrl: object.accessUrl ?? undefined,
+        source: `${object.provider} / ${object.focusArea}`,
       });
     }
   };
@@ -743,6 +743,7 @@ export default function BorderMap({
     showSatelliteOverlay,
     satelliteOverlay,
     hasMapboxToken: MAPBOX_TOKEN.length > 0,
+    webglSupported,
   });
 
   return (
@@ -754,30 +755,94 @@ export default function BorderMap({
         />
       )}
 
-      <DeckGL
-        id="phuket-deck"
-        viewState={viewState}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
-          const next = nextViewState as MapViewState;
-          setViewState(next);
-        }}
-        controller={true}
-        layers={allLayers}
-        onClick={handleMapClick}
-        getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
-      >
-        {hasMapboxBaseMap ? (
-          <MapboxMap
-            mapboxAccessToken={MAPBOX_TOKEN}
-            mapStyle={mapStyle}
-            reuseMaps
-            attributionControl={false}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
-        )}
-      </DeckGL>
+      {webglSupported ? (
+        <DeckGL
+          id="phuket-deck"
+          viewState={viewState}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
+            const next = nextViewState as MapViewState;
+            setViewState(next);
+          }}
+          controller={true}
+          layers={allLayers}
+          onClick={handleMapClick}
+          getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
+        >
+          {hasMapboxBaseMap ? (
+            <MapboxMap
+              mapboxAccessToken={MAPBOX_TOKEN}
+              mapStyle={mapStyle}
+              reuseMaps
+              attributionControl={false}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
+          )}
+        </DeckGL>
+      ) : (
+        <div className="absolute inset-0 px-5 pb-24 pt-24">
+          <div className="flex h-full items-center justify-center border border-[var(--line)] bg-[rgba(248,246,240,0.72)] backdrop-blur-sm">
+            <div className="w-[min(680px,100%)] border border-[var(--line)] bg-[var(--bg)] p-5">
+              <div className="eyebrow">Operational map fallback</div>
+              <h3 className="pt-1 text-[20px] font-bold tracking-[-0.04em] text-[var(--ink)]">
+                {activeCorridor?.label ?? "Island corridor"} still stays in focus
+              </h3>
+              <p className="pt-2 text-[12px] leading-5 text-[var(--muted)]">
+                This client does not expose WebGL, so the deck.gl map cannot render here.
+                The governor workflow stays live on internal APIs, corridor selection, cameras,
+                flights, overlays, and satellite configuration.
+              </p>
+
+              <div className="mt-4 grid gap-2 md:grid-cols-4">
+                {[
+                  { label: "Signals", value: signalCount },
+                  { label: "Verified cams", value: verifiedCameraCount },
+                  { label: "Scout cams", value: scoutCameraCount },
+                  { label: "Aircraft", value: flights.length },
+                ].map((item) => (
+                  <div key={item.label} className="border border-[var(--line)] px-3 py-2">
+                    <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                      {item.label}
+                    </div>
+                    <div className="pt-1 text-[18px] font-mono font-bold text-[var(--ink)]">
+                      {item.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                <div className="border border-[var(--line)] px-3 py-3">
+                  <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                    Focus corridor
+                  </div>
+                  <div className="pt-1 text-[12px] font-semibold text-[var(--ink)]">
+                    {activeCorridor?.label ?? "Phuket island"}
+                  </div>
+                  <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+                    {activeCorridor
+                      ? `${activeCorridor.focusAreas.join(", ")} remain available through the governor corridor cards.`
+                      : "Island chokepoints remain available through the governor corridor cards."}
+                  </div>
+                </div>
+                <div className="border border-[var(--line)] px-3 py-3">
+                  <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                    Overlay posture
+                  </div>
+                  <div className="pt-1 text-[12px] font-semibold text-[var(--ink)]">
+                    {totalActiveLayers} layers configured
+                  </div>
+                  <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+                    Satellite, weather, AQI, flights, rainfall, and camera overlays stay
+                    operational when WebGL is available on the client.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {enabledOverlays.kmGrid && (
         <div className="pointer-events-none absolute bottom-14 right-3 z-30 border border-[rgba(15,111,136,0.25)] bg-[rgba(248,246,240,0.88)] px-2.5 py-1.5 backdrop-blur-sm xl:right-4 xl:bottom-16">
@@ -797,11 +862,12 @@ export default function BorderMap({
         <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-1.5 xl:px-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="text-[14px] font-bold tracking-tight text-[var(--ink)] uppercase">Operating Surface</div>
+              <div className="text-[14px] font-bold tracking-tight text-[var(--ink)] uppercase">Island chokepoints</div>
               <div className="h-3 w-[1px] bg-[var(--line)]" />
               <div className="flex gap-3 text-[9px] font-mono font-bold text-[var(--dim)] uppercase tracking-tight">
                 <span>SIG {signalCount}</span>
-                <span>AQI {airQuality.length}</span>
+                <span>VER {verifiedCameraCount}</span>
+                <span>SCT {scoutCameraCount}</span>
                 <span>FLT {flights.length}</span>
                 <span>LYR {totalActiveLayers}</span>
               </div>
@@ -854,13 +920,18 @@ export default function BorderMap({
               <button
                 key={preset.id}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  onCorridorSelect?.(preset.id);
                   setViewState((current) => ({
                     ...current,
                     ...preset.view,
-                  }))
-                }
-                className="whitespace-nowrap rounded border border-[var(--line)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--dim)] transition-colors hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
+                  }));
+                }}
+                className={`whitespace-nowrap rounded border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                  selectedCorridorId === preset.id
+                    ? "border-[var(--ink)] bg-[rgba(17,17,17,0.05)] text-[var(--ink)]"
+                    : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
+                }`}
               >
                 {preset.label}
               </button>

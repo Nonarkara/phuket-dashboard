@@ -1,236 +1,128 @@
 "use client";
 
-import { useCallback, useState, useRef, useEffect } from "react";
-import { Volume2, VolumeX, Tv, ExternalLink } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, MapPin, Tv, Volume2, VolumeX } from "lucide-react";
+import { findCorridorById } from "../../lib/governor-config";
+import { LIVE_TV_CHANNELS } from "../../lib/live-tv-channels";
+import type { PublicCameraResponse } from "../../types/dashboard";
 
-/**
- * Live TV channels from SE Asian countries.
- * Uses YouTube live stream embeds (muted by default).
- * Each has a speaker toggle for audio and an external link.
- */
-interface TVChannel {
-  country: string;
-  code: string;
-  name: string;
-  /** YouTube permanent channel ID for live_stream embed */
-  ytChannelId?: string;
-  /** YouTube handle to scrape the live video ID from /streams (for channels that block channel embed) */
-  ytHandle?: string;
-  externalUrl: string;
-  color: string;
+interface LiveTVPanelProps {
+  cameraPayload: PublicCameraResponse | null;
+  selectedCorridorId: string;
 }
 
-const CHANNELS: TVChannel[] = [
-  {
-    country: "Thailand",
-    code: "PBS",
-    name: "Thai PBS News",
-    ytHandle: "@ThaiPBSNews",
-    externalUrl: "https://www.youtube.com/@ThaiPBSNews",
-    color: "#38bdf8",
-  },
-  {
-    country: "Thailand",
-    code: "NBT",
-    name: "NBT Connext",
-    ytHandle: "@NBTConnext",
-    externalUrl: "https://www.youtube.com/@NBTConnext",
-    color: "#f59e0b",
-  },
-  {
-    country: "Thailand",
-    code: "TNN",
-    name: "TNN Online",
-    ytHandle: "@TNNOnline",
-    externalUrl: "https://www.youtube.com/@TNNOnline",
-    color: "#22c55e",
-  },
-  {
-    country: "Thailand",
-    code: "PPTV",
-    name: "PPTV HD 36",
-    ytHandle: "@PPTVHD36",
-    externalUrl: "https://www.youtube.com/@PPTVHD36",
-    color: "#a855f7",
-  },
-  {
-    country: "Thailand",
-    code: "NAT",
-    name: "NationTV",
-    ytHandle: "@NationTV22",
-    externalUrl: "https://www.youtube.com/@NationTV22",
-    color: "#ef4444",
-  },
-  {
-    country: "Thailand",
-    code: "AMR",
-    name: "Amarin TV",
-    ytHandle: "@AMARINTVHD",
-    externalUrl: "https://www.youtube.com/@AMARINTVHD",
-    color: "#f97316",
-  },
-];
-
-function TVSlot({ channel }: { channel: TVChannel }) {
-  const [muted, setMuted] = useState(true);
+function TVSlot({
+  channelId,
+  channelName,
+  channelHandle,
+  channelColor,
+  externalUrl,
+}: {
+  channelId?: string;
+  channelName: string;
+  channelHandle?: string;
+  channelColor: string;
+  externalUrl: string;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [muted, setMuted] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [dynamicId, setDynamicId] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
-  // Lazy-load: only render iframe when visible
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
   useEffect(() => {
-    if (!visible) return;
-
-    if (channel.ytHandle && !dynamicId) {
-      fetch(`/api/live-tv?handle=${encodeURIComponent(channel.ytHandle)}`)
-        .then((r) => r.json())
+    if (channelHandle && !dynamicId) {
+      fetch(`/api/live-tv?handle=${encodeURIComponent(channelHandle)}`)
+        .then((response) => response.json())
         .then((data) => {
-          if (data.videoId) setDynamicId(data.videoId);
-          else setError(true);
+          if (data.videoId) {
+            setDynamicId(data.videoId);
+            return;
+          }
+
+          setError(true);
         })
         .catch(() => setError(true));
     }
-  }, [visible, channel.ytHandle, dynamicId]);
+  }, [channelHandle, dynamicId]);
 
-  // Build YouTube resilient embed URL
-  let embedUrl = "";
-  const baseParams = "autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&fs=0&disablekb=1&enablejsapi=1";
-  
-  if (channel.ytChannelId) {
-    embedUrl = `https://www.youtube.com/embed/live_stream?channel=${channel.ytChannelId}&${baseParams}`;
-  } else if (dynamicId) {
-    embedUrl = `https://www.youtube.com/embed/${dynamicId}?${baseParams}`;
-  }
-
-  const toggleMute = useCallback(() => {
-    if (!iframeRef.current?.contentWindow) return;
-    
-    // Toggle state
-    const nextMuted = !muted;
-    setMuted(nextMuted);
-    
-    // Send postMessage to YouTube iframe to mute/unmute without reloading the src
-    iframeRef.current.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: nextMuted ? "mute" : "unMute", args: [] }),
-      "*"
-    );
-    
-    // Also enforce play command just in case browser autoplay was initially blocked
-    iframeRef.current.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-      "*"
-    );
-  }, [muted]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1 },
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const embedUrl = channelId
+    ? `https://www.youtube.com/embed/live_stream?channel=${channelId}&autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&enablejsapi=1`
+    : dynamicId
+      ? `https://www.youtube.com/embed/${dynamicId}?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&enablejsapi=1`
+      : "";
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex flex-col overflow-hidden rounded-md border border-[var(--line-bright)] bg-[var(--bg)]"
-    >
-      {/* Video area */}
+    <div className="border border-[var(--line)] bg-[var(--bg)]">
       <div className="relative aspect-video w-full bg-black">
-        {error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-            <Tv size={16} className="text-[#ef4444]" />
-            <span className="text-[9px] text-[var(--muted)]">Offline</span>
+        {error || !embedUrl ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <Tv size={14} className="text-[var(--dim)]" />
+            <span className="text-[9px] text-[var(--muted)]">TV source loading</span>
           </div>
-        ) : visible && embedUrl ? (
+        ) : (
           <iframe
             ref={iframeRef}
             src={embedUrl}
-            title={`${channel.name} Live`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            title={channelName}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
-            className="absolute inset-0 h-full w-full origin-center scale-[1.35] transform-gpu"
+            className="absolute inset-0 h-full w-full"
             style={{ border: "none" }}
             onLoad={() => {
               setLoaded(true);
-              // Force play when loaded
-              if (iframeRef.current?.contentWindow) {
-                iframeRef.current.contentWindow.postMessage(
-                  JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-                  "*"
-                );
-              }
             }}
           />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Tv size={16} className="text-[var(--dim)]" />
-          </div>
         )}
 
-        {/* Loading state */}
-        {visible && !loaded && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <div className="h-3 w-3 animate-spin rounded-full border border-[var(--cool)] border-t-transparent" />
+        {!loaded && !error ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+            <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
           </div>
-        )}
-
+        ) : null}
       </div>
 
-      {/* Label bar */}
-      <div className="flex items-center justify-between px-1.5 py-1 bg-[var(--bg-surface)]">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1">
-            <span
-              className="text-[7px] font-bold uppercase tracking-[0.1em]"
-              style={{ color: channel.color }}
-            >
-              {channel.code}
-            </span>
-            <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] truncate">
-              {channel.name}
-            </span>
+      <div className="flex items-center justify-between px-2 py-1.5">
+        <div>
+          <div
+            className="text-[8px] font-bold uppercase tracking-[0.16em]"
+            style={{ color: channelColor }}
+          >
+            {channelName}
           </div>
-          <span className="flex items-center gap-0.5 mt-0.5">
-            <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-[#ef4444]" />
-            <span className="text-[6px] font-bold uppercase tracking-[0.15em] text-[var(--dim)]">
-              LIVE
-            </span>
-          </span>
+          <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+            Live wall
+          </div>
         </div>
 
-        {/* Controls */}
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={toggleMute}
-            className="flex h-5 w-5 items-center justify-center rounded-sm bg-[var(--bg-raised)] text-[var(--ink)] transition-colors hover:bg-[var(--bg-surface)] hover:text-white border border-[var(--line-bright)]"
+            onClick={() => {
+              const nextMuted = !muted;
+              setMuted(nextMuted);
+              iframeRef.current?.contentWindow?.postMessage(
+                JSON.stringify({
+                  event: "command",
+                  func: nextMuted ? "mute" : "unMute",
+                  args: [],
+                }),
+                "*",
+              );
+            }}
+            className="flex h-6 w-6 items-center justify-center border border-[var(--line)] text-[var(--ink)]"
             title={muted ? "Unmute" : "Mute"}
           >
             {muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
           </button>
           <a
-            href={channel.externalUrl}
+            href={externalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-5 w-5 items-center justify-center rounded-sm bg-[var(--bg-raised)] text-[var(--ink)] transition-colors hover:bg-[var(--bg-surface)] hover:text-white border border-[var(--line-bright)]"
-            title="Open Stream"
+            className="flex h-6 w-6 items-center justify-center border border-[var(--line)] text-[var(--ink)]"
+            title="Open channel"
           >
-            <ExternalLink size={9} />
+            <ExternalLink size={10} />
           </a>
         </div>
       </div>
@@ -238,27 +130,104 @@ function TVSlot({ channel }: { channel: TVChannel }) {
   );
 }
 
-export default function LiveTVPanel() {
+export default function LiveTVPanel({
+  cameraPayload,
+  selectedCorridorId,
+}: LiveTVPanelProps) {
+  const corridor = findCorridorById(selectedCorridorId);
+  const allCameras = cameraPayload?.cameras ?? [];
+  const corridorCameras = allCameras.filter((camera) =>
+    camera.corridorIds?.includes(selectedCorridorId),
+  );
+  const featuredCameras = corridorCameras.length > 0 ? corridorCameras : allCameras;
+  const verifiedCameras = featuredCameras.filter(
+    (camera) => camera.validationState === "verified",
+  );
+  const scoutCameras = featuredCameras.filter(
+    (camera) => camera.validationState === "candidate",
+  );
+
   return (
-    <section className="flex h-full flex-col bg-[var(--bg-surface)] p-3 overflow-visible">
-      <div className="flex items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <Tv size={12} className="text-[var(--cool)]" />
-          <div className="eyebrow">Thailand / south</div>
+    <section className="flex h-full flex-col bg-[var(--bg-surface)] p-3 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 pb-2">
+        <div>
+          <div className="eyebrow">Visual confirmation</div>
+          <div className="pt-0.5 text-[13px] font-bold tracking-[-0.02em] text-[var(--ink)]">
+            {corridor?.label ?? "Governor feed mix"}
+          </div>
         </div>
-        <span className="text-[7px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
-          6 channels
-        </span>
+        <div className="text-right text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+          {verifiedCameras.length} verified / {scoutCameras.length} scout
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 pt-1">
-        {CHANNELS.map((ch) => (
-          <TVSlot key={ch.code} channel={ch} />
-        ))}
-      </div>
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+        <div className="grid gap-2">
+          {LIVE_TV_CHANNELS.slice(0, 2).map((channel) => (
+            <TVSlot
+              key={channel.code}
+              channelId={channel.ytChannelId}
+              channelName={channel.name}
+              channelHandle={channel.ytHandle}
+              channelColor={channel.color}
+              externalUrl={channel.externalUrl}
+            />
+          ))}
+        </div>
 
-      <div className="mt-1 text-[7px] font-mono tracking-[0.1em] text-[var(--dim)]">
-        Source: YouTube Live feeds with strong Phuket and southern Thailand coverage
+        <div className="min-h-0 overflow-y-auto border border-[var(--line)] bg-[var(--bg)]">
+          <div className="border-b border-[var(--line)] px-3 py-2">
+            <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Camera stack
+            </div>
+          </div>
+
+          <div className="divide-y divide-[var(--line)]">
+            {featuredCameras.slice(0, 6).map((camera) => (
+              <div key={camera.id} className="px-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold text-[var(--ink)]">
+                      {camera.label}
+                    </div>
+                    <div className="pt-0.5 flex items-center gap-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                      <MapPin size={8} />
+                      {camera.locationLabel}
+                    </div>
+                  </div>
+                  <span
+                    className={`border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] ${
+                      camera.validationState === "verified"
+                        ? "border-[var(--cool)] bg-[rgba(15,111,136,0.08)] text-[var(--cool)]"
+                        : "border-[var(--line)] bg-[rgba(17,17,17,0.03)] text-[var(--dim)]"
+                    }`}
+                  >
+                    {camera.validationState}
+                  </span>
+                </div>
+                <p className="pt-1 text-[9px] leading-4 text-[var(--muted)]">
+                  {camera.strategicNote}
+                </p>
+
+                {camera.accessUrl ? (
+                  <a
+                    href={camera.accessUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 border border-[var(--line)] px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-[var(--ink)]"
+                  >
+                    Open feed
+                    <ExternalLink size={9} />
+                  </a>
+                ) : (
+                  <div className="mt-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                    {camera.candidateSourceNote ?? "Candidate source pending validation"}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );

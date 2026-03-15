@@ -1,160 +1,162 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { fallbackSources } from "../../lib/mock-data";
-import { buildMapOverlayCatalog } from "../../lib/map-overlays";
+import { Anchor, MessageSquare, Radar, Waves } from "lucide-react";
+import { findCorridorById } from "../../lib/governor-config";
 import type {
-  ApiSourceResponse,
-  MapOverlayCatalogResponse,
+  GovernorBrief,
+  MarineStatusResponse,
+  MediaWatchResponse,
+  PublicCameraResponse,
 } from "../../types/dashboard";
 
-function isApiSourceResponse(value: unknown): value is ApiSourceResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "sources" in value &&
-    Array.isArray(value.sources)
-  );
+interface SourceStackProps {
+  brief: GovernorBrief | null;
+  marine: MarineStatusResponse | null;
+  mediaWatch: MediaWatchResponse | null;
+  cameraPayload: PublicCameraResponse | null;
+  selectedCorridorId: string;
 }
 
-function isMapOverlayCatalogResponse(
-  value: unknown,
-): value is MapOverlayCatalogResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "overlays" in value &&
-    Array.isArray(value.overlays)
+export default function SourceStack({
+  brief,
+  marine,
+  mediaWatch,
+  cameraPayload,
+  selectedCorridorId,
+}: SourceStackProps) {
+  const corridor = findCorridorById(selectedCorridorId);
+  const corridorBrief = brief?.corridorPriorities.find(
+    (item) => item.id === selectedCorridorId,
   );
-}
+  const corridorMarine =
+    marine?.corridors.filter(
+      (item) =>
+        corridor?.focusAreas.includes(item.focusArea) ||
+        corridor?.aliases.some((alias) =>
+          `${item.label} ${item.focusArea}`.toLowerCase().includes(alias.toLowerCase()),
+        ),
+    ) ?? [];
+  const corridorSignals =
+    mediaWatch
+      ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare].filter(
+          (signal) =>
+            corridor?.focusAreas.includes(signal.zone) ||
+            corridor?.aliases.some((alias) =>
+              `${signal.title} ${signal.zone} ${signal.summary}`
+                .toLowerCase()
+                .includes(alias.toLowerCase()),
+            ),
+        )
+      : [];
+  const corridorCameras =
+    cameraPayload?.cameras.filter((camera) =>
+      camera.corridorIds?.includes(selectedCorridorId),
+    ) ?? [];
+  const verifiedCount = corridorCameras.filter(
+    (camera) => camera.validationState === "verified",
+  ).length;
+  const scoutCount = corridorCameras.filter(
+    (camera) => camera.validationState === "candidate",
+  ).length;
+  const leadMarine = corridorMarine[0];
+  const leadSignal = corridorSignals[0];
 
-export default function SourceStack() {
-  const [sources, setSources] = useState<ApiSourceResponse>(fallbackSources);
-  const [catalog, setCatalog] = useState<MapOverlayCatalogResponse>(
-    buildMapOverlayCatalog(),
-  );
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const [sourcesResponse, overlayResponse] = await Promise.all([
-        fetch("/api/sources"),
-        fetch("/api/map/overlays"),
-      ]);
-      const [sourcesPayload, overlayPayload]: [unknown, unknown] =
-        await Promise.all([sourcesResponse.json(), overlayResponse.json()]);
-
-      if (isApiSourceResponse(sourcesPayload)) {
-        setSources(sourcesPayload);
-      }
-
-      if (isMapOverlayCatalogResponse(overlayPayload)) {
-        setCatalog(overlayPayload);
-      }
-    } catch {
-      setSources(fallbackSources);
-      setCatalog(buildMapOverlayCatalog());
-    }
-  }, []);
-
-  useEffect(() => {
-    const initialLoad = setTimeout(() => {
-      void load();
-    }, 0);
-    const interval = setInterval(() => {
-      void load();
-    }, 3 * 60 * 1000);
-    return () => {
-      clearTimeout(initialLoad);
-      clearInterval(interval);
-    };
-  }, [load]);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    load().then(() => setTimeout(() => setRefreshing(false), 600));
-  };
+  if (!corridor || !corridorBrief) {
+    return (
+      <section className="flex h-full items-center justify-center bg-[var(--bg-surface)]">
+        <span className="eyebrow">Loading corridor dossier</span>
+      </section>
+    );
+  }
 
   return (
     <section className="flex h-full flex-col bg-[var(--bg-surface)] overflow-y-auto">
-      <div className="flex-1 p-4">
-        <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
-          <div>
-            <div className="eyebrow">Sources</div>
-            <div className="pt-1 text-[14px] font-bold tracking-[-0.02em] text-[var(--ink)]">
-              Data feeds
-            </div>
-          </div>
-          <button type="button" onClick={handleRefresh} className="text-[var(--dim)] hover:text-[var(--cool)] transition-colors" title="Refresh sources">
-            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-          </button>
+      <div className="p-4 border-b border-[var(--line)]">
+        <div className="eyebrow">Selected corridor</div>
+        <div className="pt-1 text-[16px] font-bold tracking-[-0.03em] text-[var(--ink)]">
+          {corridorBrief.label}
         </div>
-        <div className="divide-y divide-[var(--line)] pt-2">
-          {sources.sources.slice(0, 4).map((source) => (
-            <div
-              key={source.id}
-              className="grid grid-cols-[70px_1fr] gap-3 py-3 text-[10px]"
-            >
-              <div className="font-bold uppercase tracking-[0.14em] text-[var(--dim)]">
-                {source.target}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-[var(--ink)]">{source.label}</div>
-                  {source.health ? (
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${
-                        source.health === "live"
-                          ? "bg-[rgba(34,197,94,0.15)] text-[#22c55e]"
-                          : source.health === "stale"
-                            ? "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]"
-                            : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
-                      }`}
-                    >
-                      {source.health}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="truncate pt-0.5 text-[var(--dim)]">{source.url}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <p className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+          {corridorBrief.whyNow}
+        </p>
       </div>
 
-      <div className="border-t border-[var(--line)] p-4">
-        <div className="eyebrow">
-          Overlays / {new Date(catalog.updatedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "2-digit",
-          })}
-        </div>
-        <div className="grid gap-0 pt-2">
-          {catalog.overlays
-            .filter((overlay) => overlay.kind === "raster")
-            .slice(0, 5)
-            .map((source) => (
-            <div
-              key={source.id}
-              className="border-t border-[var(--line)] px-0 py-3 first:border-t-0"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--cool)]">
-                  {source.label}
-                </div>
-                <span className="text-[8px] font-mono uppercase tracking-[0.14em] text-[var(--dim)]">
-                  {source.shortLabel}
-                </span>
-              </div>
-              <p className="pt-1 text-[10px] leading-4 text-[var(--dim)]">
-                {source.description}
-              </p>
-              <div className="pt-1 text-[9px] uppercase tracking-[0.14em] text-[var(--dim)]">
-                {source.source}
-              </div>
+      <div className="grid gap-3 p-4">
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="border border-[var(--line)] px-3 py-3">
+            <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              <Radar size={11} />
+              Recommended action
             </div>
-          ))}
+            <p className="pt-2 text-[11px] leading-5 text-[var(--ink)]">
+              {corridorBrief.action}
+            </p>
+          </div>
+
+          <div className="border border-[var(--line)] px-3 py-3">
+            <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              <Anchor size={11} />
+              Visual coverage
+            </div>
+            <p className="pt-2 text-[11px] leading-5 text-[var(--ink)]">
+              {verifiedCount} verified feeds, {scoutCount} scout targets
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="border border-[var(--line)] px-3 py-3">
+            <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              <Waves size={11} />
+              Marine / weather
+            </div>
+            {leadMarine ? (
+              <div className="pt-2 space-y-1 text-[10px] leading-4 text-[var(--muted)]">
+                <div>
+                  {leadMarine.label}: {leadMarine.alertPosture}
+                </div>
+                <div>
+                  Wave {leadMarine.waveHeightMeters?.toFixed(1) ?? "--"}m / Wind{" "}
+                  {leadMarine.windSpeedKph?.toFixed(0) ?? "--"}kph / Gust{" "}
+                  {leadMarine.gustSpeedKph?.toFixed(0) ?? "--"}kph
+                </div>
+              </div>
+            ) : (
+              <p className="pt-2 text-[10px] leading-4 text-[var(--muted)]">
+                No corridor-specific marine metric available yet.
+              </p>
+            )}
+          </div>
+
+          <div className="border border-[var(--line)] px-3 py-3">
+            <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              <MessageSquare size={11} />
+              Key headline
+            </div>
+            {leadSignal ? (
+              <div className="pt-2">
+                <div className="text-[10px] font-semibold text-[var(--ink)]">
+                  {leadSignal.title}
+                </div>
+                <p className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+                  {leadSignal.summary}
+                </p>
+              </div>
+            ) : (
+              <p className="pt-2 text-[10px] leading-4 text-[var(--muted)]">
+                Narrative watch is quiet for this corridor.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="border border-[var(--line)] px-3 py-3">
+          <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+            Why this corridor matters now
+          </div>
+          <p className="pt-2 text-[11px] leading-5 text-[var(--ink)]">
+            {corridorBrief.summary} {corridorBrief.whyNow}
+          </p>
         </div>
       </div>
     </section>

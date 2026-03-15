@@ -694,7 +694,12 @@ export function createKilometerGridLayer() {
 
 function getPublicCameraColor(
   type: PublicCamera["type"],
+  validationState: PublicCamera["validationState"],
 ): [number, number, number, number] {
+  if (validationState === "candidate") {
+    return [100, 116, 139, 180];
+  }
+
   if (type === "traffic") {
     return [245, 158, 11, 220];
   }
@@ -711,8 +716,10 @@ export function createPublicCameraLayer(cameras: PublicCamera[]) {
     id: "public-cameras",
     data: cameras,
     getPosition: (camera: PublicCamera) => [camera.lng, camera.lat],
-    getFillColor: (camera: PublicCamera) => getPublicCameraColor(camera.type),
-    getRadius: 420,
+    getFillColor: (camera: PublicCamera) =>
+      getPublicCameraColor(camera.type, camera.validationState),
+    getRadius: (camera: PublicCamera) =>
+      camera.validationState === "verified" ? 420 : 540,
     radiusUnits: "meters",
     radiusMinPixels: 4,
     radiusMaxPixels: 10,

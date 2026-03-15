@@ -1,89 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { BookOpen, Database, Network } from "lucide-react";
-
-const TOP_MARKETS = [
-  {
-    rank: 1,
-    country: "Russia",
-    city: "Moscow",
-    timezone: "Europe/Moscow",
-    logo: "/logos/markets/ru.svg",
-  },
-  {
-    rank: 2,
-    country: "China",
-    city: "Beijing",
-    timezone: "Asia/Shanghai",
-    logo: "/logos/markets/cn.svg",
-  },
-  {
-    rank: 3,
-    country: "India",
-    city: "New Delhi",
-    timezone: "Asia/Kolkata",
-    logo: "/logos/markets/in.svg",
-  },
-  {
-    rank: 4,
-    country: "United Kingdom",
-    city: "London",
-    timezone: "Europe/London",
-    logo: "/logos/markets/gb.svg",
-  },
-  {
-    rank: 5,
-    country: "Germany",
-    city: "Berlin",
-    timezone: "Europe/Berlin",
-    logo: "/logos/markets/de.svg",
-  },
-  {
-    rank: 6,
-    country: "Kazakhstan",
-    city: "Almaty",
-    timezone: "Asia/Almaty",
-    logo: "/logos/markets/kz.svg",
-  },
-  {
-    rank: 7,
-    country: "France",
-    city: "Paris",
-    timezone: "Europe/Paris",
-    logo: "/logos/markets/fr.svg",
-  },
-  {
-    rank: 8,
-    country: "Australia",
-    city: "Sydney",
-    timezone: "Australia/Sydney",
-    logo: "/logos/markets/au.svg",
-  },
-  {
-    rank: 9,
-    country: "Malaysia",
-    city: "Kuala Lumpur",
-    timezone: "Asia/Kuala_Lumpur",
-    logo: "/logos/markets/my.svg",
-  },
-  {
-    rank: 10,
-    country: "United States",
-    city: "New York",
-    timezone: "America/New_York",
-    logo: "/logos/markets/us.svg",
-  },
-] as const;
-
-interface EnvData {
-  code: string;
-  temperature: number | null;
-  aqi: number | null;
-}
+import type { ExecutiveStatus, GovernorBrief } from "../../types/dashboard";
 
 interface TopBarProps {
+  brief: GovernorBrief | null;
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
@@ -99,22 +21,25 @@ function formatMainClock() {
   });
 }
 
-export function aqiColor(aqi: number | null): string {
-  if (aqi === null) return "text-[var(--dim)]";
-  if (aqi <= 50) return "text-[#22c55e]";
-  if (aqi <= 100) return "text-[#f59e0b]";
-  if (aqi <= 150) return "text-[#f97316]";
-  if (aqi <= 200) return "text-[#ef4444]";
-  return "text-[#a855f7]";
+function statusClasses(status: ExecutiveStatus) {
+  if (status === "intervene") {
+    return "border-[#ef4444] bg-[rgba(239,68,68,0.08)] text-[#ef4444]";
+  }
+
+  if (status === "watch") {
+    return "border-[#f59e0b] bg-[rgba(245,158,11,0.08)] text-[#f59e0b]";
+  }
+
+  return "border-[var(--line)] bg-[rgba(15,111,136,0.05)] text-[var(--cool)]";
 }
 
 export default function TopBar({
+  brief,
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
 }: TopBarProps) {
   const [time, setTime] = useState("");
-  const [, setPhuketEnv] = useState<EnvData | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -124,94 +49,114 @@ export default function TopBar({
     tick();
     const clockInterval = setInterval(tick, 1000);
 
-    // Fetch environment data
-    const fetchEnv = async () => {
-      try {
-        const res = await fetch("/api/environment");
-        const data: EnvData[] = await res.json();
-        const phuket = data.find((d) => d.code === "HKT");
-        if (phuket) setPhuketEnv(phuket);
-      } catch {
-        /* fallback handled by API */
-      }
-    };
-
-    fetchEnv();
-    const envInterval = setInterval(fetchEnv, 5 * 60 * 1000); // Refresh every 5 min
-
     return () => {
       clearInterval(clockInterval);
-      clearInterval(envInterval);
     };
   }, []);
 
   return (
     <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-2 backdrop-blur-xl sm:px-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex-col hidden sm:flex">
-            <div className="eyebrow leading-none">Phuket Op Center</div>
-            <div className="text-[14px] font-bold tracking-tight text-[var(--ink)]">
-              COASTAL COMMAND
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="min-w-0">
+                <div className="eyebrow leading-none">Governor War Room</div>
+                <div className="pt-1 text-[16px] font-bold tracking-tight text-[var(--ink)]">
+                  Phuket Island Command Center
+                </div>
+                <p className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+                  {brief?.posture.summary ??
+                    "Loading island posture for Phuket, the Andaman ring, and the governor's priority corridors."}
+                </p>
+              </div>
+              <div className="hidden h-10 w-[1px] bg-[var(--line)] sm:block" />
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[22px] font-bold tracking-tighter text-[var(--ink)]">
+                  {time || "--:--:--"}
+                </span>
+                <span className="text-[9px] font-mono text-[var(--dim)] uppercase tracking-wider">
+                  HKT / LIVE
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5 border border-[var(--line)] px-3 py-1.5">
+                <span className="eyebrow !text-[8px]">Island posture</span>
+                <span
+                  className={`border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] ${statusClasses(
+                    brief?.posture.level ?? "watch",
+                  )}`}
+                >
+                  {brief?.posture.label ?? "Loading"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={onOpenArchitecture}
+                  className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
+                  title="APIs / Architecture"
+                >
+                  <Network size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenDataExplorer}
+                  className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
+                  title="Data / Export"
+                >
+                  <Database size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenManual}
+                  className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
+                  title="Help / Manual"
+                >
+                  <BookOpen size={16} />
+                </button>
+              </div>
             </div>
           </div>
-          <div className="h-8 w-[1px] bg-[var(--line)] hidden sm:block" />
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[22px] font-bold tracking-tighter text-[var(--ink)]">
-              {time || "--:--:--"}
-            </span>
-            <span className="text-[9px] font-mono text-[var(--dim)] uppercase tracking-wider">
-              HKT / LIVE
-            </span>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-6">
-          <div className="hidden items-center gap-1.5 xl:flex">
-            {TOP_MARKETS.slice(0, 6).map((market) => (
+          <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+            {(brief?.topConcerns ?? Array.from({ length: 6 })).slice(0, 6).map((concern, index) => (
               <div
-                key={market.country}
-                title={`${market.country} / ${market.city}`}
-                className="flex h-9 w-10 items-center justify-center border border-[var(--line)] bg-[var(--bg)] px-1"
+                key={typeof concern === "object" ? concern.id : `placeholder-${index}`}
+                className="border border-[var(--line)] bg-[var(--bg)] px-3 py-2"
               >
-                <Image
-                  src={market.logo}
-                  alt={`${market.country} logo`}
-                  width={24}
-                  height={18}
-                  className="h-auto w-6 object-contain"
-                />
+                {typeof concern === "object" ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                        {concern.label}
+                      </div>
+                      <span
+                        className={`border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] ${statusClasses(
+                          concern.status,
+                        )}`}
+                      >
+                        {concern.status}
+                      </span>
+                    </div>
+                    <div className="pt-2 text-[18px] font-mono font-bold tracking-[-0.04em] text-[var(--ink)]">
+                      {concern.metricValue}
+                    </div>
+                    <div className="pt-0.5 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                      {concern.metricLabel}
+                    </div>
+                    <p className="pt-2 text-[10px] leading-4 text-[var(--muted)]">
+                      {concern.summary}
+                    </p>
+                  </>
+                ) : (
+                  <div className="h-[82px] animate-pulse bg-[rgba(17,17,17,0.04)]" />
+                )}
               </div>
             ))}
-          </div>
-
-          <div className="h-6 w-[1px] bg-[var(--line)] hidden xl:block" />
-
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={onOpenArchitecture}
-              className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="APIs / Architecture"
-            >
-              <Network size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={onOpenDataExplorer}
-              className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="Data / Export"
-            >
-              <Database size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={onOpenManual}
-              className="p-1.5 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="Help / Manual"
-            >
-              <BookOpen size={16} />
-            </button>
           </div>
         </div>
       </div>

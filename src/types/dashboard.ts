@@ -128,18 +128,30 @@ export interface PublicCamera {
   id: string;
   label: string;
   location: string;
+  locationLabel: string;
   lat: number;
   lng: number;
   provider: string;
   type: "beach" | "traffic" | "bay";
+  validationState: "verified" | "candidate";
+  focusArea: string;
+  strategicNote: string;
   notes: string;
-  accessUrl: string;
+  accessUrl?: string | null;
+  corridorIds?: string[];
+  lastValidatedAt?: string;
+  candidateSourceNote?: string;
+}
+
+export interface CameraScoutItem extends PublicCamera {
+  validationState: "candidate";
 }
 
 export interface PublicCameraResponse {
   generatedAt: string;
   source: string[];
   cameras: PublicCamera[];
+  scoutTargets: CameraScoutItem[];
 }
 
 export interface RegionBorderProperties {
@@ -508,4 +520,125 @@ export interface MapOverlayCatalogResponse {
   defaultBasemap: "detailed-streets";
   defaultImageryOverlayId: string;
   overlays: MapOverlay[];
+}
+
+export type ExecutiveStatus = "intervene" | "watch" | "stable";
+export type GovernorScenarioId =
+  | "red-monsoon-day"
+  | "tourism-surge-weekend"
+  | "stable-recovery-day"
+  | "live";
+
+export interface GovernorPosture {
+  level: ExecutiveStatus;
+  label: string;
+  summary: string;
+  updatedAt: string;
+}
+
+export interface GovernorConcern {
+  id: string;
+  label: string;
+  status: ExecutiveStatus;
+  summary: string;
+  whyNow: string;
+  metricLabel: string;
+  metricValue: string;
+  action: string;
+  sources: string[];
+}
+
+export interface GovernorCorridorPriority {
+  id: string;
+  label: string;
+  status: ExecutiveStatus;
+  summary: string;
+  whyNow: string;
+  action: string;
+  reasonTags: string[];
+  focusAreas: string[];
+}
+
+export interface GovernorBrief {
+  generatedAt: string;
+  scenario: GovernorScenarioId;
+  posture: GovernorPosture;
+  topConcerns: GovernorConcern[];
+  corridorPriorities: GovernorCorridorPriority[];
+  nextActions: string[];
+  sources: string[];
+}
+
+export interface MarineCorridorStatus {
+  id: string;
+  label: string;
+  locationLabel: string;
+  focusArea: string;
+  center: Coordinates;
+  status: ExecutiveStatus;
+  summary: string;
+  alertPosture: string;
+  waveHeightMeters: number | null;
+  swellHeightMeters: number | null;
+  windSpeedKph: number | null;
+  gustSpeedKph: number | null;
+  rainfallMm: number | null;
+  alerts: string[];
+  recommendedAction: string;
+  sources: string[];
+  updatedAt: string;
+}
+
+export interface MarineStatusResponse {
+  generatedAt: string;
+  scenario: GovernorScenarioId;
+  corridors: MarineCorridorStatus[];
+  sources: string[];
+  upgrades: string[];
+}
+
+export interface CityVibeCard {
+  id: string;
+  label: string;
+  status: ExecutiveStatus;
+  summary: string;
+  whyNow: string;
+  score: number;
+  cameraFreshness: string;
+  trendTraffic: string;
+  tvCoverage: string;
+  mobilityPressure: string;
+  recommendedAction: string;
+  sources: string[];
+  updatedAt: string;
+}
+
+export interface CityVibesResponse {
+  generatedAt: string;
+  scenario: GovernorScenarioId;
+  zones: CityVibeCard[];
+  sources: string[];
+}
+
+export interface NarrativeSignal {
+  id: string;
+  kind: "talk" | "share" | "broadcast";
+  title: string;
+  zone: string;
+  status: ExecutiveStatus;
+  summary: string;
+  volumeLabel: string;
+  source: string;
+  observedAt: string;
+  url?: string;
+}
+
+export interface MediaWatchResponse {
+  generatedAt: string;
+  scenario: GovernorScenarioId;
+  postureSummary: string;
+  peopleTalkAbout: NarrativeSignal[];
+  peopleShare: NarrativeSignal[];
+  broadcastWatch: NarrativeSignal[];
+  sources: string[];
 }

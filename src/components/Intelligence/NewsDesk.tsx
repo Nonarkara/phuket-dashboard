@@ -1,71 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import type { NewsResponse } from "../../types/dashboard";
+import type { ExecutiveStatus, GovernorBrief, MediaWatchResponse } from "../../types/dashboard";
 
-function isNewsResponse(value: unknown): value is NewsResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "news" in value &&
-    Array.isArray(value.news)
-  );
+interface NewsDeskProps {
+  mediaWatch: MediaWatchResponse | null;
+  brief: GovernorBrief | null;
 }
 
-function severityClass(severity: string) {
-  if (severity === "alert") {
+function statusClasses(status: ExecutiveStatus) {
+  if (status === "intervene") {
     return "bg-[rgba(239,68,68,0.15)] text-[#ef4444]";
   }
 
-  if (severity === "watch") {
+  if (status === "watch") {
     return "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]";
   }
 
   return "bg-[var(--line-bright)] text-[var(--cool)]";
 }
 
-export default function NewsDesk() {
-  const [payload, setPayload] = useState<NewsResponse | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+export default function NewsDesk({ mediaWatch, brief }: NewsDeskProps) {
+  const narrativeItems = mediaWatch
+    ? [
+        ...mediaWatch.peopleTalkAbout.slice(0, 2),
+        ...mediaWatch.peopleShare.slice(0, 2),
+        ...mediaWatch.broadcastWatch.slice(0, 1),
+      ]
+    : [];
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/news");
-      const nextPayload: unknown = await response.json();
-
-      if (isNewsResponse(nextPayload)) {
-        setPayload(nextPayload);
-      }
-    } catch {
-      setPayload(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    const initialLoad = setTimeout(() => {
-      void load();
-    }, 0);
-    const interval = setInterval(() => {
-      void load();
-    }, 2 * 60 * 1000);
-    return () => {
-      clearTimeout(initialLoad);
-      clearInterval(interval);
-    };
-  }, [load]);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    load().then(() => setTimeout(() => setRefreshing(false), 600));
-  };
-
-  const items = payload?.news ?? [];
-
-  if (items.length === 0) {
+  if (!mediaWatch) {
     return (
       <section className="flex h-full items-center justify-center bg-[var(--bg-surface)]">
-        <span className="eyebrow">Loading live signal stream</span>
+        <span className="eyebrow">Loading narrative watch</span>
       </section>
     );
   }
@@ -73,37 +39,46 @@ export default function NewsDesk() {
   return (
     <section className="flex h-full flex-col bg-[var(--bg-surface)] p-4 overflow-y-auto">
       <div className="border-b border-[var(--line)] pb-3">
-        <div className="flex items-center gap-3">
-          <div className="eyebrow">Live feed</div>
-          <span className="live-badge">LIVE</span>
-          <button type="button" onClick={handleRefresh} className="text-[var(--dim)] hover:text-[var(--cool)] transition-colors ml-auto" title="Refresh news feed">
-            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-          </button>
+        <div className="eyebrow">10-minute read</div>
+        <div className="pt-1 text-[16px] font-bold tracking-[-0.02em] text-[var(--ink)]">
+          Public narrative and recommended line
         </div>
-        <div className="pt-2 text-[16px] font-bold tracking-[-0.02em] text-[var(--ink)]">
-          Local signal stream
+        <p className="pt-2 text-[10px] leading-4 text-[var(--muted)]">
+          {mediaWatch.postureSummary}
+        </p>
+      </div>
+
+      <div className="pt-3 border-b border-[var(--line)] pb-3">
+        <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+          What the governor should do next
+        </div>
+        <div className="mt-2 space-y-2">
+          {(brief?.nextActions ?? []).slice(0, 3).map((action) => (
+            <div key={action} className="border border-[var(--line)] px-3 py-2 text-[11px] leading-5 text-[var(--ink)]">
+              {action}
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="divide-y divide-[var(--line)] overflow-y-auto pt-2">
-        {items.map((item) => (
-          <article
-            key={item.id}
-            className="py-3"
-          >
+        {narrativeItems.map((item) => (
+          <article key={item.id} className="py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] ${severityClass(item.severity)}`}
+                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] ${statusClasses(
+                    item.status,
+                  )}`}
                 >
-                  {item.tag}
+                  {item.kind}
+                </span>
+                <span className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                  {item.zone}
                 </span>
               </div>
               <span className="text-[9px] font-mono tabular-nums text-[var(--dim)]">
-                {new Date(item.publishedAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "2-digit",
-                })}
+                {item.volumeLabel}
               </span>
             </div>
             <h3 className="pt-2 text-[13px] font-semibold leading-5 text-[var(--ink)]">
