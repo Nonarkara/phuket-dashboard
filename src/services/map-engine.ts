@@ -13,10 +13,12 @@ import type {
   AirQualityPoint,
   ConflictZoneCollection,
   ConflictZoneProperties,
+  DisasterAlert,
   FireEvent,
   FlightData,
   IncidentFeature,
   MapOverlay,
+  MaritimeVessel,
   PksbRouteCollection,
   PksbRouteProperties,
   PksbStopCollection,
@@ -25,6 +27,7 @@ import type {
   RainfallPoint,
   RefugeeMovement,
   RegionBorderCollection,
+  TourismHotspot,
 } from "../types/dashboard";
 
 interface ProvinceLabel {
@@ -231,6 +234,144 @@ export const createRainfallLayer = (data: RainfallPoint[]) =>
       [0, 200, 255, 200],
     ],
   });
+
+function getExecutiveStatusColor(status: "intervene" | "watch" | "stable") {
+  if (status === "intervene") {
+    return [239, 68, 68, 225] as [number, number, number, number];
+  }
+
+  if (status === "watch") {
+    return [245, 158, 11, 220] as [number, number, number, number];
+  }
+
+  return [15, 111, 136, 205] as [number, number, number, number];
+}
+
+export function createDisasterAlertLayer(alerts: DisasterAlert[]) {
+  if (!alerts.length) {
+    return [];
+  }
+
+  return [
+    new ScatterplotLayer({
+      id: "disaster-alert-points",
+      data: alerts,
+      getPosition: (alert: DisasterAlert) => [alert.lng, alert.lat],
+      getFillColor: (alert: DisasterAlert) => getExecutiveStatusColor(alert.severity),
+      getRadius: (alert: DisasterAlert) =>
+        alert.severity === "intervene" ? 5200 : alert.severity === "watch" ? 3800 : 2600,
+      radiusUnits: "meters",
+      radiusMinPixels: 4,
+      radiusMaxPixels: 14,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [248, 250, 252, 220],
+      pickable: true,
+      opacity: 0.86,
+    }),
+    new TextLayer({
+      id: "disaster-alert-labels",
+      data: alerts.filter((alert) => alert.severity !== "stable"),
+      getPosition: (alert: DisasterAlert) => [alert.lng, alert.lat],
+      getText: (alert: DisasterAlert) => alert.area,
+      getColor: [248, 250, 252, 210],
+      getSize: 11,
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "bottom",
+      getPixelOffset: [0, -14],
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [15, 23, 42, 210],
+      outlineWidth: 2,
+      sizeUnits: "pixels",
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+export function createMaritimeTrafficLayers(vessels: MaritimeVessel[]) {
+  if (!vessels.length) {
+    return [];
+  }
+
+  return [
+    new ScatterplotLayer({
+      id: "maritime-vessels",
+      data: vessels,
+      getPosition: (vessel: MaritimeVessel) => [vessel.lng, vessel.lat],
+      getFillColor: (vessel: MaritimeVessel) => getExecutiveStatusColor(vessel.status),
+      getRadius: (vessel: MaritimeVessel) =>
+        vessel.type.toLowerCase().includes("ferry") ? 1400 : 1000,
+      radiusUnits: "meters",
+      radiusMinPixels: 3,
+      radiusMaxPixels: 10,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [226, 232, 240, 220],
+      pickable: true,
+      opacity: 0.88,
+    }),
+    new TextLayer({
+      id: "maritime-vessel-labels",
+      data: vessels.filter((vessel) => vessel.status !== "stable"),
+      getPosition: (vessel: MaritimeVessel) => [vessel.lng, vessel.lat],
+      getText: (vessel: MaritimeVessel) => vessel.name,
+      getColor: [226, 232, 240, 200],
+      getSize: 10,
+      getTextAnchor: "start",
+      getAlignmentBaseline: "center",
+      getPixelOffset: [8, 0],
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [15, 23, 42, 220],
+      outlineWidth: 2,
+      sizeUnits: "pixels",
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+export function createTourismHotspotLayer(hotspots: TourismHotspot[]) {
+  if (!hotspots.length) {
+    return [];
+  }
+
+  return [
+    new ScatterplotLayer({
+      id: "tourism-hotspots",
+      data: hotspots,
+      getPosition: (hotspot: TourismHotspot) => [hotspot.lng, hotspot.lat],
+      getFillColor: (hotspot: TourismHotspot) => getExecutiveStatusColor(hotspot.status),
+      getRadius: (hotspot: TourismHotspot) =>
+        hotspot.status === "intervene" ? 2200 : hotspot.status === "watch" ? 1700 : 1300,
+      radiusUnits: "meters",
+      radiusMinPixels: 3,
+      radiusMaxPixels: 10,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [255, 255, 255, 210],
+      pickable: true,
+      opacity: 0.72,
+    }),
+    new TextLayer({
+      id: "tourism-hotspot-labels",
+      data: hotspots.filter((hotspot) => hotspot.status !== "stable"),
+      getPosition: (hotspot: TourismHotspot) => [hotspot.lng, hotspot.lat],
+      getText: (hotspot: TourismHotspot) => hotspot.label,
+      getColor: [248, 250, 252, 205],
+      getSize: 10,
+      getTextAnchor: "start",
+      getAlignmentBaseline: "top",
+      getPixelOffset: [8, 4],
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [15, 23, 42, 220],
+      outlineWidth: 2,
+      sizeUnits: "pixels",
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
 
 function getAirQualityColor(aqi: number): [number, number, number, number] {
   if (aqi <= 50) {

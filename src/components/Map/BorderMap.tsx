@@ -29,11 +29,13 @@ import {
 import {
   createAirQualityHeatmapLayers,
   createConflictZonesLayer,
+  createDisasterAlertLayer,
   createFireLayer,
   createFlightPathsLayer,
   createHeatmapLayer,
   createIncidentLayer,
   createKilometerGridLayer,
+  createMaritimeTrafficLayers,
   createPksbRouteLayers,
   createPublicCameraLayer,
   createProvinceLabelsLayer,
@@ -41,6 +43,7 @@ import {
   createRasterOverlayLayer,
   createRefugeeLayer,
   createRegionalBorderLayer,
+  createTourismHotspotLayer,
 } from "../../services/map-engine";
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
@@ -51,8 +54,12 @@ import type {
   AirQualityPoint,
   ConflictZoneCollection,
   ConflictZoneFeature,
+  DisasterAlert,
+  DisasterFeedResponse,
   FireEvent,
   IncidentFeature,
+  MaritimeSecurityResponse,
+  MaritimeVessel,
   ProvinceSelection,
   FlightData,
   RainfallPoint,
@@ -64,6 +71,8 @@ import type {
   PksbTransitResponse,
   PublicCamera,
   PublicCameraResponse,
+  TourismHotspot,
+  TourismHotspotsResponse,
 } from "../../types/dashboard";
 
 const MapboxMap = dynamic(() => import("react-map-gl/mapbox"), { ssr: false });
@@ -200,6 +209,36 @@ function isPublicCamera(value: unknown): value is PublicCamera {
   );
 }
 
+function isDisasterAlert(value: unknown): value is DisasterAlert {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.area === "string" &&
+    typeof value.summary === "string"
+  );
+}
+
+function isMaritimeVessel(value: unknown): value is MaritimeVessel {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.type === "string" &&
+    typeof value.strategicNote === "string"
+  );
+}
+
+function isTourismHotspot(value: unknown): value is TourismHotspot {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    typeof value.area === "string" &&
+    typeof value.summary === "string"
+  );
+}
+
 async function fetchJson<T>(url: string, fallback: T): Promise<T> {
   try {
     const res = await fetch(url);
@@ -242,6 +281,18 @@ function getTooltipText(object: unknown): string | null {
     return `${object.label} • ${object.validationState} • ${object.provider}`;
   }
 
+  if (isDisasterAlert(object)) {
+    return `${object.title} • ${object.area}`;
+  }
+
+  if (isMaritimeVessel(object)) {
+    return `${object.name} • ${object.type} • ${object.status}`;
+  }
+
+  if (isTourismHotspot(object)) {
+    return `${object.label} • ${object.area} • ${object.status}`;
+  }
+
   if (hasLabel(object)) {
     return object.label;
   }
@@ -280,6 +331,8 @@ export default function BorderMap({
   const [refugees, setRefugees] = useState<RefugeeMovement[]>([]);
   const [rainfall, setRainfall] = useState<RainfallPoint[]>([]);
   const [airQuality, setAirQuality] = useState<AirQualityPoint[]>([]);
+  const [disasterAlerts, setDisasterAlerts] = useState<DisasterAlert[]>([]);
+  const [maritimeVessels, setMaritimeVessels] = useState<MaritimeVessel[]>([]);
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [borders, setBorders] = useState<RegionBorderCollection | null>(null);
   const [conflictZones, setConflictZones] =
@@ -289,6 +342,7 @@ export default function BorderMap({
   const [pksbStops, setPksbStops] =
     useState<PksbTransitResponse["stops"]>(EMPTY_PKSB_STOPS);
   const [publicCameras, setPublicCameras] = useState<PublicCamera[]>([]);
+  const [tourismHotspots, setTourismHotspots] = useState<TourismHotspot[]>([]);
 
   const getSafeDate = () => {
     const d = new Date();
@@ -322,12 +376,12 @@ export default function BorderMap({
   const rainCount = rainfall.length;
   const busStopCount = pksbStops.features.length;
   const cameraCount = publicCameras.length;
+  const disasterAlertCount = disasterAlerts.length;
+  const maritimeVesselCount = maritimeVessels.length;
   const verifiedCameraCount = publicCameras.filter(
     (camera) => camera.validationState === "verified",
   ).length;
-  const scoutCameraCount = publicCameras.filter(
-    (camera) => camera.validationState === "candidate",
-  ).length;
+  const tourismHotspotCount = tourismHotspots.length;
   const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
   const totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
@@ -399,17 +453,38 @@ export default function BorderMap({
         refugeeData,
         rainfallData,
         airQualityData,
+        disasterData,
+        maritimeData,
         borderData,
         conflictZoneData,
         flightData,
         pksbTransitData,
         publicCameraData,
+        tourismHotspotData,
       ] = await Promise.all([
         fetchJson<IncidentFeature[]>("/api/incidents", []),
         fetchJson<FireEvent[]>("/api/fires", []),
         fetchJson<RefugeeMovement[]>("/api/movements", []),
         fetchJson<RainfallPoint[]>("/api/rainfall", []),
         fetchJson<AirQualityPoint[]>("/api/air-quality", []),
+        fetchJson<DisasterFeedResponse>("/api/disaster/brief", {
+          generatedAt: new Date(0).toISOString(),
+          posture: "watch",
+          summary: "",
+          alerts: [],
+          layers: [],
+          rainfallNodes: 0,
+          sources: [],
+        }),
+        fetchJson<MaritimeSecurityResponse>("/api/maritime/security", {
+          generatedAt: new Date(0).toISOString(),
+          posture: "watch",
+          summary: "",
+          provider: "",
+          vessels: [],
+          chokepoints: [],
+          sources: [],
+        }),
         fetchJson<RegionBorderCollection>("/data/region_borders.geojson", EMPTY_BORDERS),
         fetchJson<ConflictZoneCollection>("/data/conflict_zones.geojson", EMPTY_CONFLICT_ZONES),
         fetchJson<FlightData[]>("/api/flights", []),
@@ -425,6 +500,13 @@ export default function BorderMap({
           cameras: [],
           scoutTargets: [],
         }),
+        fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots", {
+          generatedAt: new Date(0).toISOString(),
+          summary: "",
+          provider: "",
+          hotspots: [],
+          sources: [],
+        }),
       ]);
 
       setIncidents(Array.isArray(incidentData) ? incidentData : []);
@@ -432,12 +514,17 @@ export default function BorderMap({
       setRefugees(Array.isArray(refugeeData) ? refugeeData : []);
       setRainfall(Array.isArray(rainfallData) ? rainfallData : []);
       setAirQuality(Array.isArray(airQualityData) ? airQualityData : []);
+      setDisasterAlerts(Array.isArray(disasterData.alerts) ? disasterData.alerts : []);
+      setMaritimeVessels(Array.isArray(maritimeData.vessels) ? maritimeData.vessels : []);
       setFlights(Array.isArray(flightData) ? flightData : []);
       setBorders(borderData);
       setConflictZones(conflictZoneData);
       setPksbRoutes(pksbTransitData.routes);
       setPksbStops(pksbTransitData.stops);
       setPublicCameras(publicCameraData.cameras);
+      setTourismHotspots(
+        Array.isArray(tourismHotspotData.hotspots) ? tourismHotspotData.hotspots : [],
+      );
     };
 
     loadData();
@@ -463,6 +550,9 @@ export default function BorderMap({
     enabledOverlays.borderContext && borders && createRegionalBorderLayer(borders),
     enabledOverlays.conflictZones && createConflictZonesLayer(conflictZones),
     enabledOverlays.rainfallAnomalies && createRainfallLayer(rainfall),
+    ...(enabledOverlays.disasterAlerts
+      ? createDisasterAlertLayer(disasterAlerts)
+      : []),
     ...(enabledOverlays.aqiHeatmap
       ? createAirQualityHeatmapLayers(airQuality, "aqi")
       : []),
@@ -479,9 +569,15 @@ export default function BorderMap({
     ...(enabledOverlays.pksbRoutes
       ? createPksbRouteLayers(pksbRoutes, pksbStops)
       : []),
+    ...(enabledOverlays.maritimeTraffic
+      ? createMaritimeTrafficLayers(maritimeVessels)
+      : []),
     enabledOverlays.publicCameras
       ? createPublicCameraLayer(publicCameras)
       : null,
+    ...(enabledOverlays.tourismHotspots
+      ? createTourismHotspotLayer(tourismHotspots)
+      : []),
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
     ...(enabledOverlays.kmGrid ? createKilometerGridLayer() : []),
     provinceLabelsLayer,
@@ -563,6 +659,12 @@ export default function BorderMap({
       detail:
         overlay.id === "conflictZones"
           ? `${formatCompactCount(conflictZones.features.length)} zones`
+          : overlay.id === "disasterAlerts"
+            ? `${formatCompactCount(disasterAlertCount)} alerts`
+            : overlay.id === "maritimeTraffic"
+              ? `${formatCompactCount(maritimeVesselCount)} vessels`
+              : overlay.id === "tourismHotspots"
+                ? `${formatCompactCount(tourismHotspotCount)} hotspots`
           : overlay.id === "populationMovement"
             ? `${formatCompactCount(refugees.length)} flows`
             : overlay.id === "pksbRoutes"
@@ -577,7 +679,13 @@ export default function BorderMap({
                   ? `${formatCompactCount(flights.length)} aircraft`
                   : overlay.shortLabel,
       icon:
-        overlay.id === "populationMovement"
+        overlay.id === "disasterAlerts"
+          ? CloudRain
+          : overlay.id === "maritimeTraffic"
+            ? Waves
+            : overlay.id === "tourismHotspots"
+              ? MapPinned
+        : overlay.id === "populationMovement"
           ? Users
           : overlay.id === "pksbRoutes"
             ? BusFront
@@ -676,6 +784,43 @@ export default function BorderMap({
         notes: object.strategicNote,
         externalUrl: object.accessUrl ?? undefined,
         source: `${object.provider} / ${object.focusArea}`,
+      });
+      return;
+    }
+
+    if (isDisasterAlert(object)) {
+      onProvinceSelect?.({
+        name: object.title,
+        type: `Disaster ${object.severity}`,
+        location: object.area,
+        notes: object.summary,
+        eventDate: object.issuedAt,
+        externalUrl: object.url,
+        source: object.source,
+      });
+      return;
+    }
+
+    if (isMaritimeVessel(object)) {
+      onProvinceSelect?.({
+        name: object.name,
+        type: `${object.type} / ${object.status}`,
+        location: object.destination ?? "Andaman corridor",
+        notes: object.strategicNote,
+        eventDate: object.lastSeen,
+        source: object.source,
+      });
+      return;
+    }
+
+    if (isTourismHotspot(object)) {
+      onProvinceSelect?.({
+        name: object.label,
+        type: `Tourism hotspot / ${object.kind}`,
+        location: object.area,
+        notes: object.summary,
+        externalUrl: object.url,
+        source: object.source,
       });
     }
   };
@@ -797,9 +942,9 @@ export default function BorderMap({
               <div className="mt-4 grid gap-2 md:grid-cols-4">
                 {[
                   { label: "Signals", value: signalCount },
+                  { label: "Alerts", value: disasterAlertCount },
                   { label: "Verified cams", value: verifiedCameraCount },
-                  { label: "Scout cams", value: scoutCameraCount },
-                  { label: "Aircraft", value: flights.length },
+                  { label: "AIS", value: maritimeVesselCount },
                 ].map((item) => (
                   <div key={item.label} className="border border-[var(--line)] px-3 py-2">
                     <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
@@ -834,8 +979,8 @@ export default function BorderMap({
                     {totalActiveLayers} layers configured
                   </div>
                   <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
-                    Satellite, weather, AQI, flights, rainfall, and camera overlays stay
-                    operational when WebGL is available on the client.
+                    Satellite, disaster alerts, AIS, tourism hotspots, flights, rainfall,
+                    and camera overlays stay operational when WebGL is available on the client.
                   </div>
                 </div>
               </div>
@@ -866,8 +1011,9 @@ export default function BorderMap({
               <div className="h-3 w-[1px] bg-[var(--line)]" />
               <div className="flex gap-3 text-[9px] font-mono font-bold text-[var(--dim)] uppercase tracking-tight">
                 <span>SIG {signalCount}</span>
+                <span>ALR {disasterAlertCount}</span>
+                <span>AIS {maritimeVesselCount}</span>
                 <span>VER {verifiedCameraCount}</span>
-                <span>SCT {scoutCameraCount}</span>
                 <span>FLT {flights.length}</span>
                 <span>LYR {totalActiveLayers}</span>
               </div>

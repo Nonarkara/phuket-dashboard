@@ -658,3 +658,83 @@ export interface PhuketVisitorOriginsResponse {
   origins: PhuketVisitorOrigin[];
   sources: string[];
 }
+
+export interface DisasterAlert {
+  id: string;
+  title: string;
+  severity: ExecutiveStatus;
+  area: string;
+  summary: string;
+  lat: number;
+  lng: number;
+  issuedAt: string;
+  source: string;
+  url?: string;
+}
+
+export interface DisasterLayerDescriptor {
+  id: string;
+  label: string;
+  kind: "api" | "wmts" | "stac" | "cap";
+  source: string;
+  url: string;
+  configured: boolean;
+}
+
+export interface DisasterFeedResponse {
+  generatedAt: string;
+  posture: ExecutiveStatus;
+  summary: string;
+  alerts: DisasterAlert[];
+  layers: DisasterLayerDescriptor[];
+  rainfallNodes: number;
+  sources: string[];
+}
+
+export interface MaritimeVessel {
+  id: string;
+  name: string;
+  type: string;
+  lat: number;
+  lng: number;
+  speedKnots: number;
+  heading: number | null;
+  lastSeen: string;
+  flag: string | null;
+  destination: string | null;
+  status: ExecutiveStatus;
+  source: string;
+  strategicNote: string;
+}
+
+export interface MaritimeSecurityResponse {
+  generatedAt: string;
+  posture: ExecutiveStatus;
+  summary: string;
+  provider: string;
+  vessels: MaritimeVessel[];
+  chokepoints: string[];
+  sources: string[];
+}
+
+export interface TourismHotspot {
+  id: string;
+  label: string;
+  kind: "beach" | "pier" | "old-town" | "attraction" | "event";
+  lat: number;
+  lng: number;
+  area: string;
+  summary: string;
+  status: ExecutiveStatus;
+  source: string;
+  url?: string;
+  strategicNote: string;
+}
+
+export interface TourismHotspotsResponse {
+  generatedAt: string;
+  summary: string;
+  provider: string;
+  hotspots: TourismHotspot[];
+  sources: string[];
+}

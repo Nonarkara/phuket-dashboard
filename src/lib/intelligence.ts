@@ -20,6 +20,12 @@ import {
   loadThailandEconomics,
   loadThailandIncidents,
 } from "./thailand-monitor";
+import {
+  buildWarRoomSourceEntries,
+  loadDisasterFeed,
+  loadMaritimeSecurity,
+  loadTourismHotspots,
+} from "./war-room-integrations";
 import type {
   ApiSourceResponse,
   BriefingPayload,
@@ -1725,9 +1731,34 @@ export async function buildLatestBriefing(): Promise<BriefingPayload> {
 }
 
 export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
-  const [referenceCatalog, packages] = await Promise.all([
+  const [referenceCatalog, packages, disaster, maritime, tourism] = await Promise.all([
     fetchReferenceApiCatalog().catch(() => ({ generatedAt: new Date().toISOString(), sources: [] })),
     loadIntelligencePackages(),
+    loadDisasterFeed().catch(() => ({
+      generatedAt: new Date().toISOString(),
+      posture: "watch" as const,
+      summary: "Fallback disaster posture",
+      alerts: [],
+      layers: [],
+      rainfallNodes: 0,
+      sources: ["Disaster fallback"],
+    })),
+    loadMaritimeSecurity().catch(() => ({
+      generatedAt: new Date().toISOString(),
+      posture: "watch" as const,
+      summary: "Fallback maritime posture",
+      provider: "AIS fallback",
+      vessels: [],
+      chokepoints: [],
+      sources: ["AIS fallback"],
+    })),
+    loadTourismHotspots().catch(() => ({
+      generatedAt: new Date().toISOString(),
+      summary: "Fallback tourism posture",
+      provider: "Tourism fallback",
+      hotspots: [],
+      sources: ["Tourism fallback"],
+    })),
   ]);
 
   const healthById = new Map(packages.sources.map((source) => [source.id, source]));
@@ -1740,9 +1771,14 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
     health: healthById.get(source.id)?.status,
     checkedAt: healthById.get(source.id)?.checkedAt,
   }));
+  const warRoomSources = buildWarRoomSourceEntries({
+    disaster,
+    maritime,
+    tourism,
+  });
 
   return {
     generatedAt: packages.generatedAt || referenceCatalog.generatedAt,
-    sources: [...derivedFeedSources, ...referenceCatalog.sources],
+    sources: [...derivedFeedSources, ...warRoomSources, ...referenceCatalog.sources],
   };
 }

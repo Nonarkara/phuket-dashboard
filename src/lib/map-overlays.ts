@@ -264,6 +264,42 @@ export function buildMapOverlayCatalog(
       enabledByDefault: true,
     }),
     vectorOverlay({
+      id: "disasterAlerts",
+      label: "Disaster Alerts",
+      shortLabel: "ALERT",
+      description:
+        "TMD / NDWC warning points plus Phuket-focused disaster posture derived from server-side feeds.",
+      source: "Internal disaster brief",
+      family: "weather",
+      role: "operational",
+      defaultOpacity: 0.96,
+      enabledByDefault: true,
+    }),
+    vectorOverlay({
+      id: "maritimeTraffic",
+      label: "AIS Vessels",
+      shortLabel: "AIS",
+      description:
+        "Tracked ferry, patrol, fishing, and passenger vessels around Phuket-linked Andaman chokepoints.",
+      source: "Internal maritime security feed",
+      family: "operational",
+      role: "operational",
+      defaultOpacity: 0.9,
+      enabledByDefault: true,
+    }),
+    vectorOverlay({
+      id: "tourismHotspots",
+      label: "Tourism Hotspots",
+      shortLabel: "TAT",
+      description:
+        "Tourism pressure points aligned to Patong, Old Town, the airport corridor, ports, Ao Nang, and Khao Lak.",
+      source: "Internal tourism hotspot feed",
+      family: "operational",
+      role: "operational",
+      defaultOpacity: 0.88,
+      enabledByDefault: false,
+    }),
+    vectorOverlay({
       id: "provinceLabels",
       label: "Province Labels",
       shortLabel: "PROV",

@@ -25,6 +25,7 @@ export type ExternalProviderCategory =
   | "Environmental"
   | "Mobility"
   | "Markets"
+  | "Tourism & Civic"
   | "Mapping & Media"
   | "Optional";
 
@@ -107,19 +108,19 @@ export const dashboardSurfaces: DashboardSurface[] = [
     id: "top-bar",
     title: "Top Bar",
     summary:
-      "Regional clocks plus temperature and AQI snapshots, with entry points for the manual, architecture view, and database explorer.",
+      "Governor posture, executive concern tiles, visitor origins, and entry points for the manual, architecture view, and database explorer.",
   },
   {
     id: "sidebar",
     title: "Sidebar",
     summary:
-      "Command context, recent signals, priority checks, and area-pressure cues.",
+      "Governor concerns, intervention queue, and island command context.",
   },
   {
     id: "map",
-    title: "Regional Map",
+    title: "Island Command Map",
     summary:
-      "DeckGL and raster overlays for focus zones, signals, fires, rainfall, flights, movements, aerosol, AQI, and PM2.5.",
+      "DeckGL and raster overlays for Phuket corridors, disaster alerts, AIS traffic, tourism hotspots, satellite imagery, flights, rainfall, AQI, and PM2.5.",
   },
   {
     id: "bottom-strip",
@@ -342,6 +343,25 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     fallback: "Returns `fallbackCopernicusPreview` when catalog generation fails.",
   },
   {
+    path: "/api/governor/brief",
+    category: "Intelligence",
+    purpose:
+      "Builds the governor-facing island posture, top concerns, corridor priorities, and next-action list.",
+    consumers: ["TopBar", "Sidebar", "BriefingPanel", "SignalTicker"],
+    upstreams: [
+      "Marine status",
+      "Disaster brief",
+      "Maritime security",
+      "Tourism hotspots",
+      "Media watch",
+      "City vibes",
+      "OpenSky posture",
+      "Local incidents",
+    ],
+    fallback:
+      "Scenario-safe and curated fallback logic keeps the executive briefing populated when live feeds degrade.",
+  },
+  {
     path: "/api/environment",
     category: "Environment",
     purpose:
@@ -368,6 +388,16 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     consumers: ["Map surface", "convergence scoring"],
     upstreams: ["Postgres `rainfall_data`"],
     fallback: "Returns `fallbackRainfall` when the database is empty or unavailable.",
+  },
+  {
+    path: "/api/disaster/brief",
+    category: "Environment",
+    purpose:
+      "Builds the Phuket disaster posture from TMD / NDWC warnings, GISTDA configuration, and rainfall-aware fallback logic.",
+    consumers: ["Governor briefing", "Map surface", "corridor dossier"],
+    upstreams: ["TMD warning feed", "optional GISTDA disaster API", "configured GISTDA layer catalog"],
+    fallback:
+      "Returns governor-readable fallback alerts and configured layer descriptors when live warning payloads are missing.",
   },
   {
     path: "/api/incidents",
@@ -418,6 +448,25 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     fallback: "Returns the bundled camera catalog.",
   },
   {
+    path: "/api/marine",
+    category: "Operations",
+    purpose:
+      "Builds Phuket-focused marine corridor weather posture using Open-Meteo Marine, forecast data, and TMD warning overlays.",
+    consumers: ["Governor briefing", "corridor dossier", "SignalTicker"],
+    upstreams: ["Open-Meteo Marine", "Open-Meteo forecast", "TMD warning feed"],
+    fallback: "Returns scenario-safe or curated marine corridors when live marine weather fails.",
+  },
+  {
+    path: "/api/maritime/security",
+    category: "Operations",
+    purpose:
+      "Builds the Phuket-Andaman AIS picture for ferry lanes, anchorage pressure, and suspicious or slow vessel watch.",
+    consumers: ["Map surface", "corridor dossier", "source health"],
+    upstreams: ["MarineTraffic or AISHub when configured", "curated fallback vessel patterns"],
+    fallback:
+      "Returns fallback vessel contacts and chokepoints when no AIS provider is configured or the provider is unavailable.",
+  },
+  {
     path: "/api/flights",
     category: "Operations",
     purpose:
@@ -445,6 +494,16 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     fallback: "Returns the curated term set if RSS fetches fail.",
   },
   {
+    path: "/api/city-vibes",
+    category: "Analytics",
+    purpose:
+      "Scores Patong, Old Town, the airport corridor, ports, Ao Nang, and Khao Lak using cameras, narrative, marine, and access cues.",
+    consumers: ["TrendingKeywords", "Governor briefing"],
+    upstreams: ["Public cameras", "Media watch", "Marine status", "OpenSky posture", "local incidents"],
+    fallback:
+      "Returns blended city-vibe scoring from the governor heuristics even when one or more upstream feeds degrade.",
+  },
+  {
     path: "/api/markets",
     category: "Analytics",
     purpose:
@@ -468,6 +527,26 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     consumers: ["API clients", "future analytics views"],
     upstreams: ["Reference market loaders", "Postgres `market_data`"],
     fallback: "Returns `fallbackEconomicIndicators` if both live and DB-backed loaders fail.",
+  },
+  {
+    path: "/api/tourism/hotspots",
+    category: "Analytics",
+    purpose:
+      "Builds the governor's tourism hotspot list for Patong, Old Town, the airport corridor, ports, Ao Nang, and Khao Lak.",
+    consumers: ["Map surface", "corridor dossier", "Governor briefing"],
+    upstreams: ["TAT Data API when configured", "curated tourism hotspot fallback"],
+    fallback:
+      "Returns a curated hotspot slate when TAT is unavailable or not yet configured.",
+  },
+  {
+    path: "/api/visitor-origins",
+    category: "Analytics",
+    purpose:
+      "Returns Phuket's top feeder countries and GDP per capita for the executive top bar.",
+    consumers: ["TopBar"],
+    upstreams: ["World Bank WDI", "curated Phuket origin ranking"],
+    fallback:
+      "Returns a Phuket-specific fallback feeder-country list when live macro data fails.",
   },
   {
     path: "/api/intelligence/packages",
@@ -497,6 +576,16 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     fallback: "Returns `fallbackTicker` if ticker synthesis fails.",
   },
   {
+    path: "/api/media-watch",
+    category: "Intelligence",
+    purpose:
+      "Fuses Google Trends, GDELT, and the TV wall into public-talk, public-share, and broadcast-watch signals.",
+    consumers: ["NewsDesk", "TrendingKeywords", "Governor briefing"],
+    upstreams: ["Google Trends RSS TH", "GDELT DOC 2", "live TV channel roster"],
+    fallback:
+      "Returns scenario-safe or curated talk/share/broadcast signals if live narrative sources fail.",
+  },
+  {
     path: "/api/briefings/latest",
     category: "Intelligence",
     purpose:
@@ -521,6 +610,7 @@ export const externalProviderCategoryOrder: ExternalProviderCategory[] = [
   "Environmental",
   "Mobility",
   "Markets",
+  "Tourism & Civic",
   "Mapping & Media",
   "Optional",
 ];
@@ -607,12 +697,48 @@ export const externalProviderCatalog: ExternalProviderDescriptor[] = [
     endpoints: ["https://air-quality-api.open-meteo.com/v1/air-quality?latitude=...&longitude=...&current=us_aqi,pm2_5"],
   },
   {
+    id: "gistda-disaster",
+    label: "GISTDA Disaster Platform",
+    category: "Environmental",
+    description:
+      "Thai disaster and satellite platform used for flood/fire overlays, disaster posture, and NSDC-linked imagery upgrades.",
+    surfaces: ["Disaster brief", "source health", "future GISTDA overlays"],
+    endpoints: [
+      "https://disaster.gistda.or.th/services/open-api",
+      "https://nsdc.gistda.or.th",
+    ],
+  },
+  {
+    id: "tmd-ndwc",
+    label: "TMD / NDWC Alerts",
+    category: "Environmental",
+    description:
+      "Thai warning feeds used for rough-sea, heavy-rain, and tsunami-linked alert posture.",
+    surfaces: ["Disaster brief", "marine corridor posture", "source health"],
+    endpoints: [
+      "https://data.tmd.go.th/api/WeatherWarningNews/v1/?uid=api&ukey=api12345",
+    ],
+  },
+  {
     id: "opensky",
     label: "OpenSky Network",
     category: "Mobility",
     description: "Regional state vector feed for live aircraft tracks.",
     surfaces: ["Flight paths overlay"],
     endpoints: ["https://opensky-network.org/api/states/all?lamin=...&lomin=...&lamax=...&lomax=..."],
+  },
+  {
+    id: "marinetraffic",
+    label: "MarineTraffic / AISHub",
+    category: "Mobility",
+    description:
+      "AIS vessel providers used for ferry-lane density, anchorage pressure, and suspicious-contact watch around Phuket and the Andaman ring.",
+    surfaces: ["AIS vessel overlay", "marine security dossier", "source health"],
+    endpoints: [
+      "https://servicedocs.marinetraffic.com",
+      "https://www.aishub.net/api",
+    ],
+    optional: true,
   },
   {
     id: "reference-dashboard",
@@ -661,6 +787,34 @@ export const externalProviderCatalog: ExternalProviderDescriptor[] = [
       "https://trends.google.com/trending/rss?geo=KH",
       "https://trends.google.com/trending/rss?geo=MM",
     ],
+  },
+  {
+    id: "gdelt-doc-2",
+    label: "GDELT DOC 2",
+    category: "News",
+    description:
+      "Global news metadata API used for Phuket- and Andaman-linked shared coverage and narrative-watch signals.",
+    surfaces: ["Media watch", "narrative watch", "corridor dossier"],
+    endpoints: ["https://api.gdeltproject.org/api/v2/doc/doc?..."],
+  },
+  {
+    id: "tat-data-api",
+    label: "TAT Data API",
+    category: "Tourism & Civic",
+    description:
+      "Tourism Authority of Thailand dataset used for Phuket attractions, events, and hotspot upgrades.",
+    surfaces: ["Tourism hotspots", "governor briefing", "future tourism overlays"],
+    endpoints: ["https://tatdataapi.io"],
+    optional: true,
+  },
+  {
+    id: "data-go-th",
+    label: "data.go.th CKAN",
+    category: "Tourism & Civic",
+    description:
+      "Thailand open-data portal used for Phuket civic, tourism, and infrastructure context layers.",
+    surfaces: ["Source health", "foundation layers", "future static operational layers"],
+    endpoints: ["https://data.go.th/api/3/action/package_search?q=phuket"],
   },
   {
     id: "nasa-gibs",

@@ -380,6 +380,34 @@ export const fallbackSources: ApiSourceResponse = {
       kind: "external",
       target: "NASA GIBS",
     },
+    {
+      id: "source-07",
+      label: "GISTDA Disaster Platform",
+      url: "https://disaster.gistda.or.th/services/open-api",
+      kind: "external",
+      target: "GISTDA",
+    },
+    {
+      id: "source-08",
+      label: "TMD / NDWC alerts",
+      url: "https://data.tmd.go.th/api/WeatherWarningNews/v1/?uid=api&ukey=api12345",
+      kind: "external",
+      target: "TMD / NDWC",
+    },
+    {
+      id: "source-09",
+      label: "AIS provider",
+      url: "https://www.aishub.net/api",
+      kind: "external",
+      target: "MarineTraffic / AISHub",
+    },
+    {
+      id: "source-10",
+      label: "TAT Data API",
+      url: "https://tatdataapi.io",
+      kind: "external",
+      target: "Tourism Authority of Thailand",
+    },
   ],
 };
 

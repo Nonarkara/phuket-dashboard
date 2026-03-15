@@ -8,19 +8,29 @@ import {
 import { fallbackIncidents } from "./mock-data";
 import { phuketPublicCameras } from "./public-cameras";
 import { loadThailandIncidents } from "./thailand-monitor";
+import {
+  loadDisasterFeed,
+  loadMaritimeSecurity,
+  loadTourismHotspots,
+} from "./war-room-integrations";
 import type {
   CityVibeCard,
   CityVibesResponse,
+  DisasterAlert,
+  DisasterFeedResponse,
   ExecutiveStatus,
   GovernorBrief,
   GovernorConcern,
   GovernorCorridorPriority,
   GovernorScenarioId,
+  MaritimeSecurityResponse,
   MarineCorridorStatus,
   MarineStatusResponse,
   MediaWatchResponse,
   NarrativeSignal,
   PublicCamera,
+  TourismHotspot,
+  TourismHotspotsResponse,
 } from "../types/dashboard";
 
 const GOOGLE_TRENDS_RSS_TH = "https://trends.google.com/trending/rss?geo=TH";
@@ -1117,32 +1127,55 @@ export async function loadCityVibes(
 }
 
 function describeCorridorLead(
+  disasterAlerts: DisasterAlert[],
+  maritimeContacts: MaritimeSecurityResponse["vessels"],
   marineCorridors: MarineCorridorStatus[],
+  tourismHotspots: TourismHotspotsResponse["hotspots"],
   vibeCards: CityVibeCard[],
   signals: NarrativeSignal[],
 ) {
+  const disasterLead = disasterAlerts.sort(
+    (left, right) => STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity],
+  )[0];
+  const maritimeLead = maritimeContacts.sort(compareByStatus)[0];
   const marineLead = marineCorridors.sort(compareByStatus)[0];
+  const tourismLead = tourismHotspots.sort(compareByStatus)[0];
   const vibeLead = vibeCards.sort(compareByStatus)[0];
   const narrativeLead = signals.sort(compareByStatus)[0];
 
-  return marineLead?.status === "intervene"
+  return disasterLead?.severity === "intervene"
+    ? disasterLead.summary
+    : maritimeLead?.status === "intervene"
+      ? maritimeLead.strategicNote
+      : marineLead?.status === "intervene"
     ? marineLead.summary
-    : vibeLead?.status === "intervene"
-      ? vibeLead.summary
-      : narrativeLead?.summary ??
-        marineLead?.summary ??
-        vibeLead?.summary ??
-        "No single signal dominates this corridor.";
+      : tourismLead?.status === "intervene"
+        ? tourismLead.summary
+        : vibeLead?.status === "intervene"
+          ? vibeLead.summary
+          : narrativeLead?.summary ??
+            disasterLead?.summary ??
+            maritimeLead?.strategicNote ??
+            marineLead?.summary ??
+            tourismLead?.summary ??
+            vibeLead?.summary ??
+            "No single signal dominates this corridor.";
 }
 
 function buildCorridorPriorities({
+  disaster,
+  maritimeSecurity,
   marine,
+  tourismHotspots,
   cityVibes,
   mediaWatch,
   airspace,
   incidents,
 }: {
+  disaster: DisasterFeedResponse;
+  maritimeSecurity: MaritimeSecurityResponse;
   marine: MarineStatusResponse;
+  tourismHotspots: TourismHotspotsResponse;
   cityVibes: CityVibesResponse;
   mediaWatch: MediaWatchResponse;
   airspace: AirspacePressure;
@@ -1155,6 +1188,23 @@ function buildCorridorPriorities({
   ];
 
   return GOVERNOR_CORRIDORS.map((corridor) => {
+    const disasterAlerts = disaster.alerts.filter(
+      (alert) =>
+        corridor.focusAreas.includes(alert.area) ||
+        matchAny(`${alert.title} ${alert.summary} ${alert.area}`, corridor.aliases),
+    );
+    const maritimeContacts = maritimeSecurity.vessels.filter(
+      (vessel) =>
+        matchAny(
+          `${vessel.name} ${vessel.type} ${vessel.destination ?? ""} ${vessel.strategicNote}`,
+          corridor.aliases,
+        ) ||
+        corridor.focusAreas.some((focusArea) =>
+          `${vessel.destination ?? ""} ${vessel.strategicNote}`
+            .toLowerCase()
+            .includes(focusArea.toLowerCase()),
+        ),
+    );
     const marineCorridors = marine.corridors.filter(
       (item) =>
         corridor.focusAreas.includes(item.focusArea) ||
@@ -1164,6 +1214,14 @@ function buildCorridorPriorities({
       (zone) =>
         corridor.focusAreas.some((focusArea) => zone.label.includes(focusArea)) ||
         matchAny(`${zone.label} ${zone.summary} ${zone.whyNow}`, corridor.aliases),
+    );
+    const tourismNodes = tourismHotspots.hotspots.filter(
+      (hotspot) =>
+        corridor.focusAreas.includes(hotspot.area) ||
+        matchAny(
+          `${hotspot.label} ${hotspot.area} ${hotspot.summary} ${hotspot.strategicNote}`,
+          corridor.aliases,
+        ),
     );
     const signals = allSignals.filter(
       (signal) =>
@@ -1177,7 +1235,16 @@ function buildCorridorPriorities({
       ),
     );
     const corridorScore =
+      disasterAlerts.reduce(
+        (sum, alert) => sum + STATUS_PRIORITY[alert.severity] * 16,
+        0,
+      ) +
+      maritimeContacts.reduce(
+        (sum, vessel) => sum + STATUS_PRIORITY[vessel.status] * 12,
+        0,
+      ) +
       marineCorridors.reduce((sum, item) => sum + STATUS_PRIORITY[item.status] * 18, 0) +
+      tourismNodes.reduce((sum, hotspot) => sum + STATUS_PRIORITY[hotspot.status] * 10, 0) +
       vibeCards.reduce((sum, item) => sum + STATUS_PRIORITY[item.status] * 14, 0) +
       signals.reduce((sum, item) => sum + narrativeWeight(item.status), 0) +
       corridorIncidents.reduce(
@@ -1186,13 +1253,23 @@ function buildCorridorPriorities({
       ) +
       (corridor.id === "airport-patong" ? airspace.count * 1.4 : 0);
     const status =
+      disasterAlerts.some((item) => item.severity === "intervene") ||
+      maritimeContacts.some((item) => item.status === "intervene") ||
       marineCorridors.some((item) => item.status === "intervene") ||
+      tourismNodes.some((item) => item.status === "intervene") ||
       vibeCards.some((item) => item.status === "intervene") ||
       corridorScore >= 78
         ? "intervene"
         : corridorScore >= 42
           ? "watch"
           : "stable";
+    const corridorAction =
+      actionFromDisasterAlert(disasterAlerts[0]) ??
+      actionFromMaritimeContact(maritimeContacts[0]) ??
+      actionFromTourismHotspot(tourismNodes[0]) ??
+      marineCorridors[0]?.recommendedAction ??
+      vibeCards[0]?.recommendedAction ??
+      corridor.defaultAction;
 
     return {
       id: corridor.id,
@@ -1203,14 +1280,21 @@ function buildCorridorPriorities({
           ? `${corridor.label} needs executive attention today.`
           : status === "watch"
             ? `${corridor.label} is elevated and worth a governor glance.`
-            : `${corridor.label} is operating inside a stable envelope.`,
-      whyNow: describeCorridorLead(marineCorridors, vibeCards, signals),
-      action:
-        marineCorridors[0]?.recommendedAction ??
-        vibeCards[0]?.recommendedAction ??
-        corridor.defaultAction,
+          : `${corridor.label} is operating inside a stable envelope.`,
+      whyNow: describeCorridorLead(
+        disasterAlerts,
+        maritimeContacts,
+        marineCorridors,
+        tourismNodes,
+        vibeCards,
+        signals,
+      ),
+      action: corridorAction,
       reasonTags: uniqueStrings([
+        ...disasterAlerts.map((item) => item.area),
+        ...maritimeContacts.map((item) => item.type),
         ...marineCorridors.map((item) => item.alertPosture),
+        ...tourismNodes.map((item) => item.kind),
         ...vibeCards.map((item) => item.mobilityPressure),
         ...signals.map((item) => item.kind),
       ]).slice(0, 3),
@@ -1223,12 +1307,79 @@ function concernMetric(label: string, value: string) {
   return { label, value };
 }
 
+function actionFromDisasterAlert(alert?: DisasterAlert) {
+  if (!alert) {
+    return null;
+  }
+
+  const text = `${alert.title} ${alert.summary} ${alert.area}`.toLowerCase();
+
+  if (/airport|road|runoff|flood|old town|town/i.test(text)) {
+    return "Clear road access, inspect flood points, and keep transfer messaging practical.";
+  }
+
+  if (/pier|ferry|port|marina/i.test(text)) {
+    return "Inspect piers, confirm operator readiness, and hold unsafe departures.";
+  }
+
+  if (/beach|surf|rough sea|west coast|patong|karon|kata/i.test(text)) {
+    return "Message weather safety early and keep beach flag discipline visible.";
+  }
+
+  return "Reinforce the warning line and clear the affected corridor before the next briefing cycle.";
+}
+
+function actionFromMaritimeContact(
+  vessel?: MaritimeSecurityResponse["vessels"][number],
+) {
+  if (!vessel) {
+    return null;
+  }
+
+  const type = vessel.type.toLowerCase();
+
+  if (/ferry|passenger/.test(type)) {
+    return "Inspect ferry lanes, pier density, and passenger holding before queues spill over.";
+  }
+
+  if (/fishing|unknown/.test(type)) {
+    return "Cross-check the contact with marine patrol and port operators before it becomes a wider watch item.";
+  }
+
+  return "Keep marine operators synchronized and verify the contact through the harbor picture.";
+}
+
+function actionFromTourismHotspot(hotspot?: TourismHotspot) {
+  if (!hotspot) {
+    return null;
+  }
+
+  const text = `${hotspot.label} ${hotspot.area} ${hotspot.summary}`.toLowerCase();
+
+  if (/airport|transfer|arrivals/.test(text)) {
+    return "Coordinate transfers early and keep the arrival corridor smooth before flight banks tighten.";
+  }
+
+  if (/pier|marina|rassada|chalong|ao po/.test(text)) {
+    return "Coordinate tourism operators and pier dispatch before density starts shaping the public story.";
+  }
+
+  if (/patong|beach|ao nang|khao lak|old town/.test(text)) {
+    return hotspot.strategicNote;
+  }
+
+  return "Coordinate tourism operators before visitor pressure compounds.";
+}
+
 export async function buildGovernorBrief(
   options: GovernorDataOptions = {},
 ): Promise<GovernorBrief> {
   const scenario = resolveScenario(options.scenario);
-  const [marine, mediaWatch, airspace, incidents] = await Promise.all([
+  const [disaster, maritimeSecurity, marine, tourismHotspots, mediaWatch, airspace, incidents] = await Promise.all([
+    loadDisasterFeed({ scenario }),
+    loadMaritimeSecurity({ scenario }),
     loadMarineStatus({ scenario }),
+    loadTourismHotspots({ scenario }),
     loadMediaWatch({ scenario }),
     loadAirspacePressure({ scenario }),
     loadThailandIncidents().catch(() => fallbackIncidents),
@@ -1242,13 +1393,20 @@ export async function buildGovernorBrief(
   });
 
   const corridorPriorities = buildCorridorPriorities({
+    disaster,
+    maritimeSecurity,
     marine,
+    tourismHotspots,
     cityVibes,
     mediaWatch,
     airspace,
     incidents,
   });
   const topMarine = marine.corridors.sort(compareByStatus)[0];
+  const topDisaster = [...disaster.alerts].sort(
+    (left, right) => STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity],
+  )[0];
+  const topMaritimeContact = [...maritimeSecurity.vessels].sort(compareByStatus)[0];
   const portCorridors = marine.corridors.filter((corridor) =>
     ["Chalong / Rassada / Ao Po", "Phi Phi corridor", "Ao Nang", "Khao Lak"].includes(
       corridor.focusArea,
@@ -1260,11 +1418,25 @@ export async function buildGovernorBrief(
   const tourismZones = cityVibes.zones.filter((zone) =>
     ["Patong", "Ao Nang", "Khao Lak"].includes(zone.label),
   );
+  const activeTourismHotspots = tourismHotspots.hotspots.filter(
+    (hotspot) => hotspot.status !== "stable",
+  );
+  const topTourismHotspot = [...tourismHotspots.hotspots].sort(compareByStatus)[0];
   const publicMoodLead = [
     ...mediaWatch.peopleTalkAbout,
     ...mediaWatch.peopleShare,
   ].sort(compareByStatus)[0];
   const roadLead = roadCorridors.sort(compareByStatus)[0] ?? corridorPriorities[0];
+  const roadDisasterLead =
+    disaster.alerts.find((alert) =>
+      /airport|old town|town|road|runoff|flood|khao lak|takua pa/i.test(
+        `${alert.title} ${alert.summary} ${alert.area}`,
+      ),
+    ) ?? topDisaster;
+  const monsoonStatus =
+    topDisaster && STATUS_PRIORITY[topDisaster.severity] >= STATUS_PRIORITY[topMarine.status]
+      ? topDisaster.severity
+      : topMarine.status;
 
   const concernSpecs: Array<{
     id: string;
@@ -1279,31 +1451,52 @@ export async function buildGovernorBrief(
     {
       id: "monsoon-risk",
       label: "Monsoon risk",
-      status: topMarine.status,
-      summary: topMarine.summary,
-      whyNow: `${topMarine.label} is the current marine-weather lead.`,
-      metric: concernMetric("Wave / gust", `${formatMetric(topMarine.waveHeightMeters, "m")} / ${formatMetric(topMarine.gustSpeedKph, "kph", 0)}`),
-      action: topMarine.recommendedAction,
-      sources: topMarine.sources,
+      status: monsoonStatus,
+      summary:
+        monsoonStatus === topDisaster?.severity
+          ? disaster.summary
+          : topMarine.summary,
+      whyNow:
+        topDisaster?.summary ??
+        `${topMarine.label} is the current marine-weather lead.`,
+      metric: concernMetric(
+        "Wave / alerts",
+        `${formatMetric(topMarine.waveHeightMeters, "m")} / ${disaster.alerts.filter((alert) => alert.severity !== "stable").length}`,
+      ),
+      action: actionFromDisasterAlert(topDisaster) ?? topMarine.recommendedAction,
+      sources: uniqueStrings([...topMarine.sources, ...disaster.sources]),
     },
     {
       id: "marine-route-status",
       label: "Marine route status",
-      status: portCorridors.some((item) => item.status === "intervene")
-        ? "intervene"
-        : portCorridors.some((item) => item.status === "watch")
-          ? "watch"
-          : "stable",
-      summary: `${portCorridors.filter((item) => item.status !== "stable").length} Phuket-linked marine corridors are above baseline watch.`,
-      whyNow: portCorridors[0]?.summary ?? "East coast and open-water corridors are inside normal watch.",
+      status:
+        maritimeSecurity.posture === "intervene" ||
+        portCorridors.some((item) => item.status === "intervene")
+          ? "intervene"
+          : maritimeSecurity.posture === "watch" ||
+              portCorridors.some((item) => item.status === "watch")
+            ? "watch"
+            : "stable",
+      summary:
+        maritimeSecurity.posture === "intervene"
+          ? maritimeSecurity.summary
+          : `${portCorridors.filter((item) => item.status !== "stable").length} Phuket-linked marine corridors are above baseline watch.`,
+      whyNow:
+        topMaritimeContact?.strategicNote ??
+        portCorridors[0]?.summary ??
+        "East coast and open-water corridors are inside normal watch.",
       metric: concernMetric(
-        "Watched corridors",
-        `${portCorridors.filter((item) => item.status !== "stable").length}/${portCorridors.length}`,
+        "Corridors / vessels",
+        `${portCorridors.filter((item) => item.status !== "stable").length}/${portCorridors.length} • ${maritimeSecurity.vessels.length}`,
       ),
       action:
+        actionFromMaritimeContact(topMaritimeContact) ??
         corridorPriorities.find((item) => item.id === "east-coast-ports")?.action ??
         "Inspect piers and ferry departures.",
-      sources: uniqueStrings(portCorridors.flatMap((item) => item.sources)),
+      sources: uniqueStrings([
+        ...portCorridors.flatMap((item) => item.sources),
+        ...maritimeSecurity.sources,
+      ]),
     },
     {
       id: "airport-arrivals-pressure",
@@ -1322,40 +1515,59 @@ export async function buildGovernorBrief(
     {
       id: "road-bottlenecks",
       label: "Road bottlenecks",
-      status: roadLead.status,
-      summary: roadLead.summary,
-      whyNow: roadLead.whyNow,
+      status:
+        roadDisasterLead &&
+        STATUS_PRIORITY[roadDisasterLead.severity] > STATUS_PRIORITY[roadLead.status]
+          ? roadDisasterLead.severity
+          : roadLead.status,
+      summary:
+        roadDisasterLead &&
+        STATUS_PRIORITY[roadDisasterLead.severity] > STATUS_PRIORITY[roadLead.status]
+          ? roadDisasterLead.summary
+          : roadLead.summary,
+      whyNow: roadDisasterLead?.summary ?? roadLead.whyNow,
       metric: concernMetric(
         "Road corridors",
         `${roadCorridors.filter((item) => item.status !== "stable").length}/${roadCorridors.length}`,
       ),
-      action: roadLead.action,
-      sources: ["Camera proxy", "Local incidents", "Governor corridor model"],
+      action: actionFromDisasterAlert(roadDisasterLead) ?? roadLead.action,
+      sources: uniqueStrings([
+        "Camera proxy",
+        "Local incidents",
+        "Governor corridor model",
+        ...disaster.sources,
+      ]),
     },
     {
       id: "tourism-pulse",
       label: "Tourism pulse",
       status:
+        activeTourismHotspots.some((hotspot) => hotspot.status === "intervene") ||
         tourismZones.some((zone) => zone.status === "intervene")
           ? "intervene"
-          : tourismZones.some((zone) => zone.status === "watch")
+          : activeTourismHotspots.some((hotspot) => hotspot.status === "watch") ||
+              tourismZones.some((zone) => zone.status === "watch")
             ? "watch"
             : "stable",
-      summary: `${tourismZones[0]?.label ?? "Patong"} is currently the lead visitor-pressure zone.`,
+      summary:
+        topTourismHotspot?.summary ??
+        `${tourismZones[0]?.label ?? "Patong"} is currently the lead visitor-pressure zone.`,
       whyNow:
+        topTourismHotspot?.strategicNote ??
         tourismZones[0]?.whyNow ??
         "Tourism demand is present, but not yet dislocating operations.",
       metric: concernMetric(
-        "Visitor heat",
-        `${Math.round(
-          tourismZones.reduce((sum, zone) => sum + zone.score, 0) /
-            Math.max(tourismZones.length, 1),
-        )}`,
+        "Active hotspots",
+        `${activeTourismHotspots.length}/${tourismHotspots.hotspots.length}`,
       ),
       action:
+        actionFromTourismHotspot(topTourismHotspot) ??
         tourismZones[0]?.recommendedAction ??
         "Coordinate tourism operators before crowding compounds.",
-      sources: uniqueStrings(tourismZones.flatMap((zone) => zone.sources)),
+      sources: uniqueStrings([
+        ...tourismZones.flatMap((zone) => zone.sources),
+        ...tourismHotspots.sources,
+      ]),
     },
     {
       id: "public-mood",
@@ -1430,7 +1642,10 @@ export async function buildGovernorBrief(
     corridorPriorities,
     nextActions,
     sources: uniqueStrings([
+      ...disaster.sources,
+      ...maritimeSecurity.sources,
       ...marine.sources,
+      ...tourismHotspots.sources,
       ...cityVibes.sources,
       ...mediaWatch.sources,
       ...airspace.sources,

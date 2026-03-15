@@ -15,11 +15,14 @@ import BorderMap from "../components/Map/BorderMap";
 import Sidebar from "../components/Sidebar/Sidebar";
 import type {
   CityVibesResponse,
+  DisasterFeedResponse,
   GovernorBrief,
+  MaritimeSecurityResponse,
   MarineStatusResponse,
   MediaWatchResponse,
   ProvinceSelection,
   PublicCameraResponse,
+  TourismHotspotsResponse,
 } from "../types/dashboard";
 
 async function fetchJson<T>(url: string): Promise<T | null> {
@@ -43,7 +46,12 @@ export default function Dashboard() {
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isDataExplorerOpen, setIsDataExplorerOpen] = useState(false);
   const [brief, setBrief] = useState<GovernorBrief | null>(null);
+  const [disaster, setDisaster] = useState<DisasterFeedResponse | null>(null);
+  const [maritimeSecurity, setMaritimeSecurity] =
+    useState<MaritimeSecurityResponse | null>(null);
   const [marine, setMarine] = useState<MarineStatusResponse | null>(null);
+  const [tourismHotspots, setTourismHotspots] =
+    useState<TourismHotspotsResponse | null>(null);
   const [cityVibes, setCityVibes] = useState<CityVibesResponse | null>(null);
   const [mediaWatch, setMediaWatch] = useState<MediaWatchResponse | null>(null);
   const [cameraPayload, setCameraPayload] = useState<PublicCameraResponse | null>(
@@ -52,17 +60,32 @@ export default function Dashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const [nextBrief, nextMarine, nextCityVibes, nextMediaWatch, nextCameras] =
+      const [
+        nextBrief,
+        nextDisaster,
+        nextMaritimeSecurity,
+        nextMarine,
+        nextTourismHotspots,
+        nextCityVibes,
+        nextMediaWatch,
+        nextCameras,
+      ] =
         await Promise.all([
           fetchJson<GovernorBrief>("/api/governor/brief"),
+          fetchJson<DisasterFeedResponse>("/api/disaster/brief"),
+          fetchJson<MaritimeSecurityResponse>("/api/maritime/security"),
           fetchJson<MarineStatusResponse>("/api/marine"),
+          fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots"),
           fetchJson<CityVibesResponse>("/api/city-vibes"),
           fetchJson<MediaWatchResponse>("/api/media-watch"),
           fetchJson<PublicCameraResponse>("/api/public-cameras"),
         ]);
 
       if (nextBrief) setBrief(nextBrief);
+      if (nextDisaster) setDisaster(nextDisaster);
+      if (nextMaritimeSecurity) setMaritimeSecurity(nextMaritimeSecurity);
       if (nextMarine) setMarine(nextMarine);
+      if (nextTourismHotspots) setTourismHotspots(nextTourismHotspots);
       if (nextCityVibes) setCityVibes(nextCityVibes);
       if (nextMediaWatch) setMediaWatch(nextMediaWatch);
       if (nextCameras) setCameraPayload(nextCameras);
@@ -137,7 +160,10 @@ export default function Dashboard() {
               <div className="eyebrow mb-1 opacity-50 px-1">Corridor dossier</div>
               <SourceStack
                 brief={brief}
+                disaster={disaster}
+                maritimeSecurity={maritimeSecurity}
                 marine={marine}
+                tourismHotspots={tourismHotspots}
                 mediaWatch={mediaWatch}
                 cameraPayload={cameraPayload}
                 selectedCorridorId={selectedCorridorId}
