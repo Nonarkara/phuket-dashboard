@@ -1,0 +1,388 @@
+import { NextResponse } from "next/server";
+
+/**
+ * Feed Registry API
+ *
+ * Returns metadata about all connected and available data feeds
+ * for the Phuket Dashboard. Includes status of each integration.
+ */
+
+interface FeedEntry {
+  id: string;
+  domain: string;
+  name: string;
+  provider: string;
+  endpoint: string;
+  status: "active" | "available" | "requires_key" | "planned";
+  requiresApiKey: boolean;
+  notes: string;
+}
+
+export async function GET() {
+  const feeds: FeedEntry[] = [
+    // Active feeds (already integrated)
+    {
+      id: "nasa-gibs",
+      domain: "satellite",
+      name: "NASA GIBS Satellite Imagery",
+      provider: "NASA",
+      endpoint: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/",
+      status: "active",
+      requiresApiKey: false,
+      notes: "VIIRS true color, MODIS false color, precipitation, aerosol, night lights, SST",
+    },
+    {
+      id: "nasa-firms",
+      domain: "fire",
+      name: "NASA FIRMS Fire Detection",
+      provider: "NASA",
+      endpoint: "/api/fires",
+      status: process.env.FIRMS_KEY ? "active" : "requires_key",
+      requiresApiKey: true,
+      notes: "Thermal hotspots via VIIRS and MODIS",
+    },
+    {
+      id: "opensky",
+      domain: "aviation",
+      name: "OpenSky Network Flight Tracking",
+      provider: "OpenSky",
+      endpoint: "/api/flights",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Real-time aircraft positions over Phuket",
+    },
+    {
+      id: "open-meteo",
+      domain: "weather",
+      name: "Open-Meteo Air Quality",
+      provider: "Open-Meteo",
+      endpoint: "/api/air-quality",
+      status: "active",
+      requiresApiKey: false,
+      notes: "AQI and PM2.5 heatmap data",
+    },
+    {
+      id: "pksb",
+      domain: "transit",
+      name: "Phuket Smart Bus",
+      provider: "PKSB",
+      endpoint: "/api/transit/pksb",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Bus routes and stop locations",
+    },
+    {
+      id: "public-cameras",
+      domain: "cameras",
+      name: "Public Camera Network",
+      provider: "SCS/SSS Webcams",
+      endpoint: "/api/public-cameras",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Verified beach, bay, and traffic cameras",
+    },
+    {
+      id: "maritime-ais",
+      domain: "maritime",
+      name: "Maritime AIS Tracking",
+      provider: "Internal",
+      endpoint: "/api/maritime/security",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Ferry, patrol, fishing vessel tracking",
+    },
+
+    // New feeds (just integrated)
+    {
+      id: "longdo-traffic",
+      domain: "traffic",
+      name: "Longdo Traffic Feeds",
+      provider: "Longdo/ITIC",
+      endpoint: "/api/traffic",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Real-time traffic incidents and congestion near Phuket",
+    },
+    {
+      id: "nabc-agriculture",
+      domain: "agriculture",
+      name: "NABC Agricultural Prices",
+      provider: "National Agricultural Big Data Center",
+      endpoint: "/api/agriculture",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Daily commodity prices for rice, rubber, palm oil, shrimp, pineapple",
+    },
+    {
+      id: "gistda-flood",
+      domain: "disaster",
+      name: "GISTDA Flood & Disaster",
+      provider: "GISTDA",
+      endpoint: "/api/gistda",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Flood area polygons (1/3/7 day); disaster hotspot requires GISTDA_SPHERE_KEY",
+    },
+    {
+      id: "tmd-weather",
+      domain: "weather",
+      name: "TMD Weather Services",
+      provider: "Thai Meteorological Department",
+      endpoint: "/api/weather/tmd",
+      status: process.env.TMD_UID ? "active" : "requires_key",
+      requiresApiKey: true,
+      notes: "Weather warnings, 7-day forecast; requires TMD_UID and TMD_UKEY",
+    },
+
+    // Available but requiring keys
+    {
+      id: "tat-events",
+      domain: "tourism",
+      name: "TAT Events & Places",
+      provider: "Tourism Authority of Thailand",
+      endpoint: "https://tatdataapi.io/api/v1/events",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Tourism events, places, routes, SHA certified venues",
+    },
+    {
+      id: "thai-holidays",
+      domain: "holidays",
+      name: "Thai Holiday Data",
+      provider: "iApp Technology",
+      endpoint: "https://api.iapp.co.th/v3/store/data/thai-holiday",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Public and financial holiday calendar",
+    },
+    {
+      id: "gistda-sphere-hotspot",
+      domain: "disaster",
+      name: "GISTDA Sphere Hotspot",
+      provider: "GISTDA",
+      endpoint: "https://api.sphere.gistda.or.th/services/info/disaster-hotspot",
+      status: process.env.GISTDA_SPHERE_KEY ? "active" : "requires_key",
+      requiresApiKey: true,
+      notes: "Daily wildfire hotspot data based on coordinates",
+    },
+
+    // Global feeds (active proxies)
+    {
+      id: "usgs-earthquakes",
+      domain: "disasters/earthquakes",
+      name: "USGS Earthquake Catalog",
+      provider: "USGS",
+      endpoint: "/api/earthquakes",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Andaman Sea / Indian Ocean seismic activity; tsunami flags for M5.0+",
+    },
+    {
+      id: "nasa-eonet",
+      domain: "disasters",
+      name: "NASA EONET Natural Events",
+      provider: "NASA",
+      endpoint: "/api/natural-events",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Curated global natural events: wildfires, storms, volcanoes, floods",
+    },
+    {
+      id: "open-meteo-flood",
+      domain: "hydrology/flood",
+      name: "Open-Meteo Flood Forecast",
+      provider: "Open-Meteo / GloFAS",
+      endpoint: "/api/flood-forecast",
+      status: "active",
+      requiresApiKey: false,
+      notes: "River discharge predictions for 5 southern Thailand monitoring points",
+    },
+    {
+      id: "gdacs-disasters",
+      domain: "disasters",
+      name: "GDACS Global Disaster Alerts",
+      provider: "GDACS",
+      endpoint: "/api/global-disasters",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Earthquakes, floods, cyclones, volcanoes, droughts worldwide",
+    },
+    {
+      id: "reliefweb",
+      domain: "humanitarian",
+      name: "ReliefWeb Reports",
+      provider: "UN OCHA",
+      endpoint: "/api/reliefweb",
+      status: "active",
+      requiresApiKey: false,
+      notes: "Humanitarian reports and situation updates for Thailand",
+    },
+
+    // Available global feeds (key or integration needed)
+    {
+      id: "usgs-flood-impact",
+      domain: "water/flood",
+      name: "USGS Real-Time Flood Impact",
+      provider: "USGS",
+      endpoint: "https://api.waterdata.usgs.gov/rtfi-api",
+      status: "available",
+      requiresApiKey: false,
+      notes: "Flood-impact reference points linked to USGS stream gages",
+    },
+    {
+      id: "usgs-water-data",
+      domain: "water/environment",
+      name: "USGS Water Data APIs",
+      provider: "USGS",
+      endpoint: "https://api.waterdata.usgs.gov/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "Real-time streamflow, gage height, monitoring locations",
+    },
+    {
+      id: "water-quality-portal",
+      domain: "water quality",
+      name: "Water Quality Portal",
+      provider: "USGS/EPA",
+      endpoint: "https://www.waterqualitydata.us/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "Chemical, physical, biological water measurements",
+    },
+    {
+      id: "noaa-cdo",
+      domain: "weather/climate",
+      name: "NOAA Climate Data Online",
+      provider: "NOAA NCEI",
+      endpoint: "https://www.ncei.noaa.gov/cdo-web/api/v2/",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Historical climate statistics; 5 req/sec, 10k/day limit",
+    },
+    {
+      id: "opentripmap",
+      domain: "tourism",
+      name: "OpenTripMap POI",
+      provider: "OpenTripMap",
+      endpoint: "https://api.opentripmap.com/",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Global points-of-interest from OSM, Wikidata, other sources",
+    },
+    {
+      id: "openaq",
+      domain: "air quality",
+      name: "OpenAQ Air Quality",
+      provider: "OpenAQ",
+      endpoint: "https://api.openaq.org/v3/",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Global air quality measurements (PM2.5, PM10, SO2, NO2, CO, O3)",
+    },
+    {
+      id: "usda-fas",
+      domain: "agriculture/trade",
+      name: "USDA FAS Agricultural Trade",
+      provider: "USDA Foreign Agricultural Service",
+      endpoint: "https://apps.fas.usda.gov/api/",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "U.S. export sales reports, global commodity trade data",
+    },
+    {
+      id: "open-charge-map",
+      domain: "transport/energy",
+      name: "Open Charge Map EV Stations",
+      provider: "Open Charge Map",
+      endpoint: "https://api.openchargemap.io/v3/poi/",
+      status: "requires_key",
+      requiresApiKey: true,
+      notes: "Global EV charging station registry",
+    },
+    {
+      id: "eurostat",
+      domain: "economics/statistics",
+      name: "Eurostat Statistical Data",
+      provider: "European Commission",
+      endpoint: "https://ec.europa.eu/eurostat/api/dissemination/1.0/data/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "EU socio-economic indicators, demographics, trade data",
+    },
+    {
+      id: "nws-weather",
+      domain: "weather",
+      name: "NWS Weather API",
+      provider: "U.S. National Weather Service",
+      endpoint: "https://api.weather.gov/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "U.S. forecasts, alerts, observations (User-Agent required)",
+    },
+    {
+      id: "uk-carbon-intensity",
+      domain: "energy/carbon",
+      name: "UK Carbon Intensity",
+      provider: "NESO / National Grid ESO",
+      endpoint: "https://api.carbonintensity.org.uk/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "GB electricity carbon intensity, generation mix, regional data",
+    },
+    {
+      id: "open-food-facts",
+      domain: "food/nutrition",
+      name: "Open Food Facts",
+      provider: "Open Food Facts",
+      endpoint: "https://world.openfoodfacts.net/api/v2/product/",
+      status: "available",
+      requiresApiKey: false,
+      notes: "Crowdsourced food product data: ingredients, nutrition, environment",
+    },
+
+    // Planned / under development (Thai)
+    {
+      id: "nabc-import-export",
+      domain: "agriculture",
+      name: "NABC Import/Export",
+      provider: "NABC",
+      endpoint: "TBD",
+      status: "planned",
+      requiresApiKey: false,
+      notes: "Under development as of March 2026",
+    },
+    {
+      id: "nabc-land-use",
+      domain: "agriculture",
+      name: "NABC Land-Use",
+      provider: "NABC",
+      endpoint: "TBD",
+      status: "planned",
+      requiresApiKey: false,
+      notes: "Agricultural land-use data, under development",
+    },
+    {
+      id: "thai-gov-ckan",
+      domain: "openData",
+      name: "Thai Government Open Data (CKAN)",
+      provider: "Digital Government Development Agency",
+      endpoint: "https://data.go.th/api/3/action/package_search",
+      status: "available",
+      requiresApiKey: false,
+      notes: "34k+ government datasets; metadata search available",
+    },
+  ];
+
+  const active = feeds.filter((f) => f.status === "active").length;
+  const total = feeds.length;
+
+  return NextResponse.json({
+    generatedAt: new Date().toISOString(),
+    summary: {
+      active,
+      total,
+      domains: [...new Set(feeds.map((f) => f.domain))],
+    },
+    feeds,
+  });
+}
