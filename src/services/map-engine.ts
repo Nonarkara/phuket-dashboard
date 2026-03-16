@@ -708,7 +708,7 @@ export function createPksbRouteLayers(
   ];
 }
 
-/* ─── 1 × 1 km Grid Layer ──────────────────────────────────────── */
+/* ─── Multi-scale Distance Grid Layer ─────────────────────────── */
 
 const KM_GRID_BOUNDS = {
   west: 98.16,
@@ -717,11 +717,18 @@ const KM_GRID_BOUNDS = {
   north: 8.24,
 };
 
-const KM_GRID_MAJOR_INTERVAL = 5;
-
 /** Approximate degrees per kilometer at the Phuket latitude (~7.9°N). */
 const DEG_PER_KM_LAT = 1 / 111.32;
 const DEG_PER_KM_LNG = 1 / (111.32 * Math.cos((7.9 * Math.PI) / 180));
+
+export type GridScale = 0.5 | 1 | 5 | 10;
+
+export const GRID_SCALES: { value: GridScale; label: string }[] = [
+  { value: 0.5, label: "500m" },
+  { value: 1, label: "1km" },
+  { value: 5, label: "5km" },
+  { value: 10, label: "10km" },
+];
 
 interface GridLine {
   start: [number, number];
@@ -737,69 +744,66 @@ interface GridLabel {
   axis: "x" | "y";
 }
 
-function roundKmIndex(distanceDegrees: number, degreesPerKm: number) {
-  return Math.round(distanceDegrees / degreesPerKm);
-}
-
-function buildKmGridData() {
+function buildKmGridData(scaleKm: GridScale) {
   const lines: GridLine[] = [];
   const labels: GridLabel[] = [];
   const { west, east, south, north } = KM_GRID_BOUNDS;
-  const lngStart = Math.floor(west / DEG_PER_KM_LNG) * DEG_PER_KM_LNG;
-  const latStart = Math.floor(south / DEG_PER_KM_LAT) * DEG_PER_KM_LAT;
+  const stepLng = DEG_PER_KM_LNG * scaleKm;
+  const stepLat = DEG_PER_KM_LAT * scaleKm;
+  const majorEvery = 5;
+  const lngStart = Math.floor(west / stepLng) * stepLng;
+  const latStart = Math.floor(south / stepLat) * stepLat;
 
-  for (let lng = lngStart; lng <= east + DEG_PER_KM_LNG / 2; lng += DEG_PER_KM_LNG) {
-    const indexKm = roundKmIndex(lng - lngStart, DEG_PER_KM_LNG);
-    const kind = indexKm % KM_GRID_MAJOR_INTERVAL === 0 ? "major" : "minor";
+  let idx = 0;
+  for (let lng = lngStart; lng <= east + stepLng / 2; lng += stepLng) {
+    const kind = idx % majorEvery === 0 ? "major" : "minor";
+    lines.push({ start: [lng, south], end: [lng, north], kind, axis: "vertical", indexKm: idx });
 
-    lines.push({
-      start: [lng, south],
-      end: [lng, north],
-      kind,
-      axis: "vertical",
-      indexKm,
-    });
-
-    if (kind === "major" && indexKm > 0) {
+    if (kind === "major" && idx > 0) {
+      const dist = idx * scaleKm;
       labels.push({
         position: [lng, north - DEG_PER_KM_LAT * 0.35],
-        text: `${indexKm} km`,
+        text: dist < 1 ? `${dist * 1000}m` : `${dist}km`,
         axis: "x",
       });
     }
+    idx++;
   }
 
-  for (let lat = latStart; lat <= north + DEG_PER_KM_LAT / 2; lat += DEG_PER_KM_LAT) {
-    const indexKm = roundKmIndex(lat - latStart, DEG_PER_KM_LAT);
-    const kind = indexKm % KM_GRID_MAJOR_INTERVAL === 0 ? "major" : "minor";
+  idx = 0;
+  for (let lat = latStart; lat <= north + stepLat / 2; lat += stepLat) {
+    const kind = idx % majorEvery === 0 ? "major" : "minor";
+    lines.push({ start: [west, lat], end: [east, lat], kind, axis: "horizontal", indexKm: idx });
 
-    lines.push({
-      start: [west, lat],
-      end: [east, lat],
-      kind,
-      axis: "horizontal",
-      indexKm,
-    });
-
-    if (kind === "major" && indexKm > 0) {
+    if (kind === "major" && idx > 0) {
+      const dist = idx * scaleKm;
       labels.push({
         position: [west + DEG_PER_KM_LNG * 0.55, lat],
-        text: `${indexKm} km`,
+        text: dist < 1 ? `${dist * 1000}m` : `${dist}km`,
         axis: "y",
       });
     }
+    idx++;
   }
 
   return { lines, labels };
 }
 
-const KM_GRID_DATA = buildKmGridData();
+const gridCache = new Map<GridScale, { lines: GridLine[]; labels: GridLabel[] }>();
 
-export function createKilometerGridLayer() {
+function getGridData(scaleKm: GridScale) {
+  if (!gridCache.has(scaleKm)) {
+    gridCache.set(scaleKm, buildKmGridData(scaleKm));
+  }
+  return gridCache.get(scaleKm)!;
+}
+
+export function createKilometerGridLayer(scaleKm: GridScale = 1) {
+  const data = getGridData(scaleKm);
   return [
     new LineLayer({
       id: "km-grid-lines",
-      data: KM_GRID_DATA.lines,
+      data: data.lines,
       getSourcePosition: (d: GridLine) => d.start,
       getTargetPosition: (d: GridLine) => d.end,
       getColor: (d: GridLine) =>
@@ -813,7 +817,7 @@ export function createKilometerGridLayer() {
     }),
     new TextLayer({
       id: "km-grid-labels",
-      data: KM_GRID_DATA.labels,
+      data: data.labels,
       getPosition: (d: GridLabel) => d.position,
       getText: (d: GridLabel) => d.text,
       getSize: 9,

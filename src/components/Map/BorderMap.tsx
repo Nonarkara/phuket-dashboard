@@ -44,6 +44,8 @@ import {
   createRefugeeLayer,
   createRegionalBorderLayer,
   createTourismHotspotLayer,
+  GRID_SCALES,
+  type GridScale,
 } from "../../services/map-engine";
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
@@ -325,6 +327,7 @@ export default function BorderMap({
   const [isDetailedMap, setIsDetailedMap] = useState(true);
   const [showAerialBasemap, setShowAerialBasemap] = useState(MAPBOX_TOKEN.length === 0);
   const [showStreets, setShowStreets] = useState(MAPBOX_TOKEN.length === 0);
+  const [gridScale, setGridScale] = useState<GridScale>(1);
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
   const [fires, setFires] = useState<FireEvent[]>([]);
@@ -579,7 +582,7 @@ export default function BorderMap({
       ? createTourismHotspotLayer(tourismHotspots)
       : []),
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
-    ...(enabledOverlays.kmGrid ? createKilometerGridLayer() : []),
+    ...(enabledOverlays.kmGrid ? createKilometerGridLayer(gridScale) : []),
     provinceLabelsLayer,
   ].filter(Boolean);
 
@@ -990,15 +993,28 @@ export default function BorderMap({
       )}
 
       {enabledOverlays.kmGrid && (
-        <div className="pointer-events-none absolute bottom-14 right-3 z-30 border border-[rgba(15,111,136,0.25)] bg-[rgba(248,246,240,0.88)] px-2.5 py-1.5 backdrop-blur-sm xl:right-4 xl:bottom-16">
+        <div className="pointer-events-auto absolute bottom-14 right-3 z-30 border border-[rgba(15,111,136,0.25)] bg-[rgba(248,246,240,0.88)] px-2.5 py-1.5 backdrop-blur-sm xl:right-4 xl:bottom-16">
           <div className="text-[8px] font-mono font-bold uppercase tracking-[0.24em] text-[var(--cool)]">
             Distance Grid
           </div>
-          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)]">
-            1 x 1 km
+          <div className="mt-1 flex gap-1">
+            {GRID_SCALES.map((scale) => (
+              <button
+                key={scale.value}
+                type="button"
+                onClick={() => setGridScale(scale.value)}
+                className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                  gridScale === scale.value
+                    ? "border-[var(--cool)] bg-[rgba(15,111,136,0.1)] text-[var(--cool)]"
+                    : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {scale.label}
+              </button>
+            ))}
           </div>
-          <div className="text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
-            Major lines every 5 km
+          <div className="mt-1 text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
+            Major every {gridScale < 1 ? `${gridScale * 1000 * 5}m` : `${gridScale * 5}km`}
           </div>
         </div>
       )}
@@ -1039,7 +1055,7 @@ export default function BorderMap({
                 </button>
               ))}
             </div>
-            {mapModeControls.slice(0, 3).map((control) => {
+            {mapModeControls.map((control) => {
               const Icon = control.icon;
               return (
                 <button

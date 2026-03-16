@@ -74,9 +74,9 @@ export function buildMapOverlayCatalog(
       defaultOpacity: 0.72,
       enabledByDefault: false,
       maxZoom: 8,
-      timeMode: "dated",
+      timeMode: "default",
       tileTemplate:
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief/default/${focusDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg`,
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
     }),
     rasterOverlay({
       id: "vegetationIndex",
@@ -90,9 +90,9 @@ export function buildMapOverlayCatalog(
       defaultOpacity: 0.46,
       enabledByDefault: false,
       maxZoom: 9,
-      timeMode: "default",
+      timeMode: "dated",
       tileTemplate:
-        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_EVI_8Day/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_EVI_8Day/default/${focusDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`,
     }),
     rasterOverlay({
       id: "nightLights",
@@ -349,10 +349,10 @@ export function buildMapOverlayCatalog(
     }),
     rasterOverlay({
       id: "gsmapRain",
-      label: "GSMaP Rainfall",
-      shortLabel: "GSMAP",
-      description: "JAXA GSMaP hourly global rainfall estimate for near-real-time precipitation monitoring.",
-      source: "JAXA GSMaP / NASA GIBS",
+      label: "Accumulated Rain",
+      shortLabel: "ACCUM",
+      description: "3-hourly accumulated precipitation estimate for flood risk and rainfall tracking.",
+      source: "NASA GIBS / GPM IMERG",
       family: "weather",
       role: "analytic",
       defaultOpacity: 0.55,
@@ -360,7 +360,7 @@ export function buildMapOverlayCatalog(
       maxZoom: 6,
       timeMode: "dated",
       tileTemplate:
-        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate/default/${focusDate}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate_3hr/default/${focusDate}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`,
     }),
     rasterOverlay({
       id: "seviriFire",
@@ -396,16 +396,16 @@ export function buildMapOverlayCatalog(
       id: "soilMoisture",
       label: "Soil Moisture",
       shortLabel: "SOIL",
-      description: "AMSR-2 soil moisture for flood risk and ground condition monitoring.",
-      source: "JAXA AMSR-2 / NASA GIBS",
+      description: "SMAP L4 surface soil moisture for flood risk and ground condition monitoring.",
+      source: "NASA SMAP / GIBS",
       family: "weather",
       role: "analytic",
       defaultOpacity: 0.45,
       enabledByDefault: false,
-      maxZoom: 6,
-      timeMode: "default",
+      maxZoom: 9,
+      timeMode: "dated",
       tileTemplate:
-        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Soil_Moisture_Active_Passive_L4_Global_Surface_Soil_Moisture/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png",
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/SMAP_L4_Analyzed_Surface_Soil_Moisture/default/${focusDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`,
     }),
     rasterOverlay({
       id: "seaSurfaceTemp",

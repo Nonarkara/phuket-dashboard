@@ -8,6 +8,7 @@ import TopBar from "../components/Intelligence/TopBar";
 import ProvinceDashboard from "../components/Analytics/ProvinceDashboard";
 import BorderMap from "../components/Map/BorderMap";
 import BottomRail from "../components/Intelligence/BottomRail";
+import NewsSidebar from "../components/Intelligence/NewsSidebar";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -115,7 +116,7 @@ export default function Dashboard() {
   return (
     <main
       data-surface="phuket-dashboard"
-      className="relative grid h-[100dvh] w-screen grid-rows-[auto_1fr_auto_auto] overflow-hidden bg-[var(--bg)] text-[var(--ink)]"
+      className="relative flex h-[100dvh] w-screen flex-col overflow-hidden bg-[var(--bg)] text-[var(--ink)]"
     >
       <TopBar
         brief={brief}
@@ -124,16 +125,34 @@ export default function Dashboard() {
         onOpenDataExplorer={openDataExplorer}
       />
 
-      {/* ─── Map-dominant center ─── */}
-      <section className="relative min-h-0 flex-1 overflow-hidden border-t border-[var(--line)]">
-        <BorderMap
-          onProvinceSelect={setSelectedProvince}
-          selectedCorridorId={selectedCorridorId}
-          onCorridorSelect={setSelectedCorridorId}
-        />
+      {/* ─── Map-dominant center with optional left news sidebar ─── */}
+      <section className="relative min-h-0 flex-1 overflow-hidden border-t border-[var(--line)] flex">
+        {/* Left sidebar — news signals (visible on xl screens) */}
+        <div className="hidden xl:block w-[260px] shrink-0">
+          <NewsSidebar />
+        </div>
+
+        {/* Map takes remaining space */}
+        <div className="relative min-w-0 flex-1">
+          <BorderMap
+            onProvinceSelect={setSelectedProvince}
+            selectedCorridorId={selectedCorridorId}
+            onCorridorSelect={setSelectedCorridorId}
+          />
+        </div>
       </section>
 
-      {/* ─── Compact Bottom Rail ─── */}
+      {/* ─── Thin ticker strip ─── */}
+      <div className="shrink-0 border-t border-[var(--line)]">
+        <SignalTicker
+          brief={brief}
+          marine={marine}
+          cityVibes={cityVibes}
+          mediaWatch={mediaWatch}
+        />
+      </div>
+
+      {/* ─── Ultra-compact bottom rail (expand on demand) ─── */}
       <BottomRail
         brief={brief}
         disaster={disaster}
@@ -146,15 +165,6 @@ export default function Dashboard() {
         selectedCorridorId={selectedCorridorId}
         onSelectCorridor={setSelectedCorridorId}
       />
-
-      <div className="border-t border-[var(--line)]">
-        <SignalTicker
-          brief={brief}
-          marine={marine}
-          cityVibes={cityVibes}
-          mediaWatch={mediaWatch}
-        />
-      </div>
 
       <ProvinceDashboard
         province={selectedProvince}
