@@ -60,14 +60,14 @@ export default function TopBar({
   const topConcerns = brief?.topConcerns ?? [];
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1.5 backdrop-blur-xl sm:px-5">
+    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1 backdrop-blur-xl sm:px-5">
       <div className="flex items-center justify-between gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Governor War Room</div>
-            <div className="text-[14px] font-bold tracking-tight text-[var(--ink)]">
-              Phuket Island Command
+            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v5.0</div>
+            <div className="text-[13px] font-bold tracking-tight text-[var(--ink)]">
+              Governor War Room
             </div>
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />

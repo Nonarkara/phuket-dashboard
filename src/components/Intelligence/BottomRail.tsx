@@ -139,9 +139,9 @@ export default function BottomRail({
     : [];
 
   return (
-    <section className="border-t border-[var(--line)] bg-[var(--bg-raised)]">
+    <section className="shrink-0 border-t border-[var(--line)] bg-[var(--bg-raised)]">
       {/* Collapsed compact bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5">
+      <div className="flex items-center gap-1.5 px-3 py-0.5">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -190,7 +190,7 @@ export default function BottomRail({
 
       {/* Expanded detail panel */}
       {expanded && (
-        <div className="max-h-[280px] overflow-y-auto border-t border-[var(--line)] bg-[var(--bg)]">
+        <div className="max-h-[180px] overflow-y-auto border-t border-[var(--line)] bg-[var(--bg)]">
           <div className="grid gap-px bg-[var(--line)] lg:grid-cols-4">
             {/* Column 1: Corridor brief + cameras */}
             <div className="bg-[var(--bg-raised)] p-3">

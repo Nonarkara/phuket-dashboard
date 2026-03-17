@@ -67,7 +67,7 @@ export default function SignalTicker({
   ];
 
   return (
-    <section className="grid h-[38px] grid-cols-2 bg-[var(--bg-surface)] lg:grid-cols-4">
+    <section className="grid h-[28px] grid-cols-2 bg-[var(--bg-surface)] lg:grid-cols-4">
       {items.map((item) => {
         const toneClass =
           item.tone === "up"

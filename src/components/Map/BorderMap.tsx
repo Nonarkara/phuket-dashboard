@@ -322,11 +322,14 @@ export default function BorderMap({
   const [mounted, setMounted] = useState(false);
   const [webglSupported, setWebglSupported] = useState(true);
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
-  const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(true);
+
+  // ─── Basemap: exactly one active at a time (radio) ───
+  type BasemapId = "esri-aerial" | "osm-streets" | "mapbox-satellite" | "mapbox-light";
+  const hasMapbox = MAPBOX_TOKEN.length > 0;
+  const [activeBasemap, setActiveBasemap] = useState<BasemapId>("esri-aerial");
+
+  // ─── NASA GIBS imagery overlay (on top of basemap, pick one or none) ───
   const [satelliteOpacity, setSatelliteOpacity] = useState(62);
-  const [isDetailedMap, setIsDetailedMap] = useState(true);
-  const [showAerialBasemap, setShowAerialBasemap] = useState(MAPBOX_TOKEN.length === 0);
-  const [showStreets, setShowStreets] = useState(MAPBOX_TOKEN.length === 0);
   const [gridScale, setGridScale] = useState<GridScale>(1);
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
@@ -361,9 +364,7 @@ export default function BorderMap({
   const additionalOverlays = overlayCatalog.overlays.filter(
     (overlay) => overlay.role !== "base-option",
   );
-  const [satelliteOverlay, setSatelliteOverlay] = useState<string>(
-    overlayCatalog.defaultImageryOverlayId,
-  );
+  const [satelliteOverlay, setSatelliteOverlay] = useState<string>("viirsTrueColor");
   const [enabledOverlays, setEnabledOverlays] = useState<Record<string, boolean>>(
     () =>
       overlayCatalog.overlays.reduce<Record<string, boolean>>((memo, overlay) => {
@@ -385,26 +386,25 @@ export default function BorderMap({
     (camera) => camera.validationState === "verified",
   ).length;
   const tourismHotspotCount = tourismHotspots.length;
-  const hasMapboxBaseMap = MAPBOX_TOKEN.length > 0;
+  const hasMapboxBaseMap = hasMapbox && (activeBasemap === "mapbox-satellite" || activeBasemap === "mapbox-light");
+  const showSatelliteOverlay = satelliteOverlay !== "none";
   const totalActiveLayers = Object.entries(enabledOverlays).filter(
     ([, active]) => active,
   ).length;
   const activeCorridor = selectedCorridorId
     ? findCorridorById(selectedCorridorId)
     : GOVERNOR_CORRIDORS[0];
-  const mapStyle = isDetailedMap
-    ? "mapbox://styles/mapbox/satellite-streets-v12"
-    : "mapbox://styles/mapbox/light-v11";
-  const fallbackBackgroundClass = isDetailedMap
-    ? "bg-[radial-gradient(circle_at_top,_var(--line-bright),_var(--bg)_52%),linear-gradient(180deg,_var(--bg)_0%,_var(--bg-surface)_100%)]"
-    : "bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.08),_rgba(10,15,26,0.98)_42%),linear-gradient(180deg,_rgba(4,8,15,1)_0%,_rgba(2,6,12,1)_100%)]";
+  const mapStyle = activeBasemap === "mapbox-light"
+    ? "mapbox://styles/mapbox/light-v11"
+    : "mapbox://styles/mapbox/satellite-streets-v12";
+  const fallbackBackgroundClass = "bg-[#1a1a2e]";
 
   const provinceLabelsLayer = enabledOverlays.provinceLabels
     ? createProvinceLabelsLayer()
     : null;
 
   const satelliteLayer =
-    showSatelliteOverlay && activeSatelliteOverlay
+    satelliteOverlay !== "none" && activeSatelliteOverlay
       ? createRasterOverlayLayer(activeSatelliteOverlay, satelliteOpacity / 100)
       : null;
 
@@ -593,43 +593,22 @@ export default function BorderMap({
     (overlay) => overlay.role === "operational",
   );
   const focusPresets = GOVERNOR_CORRIDORS;
-  const mapModeControls = [
-    {
-      id: "satellite-overlay",
-      active: showSatelliteOverlay,
-      label: "NASA overlay",
-      icon: Globe,
-      onClick: () => setShowSatelliteOverlay((value) => !value),
-    },
-    {
-      id: "aerial-base",
-      active: showAerialBasemap,
-      label: "ESRI aerial",
-      icon: Satellite,
-      onClick: () => setShowAerialBasemap((value) => !value),
-    },
-    {
-      id: "roads-base",
-      active: showStreets,
-      label: "OSM roads",
-      icon: MapPinned,
-      onClick: () => setShowStreets((value) => !value),
-    },
-    {
-      id: "detail-base",
-      active: isDetailedMap,
-      label: "Detailed map",
-      icon: MapIcon,
-      onClick: () => setIsDetailedMap((value) => !value),
-    },
-    {
-      id: "night-lights",
-      active: enabledOverlays.nightLights,
-      label: "Night lights",
-      icon: MoonStar,
-      onClick: () => toggleOverlay("nightLights"),
-    },
-  ] as const;
+
+  // ─── Basemap options (radio — exactly one at a time) ───
+  const basemapOptions: { id: BasemapId; label: string; icon: typeof Satellite; available: boolean }[] = [
+    { id: "esri-aerial", label: "ESRI", icon: Satellite, available: true },
+    { id: "osm-streets", label: "OSM", icon: MapPinned, available: true },
+    ...(hasMapbox ? [
+      { id: "mapbox-satellite" as BasemapId, label: "MAPBOX", icon: Globe, available: true },
+      { id: "mapbox-light" as BasemapId, label: "LIGHT", icon: MapIcon, available: true },
+    ] : []),
+  ];
+
+  // ─── NASA GIBS imagery options (radio — pick one or "OFF") ───
+  const imageryOptions = [
+    { id: "none", label: "OFF" },
+    ...baseOverlays.map((o) => ({ id: o.id, label: o.shortLabel })),
+  ];
   const layerControls = [
     ...analyticControls.map((overlay) => ({
       id: overlay.id,
@@ -828,34 +807,33 @@ export default function BorderMap({
     }
   };
 
-  // When aerial basemap is on, use ESRI World Imagery tiles (free, no token needed)
-  const aerialLayer = showAerialBasemap
-    ? createRasterOverlayLayer(
+  // ─── Basemap tile layer (exactly one, sits at the bottom) ───
+  const basemapTileLayer = (() => {
+    if (activeBasemap === "esri-aerial") {
+      return createRasterOverlayLayer(
         {
-          id: "esri-aerial",
+          id: "basemap-esri",
           label: "ESRI Aerial",
-          shortLabel: "AERIAL",
+          shortLabel: "ESRI",
           description: "High-resolution aerial imagery",
           source: "ESRI",
           family: "imagery",
           role: "base-option",
           kind: "raster" as const,
           defaultOpacity: 1,
-          enabledByDefault: false,
+          enabledByDefault: true,
           maxZoom: 19,
           tileTemplate:
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           updatedAt: new Date().toISOString(),
         },
         1,
-      )
-    : null;
-
-  // OpenStreetMap streets/roads layer (free, no token needed)
-  const streetsLayer = showStreets
-    ? createRasterOverlayLayer(
+      );
+    }
+    if (activeBasemap === "osm-streets") {
+      return createRasterOverlayLayer(
         {
-          id: "osm-streets",
+          id: "basemap-osm",
           label: "OpenStreetMap",
           shortLabel: "OSM",
           description: "Street-level roads and infrastructure",
@@ -863,19 +841,22 @@ export default function BorderMap({
           family: "imagery",
           role: "base-option",
           kind: "raster" as const,
-          defaultOpacity: 0.85,
-          enabledByDefault: false,
+          defaultOpacity: 1,
+          enabledByDefault: true,
           maxZoom: 19,
           tileTemplate:
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           updatedAt: new Date().toISOString(),
         },
-        0.85,
-      )
-    : null;
+        1,
+      );
+    }
+    // mapbox-satellite and mapbox-light are handled by the MapboxMap component
+    return null;
+  })();
 
-  // Prepend basemap layers so they sit below all other layers
-  const allLayers = [aerialLayer, streetsLayer, ...layers].filter(Boolean);
+  // Basemap tile goes first, then NASA GIBS imagery, then analytic/operational layers
+  const allLayers = [basemapTileLayer, ...layers].filter(Boolean);
 
   if (!mounted) {
     debugLog("H2", "BorderMap.tsx:render", "rendered not-mounted placeholder", {
@@ -896,12 +877,11 @@ export default function BorderMap({
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      {!hasMapboxBaseMap && (
-        <div
-          className={`absolute inset-0 ${fallbackBackgroundClass}`}
-          aria-hidden="true"
-        />
-      )}
+      {/* Dark background visible when no basemap tiles loaded yet */}
+      <div
+        className={`absolute inset-0 ${fallbackBackgroundClass}`}
+        aria-hidden="true"
+      />
 
       {webglSupported ? (
         <DeckGL
@@ -1019,64 +999,86 @@ export default function BorderMap({
         </div>
       )}
 
-      <div className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-[var(--line)] bg-[rgba(248,246,240,0.85)] backdrop-blur-md">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-1.5 xl:px-4">
+      <div className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-[var(--line)] bg-[rgba(248,246,240,0.88)] backdrop-blur-md">
+        {/* Row 1: Stats + Basemap radio + Imagery radio */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 xl:px-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="text-[14px] font-bold tracking-tight text-[var(--ink)] uppercase">Island chokepoints</div>
+              <div className="text-[13px] font-bold tracking-tight text-[var(--ink)] uppercase">Phuket</div>
               <div className="h-3 w-[1px] bg-[var(--line)]" />
-              <div className="flex gap-3 text-[9px] font-mono font-bold text-[var(--dim)] uppercase tracking-tight">
+              <div className="flex gap-2.5 text-[9px] font-mono font-bold text-[var(--dim)] uppercase tracking-tight">
                 <span>SIG {signalCount}</span>
                 <span>ALR {disasterAlertCount}</span>
                 <span>AIS {maritimeVesselCount}</span>
-                <span>VER {verifiedCameraCount}</span>
+                <span>CAM {verifiedCameraCount}</span>
                 <span>FLT {flights.length}</span>
-                <span>LYR {totalActiveLayers}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1 border-r border-[var(--line)] pr-2 mr-1">
-              <span className="live-badge text-[8px] px-1" title="NASA GIBS latest imagery">LIVE</span>
-              {baseOverlays.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={satelliteOverlay === option.id}
-                  onClick={() => setSatelliteOverlay(option.id)}
-                  className={`px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                    satelliteOverlay === option.id
-                      ? "text-[var(--ink)] underline underline-offset-4"
-                      : "text-[var(--dim)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  {option.shortLabel}
-                </button>
-              ))}
-            </div>
-            {mapModeControls.map((control) => {
-              const Icon = control.icon;
+          <div className="flex items-center gap-1">
+            {/* Basemap selector (radio — exactly one) */}
+            <span className="text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] mr-0.5">BASE</span>
+            {basemapOptions.map((opt) => {
+              const Icon = opt.icon;
               return (
                 <button
-                  key={control.id}
+                  key={opt.id}
                   type="button"
-                  aria-pressed={control.active}
-                  onClick={control.onClick}
-                  className={`inline-flex h-7 items-center gap-1.5 border px-2 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                    control.active
-                      ? "border-[var(--cool)] bg-[rgba(15,111,136,0.06)] text-[var(--cool)]"
+                  aria-pressed={activeBasemap === opt.id}
+                  onClick={() => setActiveBasemap(opt.id)}
+                  className={`inline-flex h-6 items-center gap-1 border px-1.5 text-[8px] font-bold uppercase tracking-wider transition-colors ${
+                    activeBasemap === opt.id
+                      ? "border-[var(--cool)] bg-[rgba(15,111,136,0.1)] text-[var(--cool)]"
                       : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
                   }`}
                 >
-                  <Icon size={11} />
-                  {control.label.split(" ")[0]}
+                  <Icon size={10} />
+                  {opt.label}
                 </button>
               );
             })}
+
+            <div className="h-4 w-[1px] bg-[var(--line)] mx-1" />
+
+            {/* NASA GIBS imagery selector (radio — pick one or OFF) */}
+            <span className="live-badge text-[7px] px-0.5" title="NASA GIBS imagery">LIVE</span>
+            {imageryOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                aria-pressed={satelliteOverlay === opt.id}
+                onClick={() => setSatelliteOverlay(opt.id)}
+                className={`px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider transition-colors ${
+                  satelliteOverlay === opt.id
+                    ? "text-[var(--ink)] underline underline-offset-4 decoration-[var(--cool)]"
+                    : "text-[var(--dim)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            {/* Opacity slider for GIBS imagery */}
+            {showSatelliteOverlay && (
+              <div className="flex items-center gap-1.5 ml-1 min-w-[100px]">
+                <span className="text-[8px] font-mono text-[var(--dim)] shrink-0">{satelliteOpacity}%</span>
+                <input
+                  type="range"
+                  min="20"
+                  max="100"
+                  step="5"
+                  value={satelliteOpacity}
+                  onChange={(event) => setSatelliteOpacity(Number(event.target.value))}
+                  className="w-full h-1 bg-[var(--line)] rounded-full appearance-none accent-[var(--cool)] cursor-pointer"
+                />
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-1.5 xl:px-4">
+
+        {/* Row 2: Corridor focus presets */}
+        <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-1 xl:px-4">
           <div className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
             {focusPresets.map((preset) => (
               <button
@@ -1098,19 +1100,6 @@ export default function BorderMap({
                 {preset.label}
               </button>
             ))}
-          </div>
-          <div className={`flex items-center gap-2 min-w-[140px] ${showSatelliteOverlay ? "opacity-100" : "opacity-40"}`}>
-            <span className="text-[9px] font-mono text-[var(--dim)] shrink-0">VIS {satelliteOpacity}%</span>
-            <input
-              type="range"
-              min="20"
-              max="100"
-              step="10"
-              value={satelliteOpacity}
-              disabled={!showSatelliteOverlay}
-              onChange={(event) => setSatelliteOpacity(Number(event.target.value))}
-              className="w-full h-1 bg-[var(--line)] rounded-full appearance-none accent-[var(--cool)] cursor-pointer"
-            />
           </div>
         </div>
       </div>

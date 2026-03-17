@@ -8,16 +8,17 @@ export async function GET() {
 
   return Response.json({
     status: "operational",
-    version: "4.3.0",
+    version: "5.0.0",
+    name: "Phuket Dashboard",
+    standalone: true,
     signal_strength: 0.98,
     services: {
       database: process.env.DATABASE_URL ? "configured" : "fallback",
       basemap: hasMapboxToken ? "configured" : "missing",
-      reference_dashboard: process.env.REFERENCE_DASHBOARD_URL
-        ? "configured"
-        : "default",
       intelligence_cache: process.env.DATABASE_URL ? "hybrid" : "memory",
-      ai_summary: process.env.OPENAI_API_KEY ? "configured" : "fallback",
+      global_feeds: "active",
+      camera_pipeline: "active",
+      satellite_imagery: "active",
     },
   });
 }
