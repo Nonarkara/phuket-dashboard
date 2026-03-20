@@ -8,7 +8,7 @@ export async function GET() {
 
   return Response.json({
     status: "operational",
-    version: "5.0.0",
+    version: "6.0.0",
     name: "Phuket Dashboard",
     standalone: true,
     signal_strength: 0.98,
@@ -19,6 +19,7 @@ export async function GET() {
       global_feeds: "active",
       camera_pipeline: "active",
       satellite_imagery: "active",
+      satellite_toolkit: "active",
     },
   });
 }

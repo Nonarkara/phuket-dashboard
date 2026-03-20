@@ -7,8 +7,6 @@ import type {
 import { ASEAN_COUNTRIES } from "./asean-country-registry";
 import { buildMapOverlayCatalog } from "./map-overlays";
 
-const DEFAULT_REFERENCE_DASHBOARD_URL =
-  "https://dr-non-operating-systems.onrender.com/api/dashboard";
 const DEFAULT_FX_RATES_URL = "https://open.er-api.com/v6/latest/USD";
 const DEFAULT_BINANCE_TICKER_URL =
   "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT";
@@ -21,37 +19,6 @@ const ASEAN_WORLD_BANK_COUNTRIES = ASEAN_COUNTRIES.map((country) => ({
   code: country.code,
   name: country.label,
 }));
-
-interface ReferenceSummary {
-  apiCount: number;
-  activeCount: number;
-  appsWithApis: number;
-  liveCount: number;
-  medianResponseMs: number;
-  fastest?: {
-    label: string;
-    responseTimeMs: number;
-  };
-}
-
-interface ReferenceApi {
-  label: string;
-  url: string;
-  kind?: string;
-}
-
-interface ReferenceTarget {
-  id: string;
-  label: string;
-  responseTimeMs: number;
-  apis: ReferenceApi[];
-}
-
-interface ReferenceDashboardPayload {
-  generatedAt: string;
-  summary: ReferenceSummary;
-  targets: ReferenceTarget[];
-}
 
 interface FxRatesResponse {
   result: string;
@@ -110,43 +77,6 @@ async function fetchJson<T>(url: string): Promise<T> {
   }
 }
 
-function isReferenceApi(value: unknown): value is ReferenceApi {
-  return (
-    isRecord(value) &&
-    typeof value.label === "string" &&
-    typeof value.url === "string" &&
-    (typeof value.kind === "undefined" || typeof value.kind === "string")
-  );
-}
-
-function isReferenceTarget(value: unknown): value is ReferenceTarget {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.label === "string" &&
-    typeof value.responseTimeMs === "number" &&
-    Array.isArray(value.apis) &&
-    value.apis.every(isReferenceApi)
-  );
-}
-
-function isReferenceDashboardPayload(
-  value: unknown,
-): value is ReferenceDashboardPayload {
-  return (
-    isRecord(value) &&
-    typeof value.generatedAt === "string" &&
-    isRecord(value.summary) &&
-    typeof value.summary.apiCount === "number" &&
-    typeof value.summary.activeCount === "number" &&
-    typeof value.summary.appsWithApis === "number" &&
-    typeof value.summary.liveCount === "number" &&
-    typeof value.summary.medianResponseMs === "number" &&
-    Array.isArray(value.targets) &&
-    value.targets.every(isReferenceTarget)
-  );
-}
-
 function isBinanceTickerResponse(value: unknown): value is BinanceTickerResponse {
   return (
     isRecord(value) &&
@@ -185,35 +115,6 @@ function isWorldBankIndicatorResponse(
     Array.isArray(value[1]) &&
     value[1].every(isWorldBankIndicatorRow)
   );
-}
-
-function findTargetApiUrl(
-  dashboard: ReferenceDashboardPayload,
-  targetId: string,
-  label: string,
-) {
-  return dashboard.targets
-    .find((target) => target.id === targetId)
-    ?.apis.find((api) => api.label === label)?.url;
-}
-
-function findTarget(
-  dashboard: ReferenceDashboardPayload,
-  targetId: string,
-) {
-  return dashboard.targets.find((target) => target.id === targetId) ?? null;
-}
-
-export async function fetchReferenceDashboard() {
-  const dashboardUrl =
-    process.env.REFERENCE_DASHBOARD_URL ?? DEFAULT_REFERENCE_DASHBOARD_URL;
-  const payload = await fetchJson<unknown>(dashboardUrl);
-
-  if (!isReferenceDashboardPayload(payload)) {
-    throw new Error("Reference dashboard payload was not recognized");
-  }
-
-  return payload;
 }
 
 export async function fetchReferenceEconomicIndicators() {
@@ -386,6 +287,11 @@ export async function fetchReferenceApiCatalog(): Promise<ApiSourceResponse> {
     { id: "open-meteo-flood", label: "Open-Meteo Flood", url: "https://flood-api.open-meteo.com/v1/flood", kind: "external", target: "Global Feeds" },
     { id: "reliefweb", label: "ReliefWeb", url: "https://api.reliefweb.int/v1/reports", kind: "external", target: "Global Feeds" },
     { id: "gdacs", label: "GDACS Disasters", url: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH", kind: "external", target: "Global Feeds" },
+    { id: "satellite-toolkit", label: "DrNon Global Satellite Toolkit", url: "https://github.com/Nonarkara/DrNon-Global-Satellite-Toolkit", kind: "toolkit", target: "Satellite Imagery" },
+    { id: "nasa-firms", label: "NASA FIRMS Fire Detection", url: "https://firms.modaps.eosdis.nasa.gov/api/", kind: "external", target: "Satellite Imagery" },
+    { id: "eox-sentinel2", label: "EOX Sentinel-2 Cloudless", url: "https://tiles.maps.eox.at/wmts", kind: "external", target: "Satellite Imagery" },
+    { id: "jrc-water", label: "JRC Global Surface Water", url: "https://storage.googleapis.com/global-surface-water/tiles2021/occurrence", kind: "external", target: "Satellite Imagery" },
+    { id: "emodnet-bathy", label: "EMODnet Bathymetry", url: "https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator", kind: "external", target: "Satellite Imagery" },
   ];
 
   return {
@@ -414,9 +320,9 @@ export async function fetchReferenceStatusSummary() {
   // Standalone: return local status without external dashboard dependency
   return {
     generatedAt: new Date().toISOString(),
-    liveCount: 8,
-    activeCount: 8,
-    apiCount: 47,
+    liveCount: 13,
+    activeCount: 13,
+    apiCount: 53,
     appsWithApis: 1,
     medianResponseMs: 200,
     fastestLabel: "USGS Earthquake Catalog",

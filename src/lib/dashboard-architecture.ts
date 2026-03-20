@@ -263,7 +263,7 @@ export const storageNotes = [
   "Primary operational tables: `events`, `fire_events`, `rainfall_data`, `population_movements` as a legacy movement cache, `market_data`, `air_quality_snapshots`, and `macro_country_snapshots`.",
   "Hybrid caches: intelligence cache and area convergence snapshots.",
   "Static assets: `public/data/*.geojson`, `public/manual/*`, and generated overlay catalog metadata.",
-  "Runtime feature gates: `DATABASE_URL`, `REFERENCE_DASHBOARD_URL`, `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`, `OPENAI_API_KEY`.",
+  "Runtime feature gates: `DATABASE_URL`, `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`, `OPENAI_API_KEY`, `FIRMS_KEY`.",
 ];
 
 export const internalApiCategoryOrder: InternalApiCategory[] = [
@@ -280,7 +280,7 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     path: "/api/status",
     category: "System",
     purpose:
-      "Reports runtime posture for database, basemap, reference dashboard, cache mode, and AI summary configuration.",
+      "Reports runtime posture for database, basemap, satellite toolkit, cache mode, and AI summary configuration.",
     consumers: ["Architecture modal", "ops diagnostics", "external health checks"],
     upstreams: ["Environment configuration", "Mapbox token guard"],
     fallback: "Returns service states such as `fallback` or `missing` instead of failing.",
@@ -289,9 +289,9 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     path: "/api/sources",
     category: "System",
     purpose:
-      "Builds the source-health view for upstream feeds and discovered reference APIs.",
+      "Builds the source-health view for upstream feeds and satellite toolkit providers.",
     consumers: ["SourceStack"],
-    upstreams: ["`buildEnhancedSourceCatalog()`", "reference dashboard discovery", "intelligence feed health checks"],
+    upstreams: ["`buildEnhancedSourceCatalog()`", "satellite toolkit registry", "intelligence feed health checks"],
     fallback: "Returns `fallbackSources` if source inspection fails.",
   },
   {
@@ -510,7 +510,7 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
       "Returns the market radar payload used by the economic monitor panel.",
     consumers: ["EconomicMonitor"],
     upstreams: [
-      "Reference dashboard discovery",
+      "Satellite toolkit registry",
       "ER API FX rates",
       "Binance BTC ticker",
       "World Bank GDP and GDP per capita",
@@ -523,9 +523,9 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     path: "/api/economics",
     category: "Analytics",
     purpose:
-      "Exposes an alternate market/economic endpoint that prefers reference feeds and then local DB history.",
+      "Exposes an alternate market/economic endpoint that prefers direct source feeds and then local DB history.",
     consumers: ["API clients", "future analytics views"],
-    upstreams: ["Reference market loaders", "Postgres `market_data`"],
+    upstreams: ["Direct market loaders", "Postgres `market_data`"],
     fallback: "Returns `fallbackEconomicIndicators` if both live and DB-backed loaders fail.",
   },
   {
@@ -554,7 +554,7 @@ export const internalApiCatalog: InternalApiDescriptor[] = [
     purpose:
       "Builds the package-level intelligence view that powers briefing panels and downstream derived products.",
     consumers: ["BriefingPanel", "convergence scoring", "API clients"],
-    upstreams: ["RSS and JSON feeds", "reference markets", "Postgres incidents/weather/movement/fire", "intelligence cache"],
+    upstreams: ["RSS and JSON feeds", "direct market feeds", "Postgres incidents/weather/movement/fire", "intelligence cache"],
     fallback: "Serves cache-backed or synthesized stale payloads rather than dropping the briefing surface.",
   },
   {
@@ -741,12 +741,17 @@ export const externalProviderCatalog: ExternalProviderDescriptor[] = [
     optional: true,
   },
   {
-    id: "reference-dashboard",
-    label: "DR Non Operating Systems Dashboard",
-    category: "Markets",
-    description: "Reference dashboard that advertises downstream APIs and market-related service discovery.",
-    surfaces: ["Markets", "source catalog"],
-    endpoints: ["https://dr-non-operating-systems.onrender.com/api/dashboard"],
+    id: "satellite-toolkit",
+    label: "DrNon Global Satellite Toolkit",
+    category: "Mapping & Media",
+    description:
+      "Comprehensive geospatial toolkit with 12 satellite overlays (VIIRS, MODIS, Sentinel-2, fire detection), 80+ space agency registry, multi-backend basemap fallback, distance grids, and NASA FIRMS thermal hotspot ingestion.",
+    surfaces: ["Satellite imagery", "fire detection", "basemap fallback", "overlay catalog"],
+    endpoints: [
+      "https://github.com/Nonarkara/DrNon-Global-Satellite-Toolkit",
+      "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/",
+      "https://firms.modaps.eosdis.nasa.gov/api/",
+    ],
   },
   {
     id: "er-api",

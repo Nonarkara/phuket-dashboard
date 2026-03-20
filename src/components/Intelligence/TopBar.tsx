@@ -65,7 +65,7 @@ export default function TopBar({
         {/* Left: Title + posture */}
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v5.0</div>
+            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v6.0</div>
             <div className="text-[13px] font-bold tracking-tight text-[var(--ink)]">
               Governor War Room
             </div>

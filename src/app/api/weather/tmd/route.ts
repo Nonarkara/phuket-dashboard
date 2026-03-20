@@ -19,7 +19,7 @@ export async function GET() {
       note: "Set TMD_UID and TMD_UKEY env vars to enable TMD data",
       warnings: [],
       forecast: null,
-      sources: ["http://data.tmd.go.th/api/"],
+      sources: ["https://data.tmd.go.th/api/"],
     });
   }
 
@@ -29,7 +29,7 @@ export async function GET() {
   // Weather warnings
   try {
     const res = await fetch(
-      `http://data.tmd.go.th/api/WeatherWarningNews/V2/?uid=${uid}&ukey=${ukey}&format=json`,
+      `https://data.tmd.go.th/api/WeatherWarningNews/V2/?uid=${uid}&ukey=${ukey}&format=json`,
       { next: { revalidate: 900 } },
     );
 
@@ -51,7 +51,7 @@ export async function GET() {
   // 7-day forecast for Phuket region
   try {
     const res = await fetch(
-      `http://data.tmd.go.th/api/WeatherForecast7Days/V2/?uid=${uid}&ukey=${ukey}&format=json`,
+      `https://data.tmd.go.th/api/WeatherForecast7Days/V2/?uid=${uid}&ukey=${ukey}&format=json`,
       { next: { revalidate: 3600 } },
     );
 
@@ -69,8 +69,8 @@ export async function GET() {
     warnings,
     forecast,
     sources: [
-      "http://data.tmd.go.th/api/WeatherWarningNews/V2/",
-      "http://data.tmd.go.th/api/WeatherForecast7Days/V2/",
+      "https://data.tmd.go.th/api/WeatherWarningNews/V2/",
+      "https://data.tmd.go.th/api/WeatherForecast7Days/V2/",
     ],
   });
 }
