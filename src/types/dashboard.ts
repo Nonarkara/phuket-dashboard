@@ -46,6 +46,23 @@ export interface FireEvent {
   acq_date: string;
 }
 
+export interface TrafficEvent {
+  title: string;
+  description: string;
+  lat: number;
+  lng: number;
+  type: string;
+  start: string | null;
+  stop: string | null;
+}
+
+export interface TrafficResponse {
+  generatedAt: string;
+  provider: string;
+  status: string;
+  events: TrafficEvent[];
+}
+
 export interface FlightData {
   icao24: string;
   callsign: string;
@@ -122,6 +139,24 @@ export interface PksbTransitResponse {
   source: string[];
   routes: PksbRouteCollection;
   stops: PksbStopCollection;
+}
+
+export interface PksbBusPosition {
+  id: string;
+  routeId: string;
+  licensePlate: string;
+  vehicleId: string;
+  lng: number;
+  lat: number;
+  heading: number;
+  speedKph: number;
+  status: "moving" | "dwelling" | "unknown";
+  updatedAt: string;
+}
+
+export interface PksbBusPositionResponse {
+  generatedAt: string;
+  buses: PksbBusPosition[];
 }
 
 export interface PublicCamera {

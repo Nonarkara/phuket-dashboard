@@ -242,6 +242,17 @@ export function buildMapOverlayCatalog(
       enabledByDefault: false,
     }),
     vectorOverlay({
+      id: "trafficEvents",
+      label: "Traffic / Accidents",
+      shortLabel: "TRAFFIC",
+      description: "Real-time traffic incidents and accidents from Longdo/ITICS Thailand.",
+      source: "Longdo/ITICS",
+      family: "operational",
+      role: "operational",
+      defaultOpacity: 1,
+      enabledByDefault: true,
+    }),
+    vectorOverlay({
       id: "pksbRoutes",
       label: "PKSB Routes",
       shortLabel: "PKSB",

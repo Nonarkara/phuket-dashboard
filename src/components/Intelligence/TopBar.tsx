@@ -91,6 +91,13 @@ export default function TopBar({
       <div className="flex items-center justify-between gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 items-center gap-3">
+          {/* Logos */}
+          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+            <img src="/logos/slic.jpg" alt="SLIC" className="h-6 w-auto rounded-sm" />
+            <img src="/logos/depa.jpg" alt="depa" className="h-6 w-auto rounded-sm" />
+            <img src="/logos/smart-city-thailand.jpg" alt="Smart City Thailand" className="h-6 w-auto rounded-sm" />
+          </div>
+          <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
           <div className="min-w-0 shrink-0">
             <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v6.0</div>
             <div className="text-[13px] font-bold tracking-tight text-[var(--ink)] whitespace-nowrap">

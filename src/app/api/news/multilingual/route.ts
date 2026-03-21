@@ -17,6 +17,7 @@ interface MultilingualNewsItem {
   id: string;
   lang: "th" | "en" | "zh";
   title: string;
+  titleTh?: string;
   summary: string;
   source: string;
   zone: string;
@@ -164,6 +165,7 @@ async function fetchEnglishSignals(): Promise<MultilingualNewsItem[]> {
       id: `en-${idx + 1}`,
       lang: "en" as const,
       title: stripHtml(article.title!),
+      titleTh: translateToTh(article.title!),
       summary: `Coverage via ${article.domain ?? "international media"}`,
       source: article.domain ?? "GDELT",
       zone: getZone(article.title!),
@@ -178,9 +180,9 @@ async function fetchEnglishSignals(): Promise<MultilingualNewsItem[]> {
 function getFallbackEnglish(): MultilingualNewsItem[] {
   const now = new Date().toISOString();
   return [
-    { id: "en-1", lang: "en", title: "Phuket weather and sea conditions update", summary: "Current marine and weather outlook for the Andaman coast", source: "Regional media", zone: "Phuket", severity: "stable", publishedAt: now },
-    { id: "en-2", lang: "en", title: "Patong tourism flow steady as high season continues", summary: "Visitor arrivals remain consistent across beach areas", source: "Regional media", zone: "Patong", severity: "stable", publishedAt: now },
-    { id: "en-3", lang: "en", title: "Phuket airport operations running normally", summary: "International and domestic flights on schedule", source: "Regional media", zone: "Airport", severity: "stable", publishedAt: now },
+    { id: "en-1", lang: "en", title: "Phuket weather and sea conditions update", titleTh: "ภูเก็ต: สภาพอากาศ", summary: "Current marine and weather outlook for the Andaman coast", source: "Regional media", zone: "Phuket", severity: "stable", publishedAt: now },
+    { id: "en-2", lang: "en", title: "Patong tourism flow steady as high season continues", titleTh: "ป่าตอง: ท่องเที่ยว/นักท่องเที่ยว", summary: "Visitor arrivals remain consistent across beach areas", source: "Regional media", zone: "Patong", severity: "stable", publishedAt: now },
+    { id: "en-3", lang: "en", title: "Phuket airport operations running normally", titleTh: "สนามบิน: สนามบิน/เที่ยวบิน", summary: "International and domestic flights on schedule", source: "Regional media", zone: "Airport", severity: "stable", publishedAt: now },
   ];
 }
 
@@ -236,6 +238,52 @@ const ZH_ZONE_MAP: Record<string, string> = {
   "Pier corridor": "码头",
   "Andaman region": "安达曼",
 };
+
+// Thai zone names for translation
+const TH_ZONE_MAP: Record<string, string> = {
+  Phuket: "ภูเก็ต",
+  Patong: "ป่าตอง",
+  Kata: "กะตะ",
+  Karon: "กะรน",
+  Airport: "สนามบิน",
+  "Old Town": "เมืองเก่า",
+  Krabi: "กระบี่",
+  "Phang Nga": "พังงา",
+  "Khao Lak": "เขาหลัก",
+  "Pier corridor": "ท่าเรือ",
+  "Andaman region": "อันดามัน",
+};
+
+const TH_KEYWORD_MAP: [RegExp, string][] = [
+  [/weather|forecast|climate/i, "สภาพอากาศ"],
+  [/storm|monsoon|typhoon/i, "พายุ/มรสุม"],
+  [/rain|flood|rainfall/i, "ฝนตก/น้ำท่วม"],
+  [/tourism|tourist|visitor|arrivals/i, "ท่องเที่ยว/นักท่องเที่ยว"],
+  [/beach|sea|marine|ocean|wave/i, "ทะเล/ชายหาด"],
+  [/airport|flight|airline/i, "สนามบิน/เที่ยวบิน"],
+  [/ferry|pier|boat/i, "เรือเฟอร์รี่/ท่าเรือ"],
+  [/accident|crash|incident/i, "อุบัติเหตุ"],
+  [/warning|alert|danger/i, "เตือนภัย"],
+  [/hotel|resort|accommodation/i, "โรงแรม/ที่พัก"],
+  [/arrest|drug|crime|police/i, "อาชญากรรม/ตำรวจ"],
+  [/security|safety|patrol/i, "ความปลอดภัย"],
+  [/governor|government|administration/i, "ผู้ว่าราชการ/บริหาร"],
+  [/economy|economic|cost|price/i, "เศรษฐกิจ"],
+  [/traffic|road|transport/i, "จราจร/คมนาคม"],
+  [/jellyfish|shark|marine life/i, "สัตว์ทะเล/แมงกะพรุน"],
+  [/rescue|emergency|ambulance/i, "กู้ภัย/ฉุกเฉิน"],
+];
+
+function translateToTh(title: string): string {
+  const zone = getZone(title);
+  const thZone = TH_ZONE_MAP[zone] ?? "อันดามัน";
+  for (const [pattern, thTopic] of TH_KEYWORD_MAP) {
+    if (pattern.test(title)) {
+      return `${thZone}: ${thTopic}`;
+    }
+  }
+  return `${thZone}: ข่าวล่าสุด`;
+}
 
 const ZH_KEYWORD_MAP: [RegExp, string][] = [
   [/weather|forecast|climate/i, "天气预报"],

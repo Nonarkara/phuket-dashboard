@@ -19,6 +19,7 @@ import type {
   IncidentFeature,
   MapOverlay,
   MaritimeVessel,
+  PksbBusPosition,
   PksbRouteCollection,
   PksbRouteProperties,
   PksbStopCollection,
@@ -27,6 +28,7 @@ import type {
   RainfallPoint,
   RefugeeMovement,
   RegionBorderCollection,
+  TrafficEvent,
   TourismHotspot,
 } from "../types/dashboard";
 
@@ -708,6 +710,54 @@ export function createPksbRouteLayers(
   ];
 }
 
+/* ─── PKSB Live Bus Layer ─────────────────────────────────────── */
+
+const PKSB_BUS_ROUTE_COLORS: Record<string, [number, number, number, number]> = {
+  "rawai-airport": [22, 184, 176, 230],
+  "patong-old-bus-station": [255, 204, 51, 230],
+  "dragon-line": [219, 0, 0, 230],
+};
+
+export function createPksbBusLayers(buses: PksbBusPosition[]) {
+  if (!buses.length) return [];
+
+  return [
+    new ScatterplotLayer({
+      id: "pksb-live-buses",
+      data: buses,
+      getPosition: (bus: PksbBusPosition) => [bus.lng, bus.lat],
+      getFillColor: (bus: PksbBusPosition) =>
+        PKSB_BUS_ROUTE_COLORS[bus.routeId] ?? [22, 184, 176, 230],
+      getRadius: 600,
+      radiusUnits: "meters",
+      radiusMinPixels: 6,
+      radiusMaxPixels: 14,
+      stroked: true,
+      lineWidthMinPixels: 2,
+      getLineColor: [255, 255, 255, 240],
+      pickable: true,
+      opacity: 0.92,
+    }),
+    new TextLayer({
+      id: "pksb-bus-labels",
+      data: buses.filter((b) => b.status === "moving"),
+      getPosition: (bus: PksbBusPosition) => [bus.lng, bus.lat],
+      getText: (bus: PksbBusPosition) => bus.licensePlate,
+      getColor: [248, 250, 252, 200],
+      getSize: 10,
+      getTextAnchor: "start" as const,
+      getAlignmentBaseline: "center" as const,
+      getPixelOffset: [12, 0],
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [15, 23, 42, 220],
+      outlineWidth: 2,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
 /* ─── Multi-scale Distance Grid Layer ─────────────────────────── */
 
 const KM_GRID_BOUNDS = {
@@ -917,6 +967,55 @@ export function createFlightPathsLayer(flights: FlightData[]) {
       getPixelOffset: [8, 4],
       fontFamily: "SF Mono, JetBrains Mono, monospace",
       outlineColor: [10, 15, 26, 200],
+      outlineWidth: 2,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+// ─── Traffic Events Layer ────────────────────────────────────────
+
+function trafficColor(type: string): [number, number, number, number] {
+  const lower = type.toLowerCase();
+  if (/accident|crash|collision/i.test(lower)) return [239, 68, 68, 220];
+  if (/congestion|traffic jam|slow/i.test(lower)) return [245, 158, 11, 200];
+  if (/construction|road work/i.test(lower)) return [59, 130, 246, 180];
+  return [251, 191, 36, 180];
+}
+
+export function createTrafficEventLayers(events: TrafficEvent[]) {
+  if (!events.length) return [];
+
+  return [
+    new ScatterplotLayer<TrafficEvent>({
+      id: "traffic-events-dot",
+      data: events,
+      getPosition: (d) => [d.lng, d.lat],
+      getRadius: 120,
+      getFillColor: (d) => trafficColor(d.type),
+      getLineColor: [255, 255, 255, 200],
+      lineWidthMinPixels: 1,
+      stroked: true,
+      filled: true,
+      radiusMinPixels: 5,
+      radiusMaxPixels: 14,
+      pickable: true,
+    }),
+    new TextLayer<TrafficEvent>({
+      id: "traffic-events-label",
+      data: events,
+      getPosition: (d) => [d.lng, d.lat],
+      getText: (d) => d.type?.substring(0, 12) ?? "event",
+      getSize: 10,
+      getColor: [255, 255, 255, 230],
+      getAngle: 0,
+      getTextAnchor: "start" as const,
+      getAlignmentBaseline: "center" as const,
+      getPixelOffset: [10, 0],
+      fontFamily: "monospace",
+      fontWeight: 700,
       outlineWidth: 2,
       sizeUnits: "pixels" as const,
       billboard: false,

@@ -25,6 +25,7 @@ import {
   Users,
   Waves,
   Wind,
+  Car,
 } from "lucide-react";
 import {
   createAirQualityHeatmapLayers,
@@ -39,6 +40,7 @@ import {
   createPksbBusLayers,
   createPksbRouteLayers,
   createPublicCameraLayer,
+  createTrafficEventLayers,
   createProvinceLabelsLayer,
   createRainfallLayer,
   createRasterOverlayLayer,
@@ -76,6 +78,8 @@ import type {
   PksbTransitResponse,
   PublicCamera,
   PublicCameraResponse,
+  TrafficEvent,
+  TrafficResponse,
   TourismHotspot,
   TourismHotspotsResponse,
 } from "../../types/dashboard";
@@ -243,6 +247,16 @@ function isMaritimeVessel(value: unknown): value is MaritimeVessel {
   );
 }
 
+function isTrafficEvent(value: unknown): value is TrafficEvent {
+  return (
+    isRecord(value) &&
+    typeof value.title === "string" &&
+    typeof value.type === "string" &&
+    typeof value.lat === "number" &&
+    typeof value.lng === "number"
+  );
+}
+
 function isTourismHotspot(value: unknown): value is TourismHotspot {
   return (
     isRecord(value) &&
@@ -311,6 +325,10 @@ function getTooltipText(object: unknown): string | null {
     return `${object.label} • ${object.area} • ${object.status}`;
   }
 
+  if (isTrafficEvent(object)) {
+    return `${object.type}: ${object.title}`;
+  }
+
   if (hasLabel(object)) {
     return object.label;
   }
@@ -366,6 +384,7 @@ export default function BorderMap({
   const [pksbBuses, setPksbBuses] = useState<PksbBusPosition[]>([]);
   const [publicCameras, setPublicCameras] = useState<PublicCamera[]>([]);
   const [tourismHotspots, setTourismHotspots] = useState<TourismHotspot[]>([]);
+  const [trafficEvents, setTrafficEvents] = useState<TrafficEvent[]>([]);
 
   const getSafeDate = () => {
     const d = new Date();
@@ -481,6 +500,7 @@ export default function BorderMap({
         pksbTransitData,
         publicCameraData,
         tourismHotspotData,
+        trafficData,
       ] = await Promise.all([
         fetchJson<IncidentFeature[]>("/api/incidents", []),
         fetchJson<FireEvent[]>("/api/fires", []),
@@ -527,6 +547,12 @@ export default function BorderMap({
           hotspots: [],
           sources: [],
         }),
+        fetchJson<TrafficResponse>("/api/traffic", {
+          generatedAt: new Date(0).toISOString(),
+          provider: "Longdo/ITIC",
+          status: "fallback",
+          events: [],
+        }),
       ]);
 
       setIncidents(Array.isArray(incidentData) ? incidentData : []);
@@ -545,6 +571,7 @@ export default function BorderMap({
       setTourismHotspots(
         Array.isArray(tourismHotspotData.hotspots) ? tourismHotspotData.hotspots : [],
       );
+      setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
     };
 
     loadData();
@@ -613,6 +640,9 @@ export default function BorderMap({
     ...(enabledOverlays.tourismHotspots
       ? createTourismHotspotLayer(tourismHotspots)
       : []),
+    ...(enabledOverlays.trafficEvents
+      ? createTrafficEventLayers(trafficEvents)
+      : []),
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
     ...(enabledOverlays.kmGrid ? createKilometerGridLayer(gridScale) : []),
     provinceLabelsLayer,
@@ -677,6 +707,8 @@ export default function BorderMap({
             ? `${formatCompactCount(disasterAlertCount)} alerts`
             : overlay.id === "maritimeTraffic"
               ? `${formatCompactCount(maritimeVesselCount)} vessels`
+              : overlay.id === "trafficEvents"
+                ? `${formatCompactCount(trafficEvents.length)} events`
               : overlay.id === "tourismHotspots"
                 ? `${formatCompactCount(tourismHotspotCount)} hotspots`
           : overlay.id === "populationMovement"
@@ -697,6 +729,8 @@ export default function BorderMap({
           ? CloudRain
           : overlay.id === "maritimeTraffic"
             ? Waves
+            : overlay.id === "trafficEvents"
+              ? Car
             : overlay.id === "tourismHotspots"
               ? MapPinned
         : overlay.id === "populationMovement"

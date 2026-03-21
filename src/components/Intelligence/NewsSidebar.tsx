@@ -7,6 +7,7 @@ interface NewsItem {
   id: string;
   lang: "th" | "en" | "zh";
   title: string;
+  titleTh?: string;
   summary: string;
   source: string;
   zone: string;
@@ -172,19 +173,25 @@ export default function NewsSidebar() {
                       {item.zone}
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] font-semibold leading-4 text-[var(--ink)]">
-                    {item.url ? (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-[var(--cool)] hover:underline underline-offset-2"
-                      >
-                        {item.title}
-                      </a>
-                    ) : (
-                      item.title
+                  <div className="mt-1">
+                    {/* Thai translation for EN/ZH items */}
+                    {item.titleTh && item.lang !== "th" && (
+                      <div className="text-[10px] font-semibold leading-4 text-[var(--ink)]">
+                        {item.url ? (
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--cool)] hover:underline underline-offset-2">
+                            {item.titleTh}
+                          </a>
+                        ) : item.titleTh}
+                      </div>
                     )}
+                    {/* Original title */}
+                    <div className={`text-[${item.titleTh && item.lang !== "th" ? "9" : "10"}px] ${item.titleTh && item.lang !== "th" ? "text-[var(--muted)]" : "font-semibold text-[var(--ink)]"} leading-4`}>
+                      {item.url ? (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--cool)] hover:underline underline-offset-2">
+                          {item.title}
+                        </a>
+                      ) : item.title}
+                    </div>
                   </div>
                   <p className="mt-0.5 text-[9px] leading-[14px] text-[var(--muted)]">
                     {item.summary}
