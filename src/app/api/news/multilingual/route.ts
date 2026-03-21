@@ -85,6 +85,10 @@ function severity(text: string): "alert" | "watch" | "stable" {
   return "stable";
 }
 
+function googleNewsThUrl(query: string): string {
+  return `https://news.google.com/search?q=${encodeURIComponent(query)}&hl=th&gl=TH`;
+}
+
 function stripHtml(text: string) {
   return text.replace(/<[^>]*>/g, "").trim();
 }
@@ -106,19 +110,28 @@ async function fetchThaiSignals(): Promise<MultilingualNewsItem[]> {
       "";
     const traffic =
       itemXml.match(/<ht:approx_traffic>(.*?)<\/ht:approx_traffic>/)?.[1] ?? "";
+    const link =
+      itemXml.match(/<link>(.*?)<\/link>/)?.[1] ??
+      itemXml.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/)?.[1] ?? "";
+    // Also try to extract a news URL from nested ht:news_item
+    const newsUrl =
+      itemXml.match(/<ht:news_item_url><!\[CDATA\[(.*?)\]\]><\/ht:news_item_url>/)?.[1] ??
+      itemXml.match(/<ht:news_item_url>(.*?)<\/ht:news_item_url>/)?.[1] ?? "";
 
     // Whitelist-only: Thai Google Trends are dominated by sports/entertainment.
     // Only accept items matching Phuket/governance/safety/tourism keywords.
     if (title && PHUKET_RELEVANCE_TH.test(title) && !SPORTS_FILTER_TH.test(title)) {
+      const cleanTitle = stripHtml(title);
       items.push({
         id: `th-${items.length + 1}`,
         lang: "th",
-        title: stripHtml(title),
+        title: cleanTitle,
         summary: traffic ? `กระแสค้นหา ${traffic}` : "กำลังเป็นกระแสในประเทศไทย",
         source: "Google Trends TH",
         zone: getZone(title),
         severity: severity(title),
         publishedAt: now,
+        url: newsUrl || link || `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=th&gl=TH`,
       });
     }
 
@@ -139,10 +152,10 @@ async function fetchThaiSignals(): Promise<MultilingualNewsItem[]> {
 function getFallbackThai(): MultilingualNewsItem[] {
   const now = new Date().toISOString();
   return [
-    { id: "th-1", lang: "th", title: "ภูเก็ต สภาพอากาศวันนี้", summary: "สภาพอากาศและทะเลในจังหวัดภูเก็ต", source: "Google Trends TH", zone: "Phuket", severity: "stable", publishedAt: now },
-    { id: "th-2", lang: "th", title: "ป่าตอง ท่องเที่ยว", summary: "กระแสการท่องเที่ยวในป่าตอง", source: "Google Trends TH", zone: "Patong", severity: "stable", publishedAt: now },
-    { id: "th-3", lang: "th", title: "สนามบินภูเก็ต เที่ยวบิน", summary: "สถานการณ์เที่ยวบินสนามบินภูเก็ต", source: "Google Trends TH", zone: "Airport", severity: "stable", publishedAt: now },
-    { id: "th-4", lang: "th", title: "เรือเฟอร์รี่ ภูเก็ต พังงา", summary: "เส้นทางเรือเฟอร์รี่ภูเก็ต-พังงา", source: "Google Trends TH", zone: "Pier corridor", severity: "stable", publishedAt: now },
+    { id: "th-1", lang: "th", title: "ภูเก็ต สภาพอากาศวันนี้", summary: "สภาพอากาศและทะเลในจังหวัดภูเก็ต", source: "Google Trends TH", zone: "Phuket", severity: "stable", publishedAt: now, url: googleNewsThUrl("ภูเก็ต สภาพอากาศ") },
+    { id: "th-2", lang: "th", title: "ป่าตอง ท่องเที่ยว", summary: "กระแสการท่องเที่ยวในป่าตอง", source: "Google Trends TH", zone: "Patong", severity: "stable", publishedAt: now, url: googleNewsThUrl("ป่าตอง ท่องเที่ยว") },
+    { id: "th-3", lang: "th", title: "สนามบินภูเก็ต เที่ยวบิน", summary: "สถานการณ์เที่ยวบินสนามบินภูเก็ต", source: "Google Trends TH", zone: "Airport", severity: "stable", publishedAt: now, url: googleNewsThUrl("สนามบินภูเก็ต เที่ยวบิน") },
+    { id: "th-4", lang: "th", title: "เรือเฟอร์รี่ ภูเก็ต พังงา", summary: "เส้นทางเรือเฟอร์รี่ภูเก็ต-พังงา", source: "Google Trends TH", zone: "Pier corridor", severity: "stable", publishedAt: now, url: googleNewsThUrl("เรือเฟอร์รี่ ภูเก็ต") },
   ];
 }
 
@@ -180,9 +193,9 @@ async function fetchEnglishSignals(): Promise<MultilingualNewsItem[]> {
 function getFallbackEnglish(): MultilingualNewsItem[] {
   const now = new Date().toISOString();
   return [
-    { id: "en-1", lang: "en", title: "Phuket weather and sea conditions update", titleTh: "ภูเก็ต: สภาพอากาศ", summary: "Current marine and weather outlook for the Andaman coast", source: "Regional media", zone: "Phuket", severity: "stable", publishedAt: now },
-    { id: "en-2", lang: "en", title: "Patong tourism flow steady as high season continues", titleTh: "ป่าตอง: ท่องเที่ยว/นักท่องเที่ยว", summary: "Visitor arrivals remain consistent across beach areas", source: "Regional media", zone: "Patong", severity: "stable", publishedAt: now },
-    { id: "en-3", lang: "en", title: "Phuket airport operations running normally", titleTh: "สนามบิน: สนามบิน/เที่ยวบิน", summary: "International and domestic flights on schedule", source: "Regional media", zone: "Airport", severity: "stable", publishedAt: now },
+    { id: "en-1", lang: "en", title: "Phuket weather and sea conditions update", titleTh: "ภูเก็ต: สภาพอากาศ", summary: "Current marine and weather outlook for the Andaman coast", source: "Regional media", zone: "Phuket", severity: "stable", publishedAt: now, url: "https://news.google.com/search?q=Phuket+weather+sea+conditions&hl=en&gl=TH" },
+    { id: "en-2", lang: "en", title: "Patong tourism flow steady as high season continues", titleTh: "ป่าตอง: ท่องเที่ยว/นักท่องเที่ยว", summary: "Visitor arrivals remain consistent across beach areas", source: "Regional media", zone: "Patong", severity: "stable", publishedAt: now, url: "https://news.google.com/search?q=Patong+tourism+arrivals&hl=en&gl=TH" },
+    { id: "en-3", lang: "en", title: "Phuket airport operations running normally", titleTh: "สนามบิน: สนามบิน/เที่ยวบิน", summary: "International and domestic flights on schedule", source: "Regional media", zone: "Airport", severity: "stable", publishedAt: now, url: "https://news.google.com/search?q=Phuket+airport+flights&hl=en&gl=TH" },
   ];
 }
 
