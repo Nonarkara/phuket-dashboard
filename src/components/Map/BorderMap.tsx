@@ -358,12 +358,60 @@ export default function BorderMap({
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
   // ─── Basemap: exactly one active at a time (radio) ───
-  type BasemapId = "esri-aerial" | "osm-streets" | "mapbox-satellite" | "mapbox-light";
+  type BasemapId = "esri-aerial" | "osm-streets" | "carto-light" | "mapbox-satellite" | "mapbox-light";
   const hasMapbox = MAPBOX_TOKEN.length > 0;
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("esri-aerial");
 
   // ─── NASA GIBS imagery overlay (on top of basemap, pick one or none) ───
   const [satelliteOpacity, setSatelliteOpacity] = useState(45);
+  const [showAdvancedLayers, setShowAdvancedLayers] = useState(false);
+
+  // Governor-level view presets (groups of layers)
+  type ViewPreset = "overview" | "safety" | "weather" | "tourism";
+  const [activePreset, setActivePreset] = useState<ViewPreset>("overview");
+
+  const applyPreset = (preset: ViewPreset) => {
+    setActivePreset(preset);
+    const presetLayers: Record<ViewPreset, Record<string, boolean>> = {
+      overview: {
+        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
+        trafficEvents: true, disasterAlerts: false, maritimeTraffic: false,
+        flightPaths: false, borderContext: false, kmGrid: false,
+        thermalHotspots: false, aqiHeatmap: false, pm25Heatmap: false,
+        rainfallAnomalies: false, provinceLabels: false, incidentPoints: false,
+        incidentHeatmap: false, conflictZones: false, populationMovement: false,
+        tourismHotspots: false,
+      },
+      safety: {
+        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
+        trafficEvents: true, disasterAlerts: true, incidentPoints: true,
+        thermalHotspots: true, maritimeTraffic: false, flightPaths: false,
+        borderContext: false, kmGrid: false, aqiHeatmap: false,
+        pm25Heatmap: false, rainfallAnomalies: false, provinceLabels: false,
+        incidentHeatmap: false, conflictZones: false, populationMovement: false,
+        tourismHotspots: false,
+      },
+      weather: {
+        pksbRoutes: false, pksbLiveBuses: false, publicCameras: false,
+        trafficEvents: false, disasterAlerts: true, rainfallAnomalies: true,
+        aqiHeatmap: true, maritimeTraffic: true, thermalHotspots: false,
+        flightPaths: false, borderContext: false, kmGrid: false,
+        pm25Heatmap: false, provinceLabels: false, incidentPoints: false,
+        incidentHeatmap: false, conflictZones: false, populationMovement: false,
+        tourismHotspots: false,
+      },
+      tourism: {
+        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
+        trafficEvents: true, tourismHotspots: true, flightPaths: true,
+        populationMovement: true, disasterAlerts: false, maritimeTraffic: false,
+        borderContext: false, kmGrid: false, thermalHotspots: false,
+        aqiHeatmap: false, pm25Heatmap: false, rainfallAnomalies: false,
+        provinceLabels: false, incidentPoints: false, incidentHeatmap: false,
+        conflictZones: false,
+      },
+    };
+    setEnabledOverlays((current) => ({ ...current, ...presetLayers[preset] }));
+  };
   const [gridScale, setGridScale] = useState<GridScale>(1);
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
@@ -657,12 +705,14 @@ export default function BorderMap({
   const focusPresets = GOVERNOR_CORRIDORS;
 
   // ─── Basemap options (radio — exactly one at a time) ───
+  // Fallback chain from DrNon Global Satellite Toolkit:
+  // Mapbox → ESRI → OSM → CartoDB → Stadia
   const basemapOptions: { id: BasemapId; label: string; icon: typeof Satellite; available: boolean }[] = [
-    { id: "esri-aerial", label: "ESRI", icon: Satellite, available: true },
-    { id: "osm-streets", label: "OSM", icon: MapPinned, available: true },
+    { id: "esri-aerial", label: "Aerial", icon: Satellite, available: true },
+    { id: "osm-streets", label: "Streets", icon: MapPinned, available: true },
+    { id: "carto-light" as BasemapId, label: "Clean", icon: MapIcon, available: true },
     ...(hasMapbox ? [
-      { id: "mapbox-satellite" as BasemapId, label: "MAPBOX", icon: Globe, available: true },
-      { id: "mapbox-light" as BasemapId, label: "LIGHT", icon: MapIcon, available: true },
+      { id: "mapbox-satellite" as BasemapId, label: "Mapbox", icon: Globe, available: true },
     ] : []),
   ];
 
@@ -912,6 +962,27 @@ export default function BorderMap({
           maxZoom: 19,
           tileTemplate:
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          updatedAt: new Date().toISOString(),
+        },
+        1,
+      );
+    }
+    if (activeBasemap === "carto-light") {
+      return createRasterOverlayLayer(
+        {
+          id: "basemap-carto",
+          label: "CartoDB Positron",
+          shortLabel: "CLEAN",
+          description: "Clean minimal basemap for data overlay focus",
+          source: "CartoDB",
+          family: "imagery",
+          role: "base-option",
+          kind: "raster" as const,
+          defaultOpacity: 1,
+          enabledByDefault: true,
+          maxZoom: 19,
+          tileTemplate:
+            "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
           updatedAt: new Date().toISOString(),
         },
         1,
@@ -1170,34 +1241,81 @@ export default function BorderMap({
         </div>
       </div>
 
-      <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[rgba(248,246,240,0.85)] backdrop-blur-md">
+      <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[rgba(248,246,240,0.92)] backdrop-blur-md">
+        {/* Governor-level view presets */}
         <div className="flex items-center gap-2 px-3 py-1.5 xl:px-4">
-          <div className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
-            {layerControls.map((control) => {
-              const Icon = control.icon;
-              return (
-                <button
-                  key={control.id}
-                  type="button"
-                  aria-pressed={control.active}
-                  onClick={control.onClick}
-                  className={`border whitespace-nowrap px-2 py-1 transition-colors ${
-                    control.active
-                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Icon size={10} className="shrink-0" />
-                    <span className="text-[9px] font-bold uppercase tracking-wider">
-                      {control.label.split(" ")[0]}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] shrink-0">View</span>
+          {([
+            { id: "overview" as ViewPreset, label: "Overview", desc: "Bus routes, cameras, traffic" },
+            { id: "safety" as ViewPreset, label: "Safety", desc: "Accidents, alerts, hotspots" },
+            { id: "weather" as ViewPreset, label: "Weather", desc: "Rain, AQI, marine, alerts" },
+            { id: "tourism" as ViewPreset, label: "Tourism", desc: "Visitors, flights, hotels" },
+          ]).map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyPreset(preset.id)}
+              title={preset.desc}
+              className={`border whitespace-nowrap px-3 py-1 transition-colors ${
+                activePreset === preset.id
+                  ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                  : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+              }`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider">{preset.label}</span>
+            </button>
+          ))}
+
+          <div className="h-4 w-[1px] bg-[var(--line)] mx-1" />
+
+          <button
+            type="button"
+            onClick={() => setShowAdvancedLayers(!showAdvancedLayers)}
+            className={`border whitespace-nowrap px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+              showAdvancedLayers
+                ? "border-[var(--cool)] text-[var(--cool)]"
+                : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+            }`}
+          >
+            {showAdvancedLayers ? "Hide layers" : "More layers"}
+          </button>
+
+          <div className="flex-1" />
+          <span className="text-[8px] font-mono text-[var(--dim)] shrink-0">
+            {totalActiveLayers} active
+          </span>
         </div>
+
+        {/* Advanced layer toggles (hidden by default) */}
+        {showAdvancedLayers && (
+          <div className="border-t border-[var(--line)] px-3 py-1.5 xl:px-4">
+            <div className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
+              {layerControls.map((control) => {
+                const Icon = control.icon;
+                return (
+                  <button
+                    key={control.id}
+                    type="button"
+                    aria-pressed={control.active}
+                    onClick={control.onClick}
+                    className={`border whitespace-nowrap px-2 py-1 transition-colors ${
+                      control.active
+                        ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                        : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Icon size={10} className="shrink-0" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider">
+                        {control.label.split(" ")[0]}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
