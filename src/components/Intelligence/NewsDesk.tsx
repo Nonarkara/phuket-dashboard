@@ -82,7 +82,18 @@ export default function NewsDesk({ mediaWatch, brief }: NewsDeskProps) {
               </span>
             </div>
             <h3 className="pt-2 text-[13px] font-semibold leading-5 text-[var(--ink)]">
-              {item.title}
+              {item.url ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[var(--cool)] hover:underline underline-offset-2"
+                >
+                  {item.title}
+                </a>
+              ) : (
+                item.title
+              )}
             </h3>
             <p className="pt-1 text-[11px] leading-5 text-[var(--muted)]">
               {item.summary}

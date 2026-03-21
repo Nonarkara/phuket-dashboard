@@ -173,7 +173,18 @@ export default function NewsSidebar() {
                     </span>
                   </div>
                   <div className="mt-1 text-[10px] font-semibold leading-4 text-[var(--ink)]">
-                    {item.title}
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-[var(--cool)] hover:underline underline-offset-2"
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      item.title
+                    )}
                   </div>
                   <p className="mt-0.5 text-[9px] leading-[14px] text-[var(--muted)]">
                     {item.summary}

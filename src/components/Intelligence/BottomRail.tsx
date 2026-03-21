@@ -289,7 +289,11 @@ export default function BottomRail({
                 {narrativeItems.map((item) => (
                   <div key={item.id} className="border border-[var(--line)] px-2 py-1">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[9px] font-semibold text-[var(--ink)] truncate">{item.title}</span>
+                      {item.url ? (
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-semibold text-[var(--ink)] truncate hover:text-[var(--cool)] hover:underline underline-offset-2">{item.title}</a>
+                      ) : (
+                        <span className="text-[9px] font-semibold text-[var(--ink)] truncate">{item.title}</span>
+                      )}
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(item.status)}`} />
                     </div>
                     <div className="text-[8px] text-[var(--dim)]">{item.zone} / {item.volumeLabel}</div>
