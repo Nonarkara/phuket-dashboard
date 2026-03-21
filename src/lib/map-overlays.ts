@@ -150,7 +150,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 1,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "conflictZones",
@@ -173,7 +173,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 0.84,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "incidentHeatmap",
@@ -253,6 +253,17 @@ export function buildMapOverlayCatalog(
       enabledByDefault: true,
     }),
     vectorOverlay({
+      id: "pksbLiveBuses",
+      label: "PKSB Live Buses",
+      shortLabel: "BUS",
+      description: "Live bus positions from the Phuket Smart Bus simulation running on real timetable data.",
+      source: "Phuket Smart Bus API",
+      family: "operational",
+      role: "operational",
+      defaultOpacity: 1,
+      enabledByDefault: true,
+    }),
+    vectorOverlay({
       id: "publicCameras",
       label: "Public Cameras",
       shortLabel: "CAMS",
@@ -273,7 +284,7 @@ export function buildMapOverlayCatalog(
       family: "weather",
       role: "operational",
       defaultOpacity: 0.96,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "maritimeTraffic",
@@ -285,7 +296,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 0.9,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "tourismHotspots",
@@ -308,7 +319,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 1,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "flightPaths",
@@ -319,7 +330,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 0.85,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     vectorOverlay({
       id: "kmGrid",
@@ -330,7 +341,7 @@ export function buildMapOverlayCatalog(
       family: "operational",
       role: "operational",
       defaultOpacity: 1,
-      enabledByDefault: true,
+      enabledByDefault: false,
     }),
     rasterOverlay({
       id: "himawariCloud",

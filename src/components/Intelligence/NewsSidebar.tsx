@@ -156,9 +156,9 @@ export default function NewsSidebar() {
         )}
 
         <div className="divide-y divide-[var(--line)]">
-          {sorted.map((item) => (
+          {sorted.map((item, idx) => (
             <article
-              key={item.id}
+              key={`${item.id}-${idx}`}
               className={`border-l-2 ${severityBorder(item.severity)} px-3 py-2 transition-colors hover:bg-[rgba(15,111,136,0.03)]`}
             >
               <div className="flex items-start justify-between gap-1.5">

@@ -186,7 +186,67 @@ const KEYWORD_GROUPS = [
     weight: 10,
     terms: ["aqi", "pm2.5", "pm25", "smoke", "air quality", "haze"],
   },
+  {
+    tag: "safety",
+    weight: 18,
+    terms: [
+      "accident",
+      "motorcycle",
+      "unlicensed",
+      "tuk-tuk",
+      "tuktuk",
+      "scam",
+      "complaint",
+      "crime",
+      "theft",
+      "assault",
+      "drowning",
+      "rip current",
+      "beach safety",
+      "lifeguard",
+      "ferry incident",
+      "boat capsize",
+      "boat sink",
+    ],
+  },
+  {
+    tag: "infrastructure",
+    weight: 14,
+    terms: [
+      "water quality",
+      "sewage",
+      "waste",
+      "garbage",
+      "pollution",
+      "road condition",
+      "pothole",
+      "construction",
+      "blackout",
+      "power outage",
+      "water supply",
+      "congestion",
+      "overcrowd",
+    ],
+  },
 ] as const;
+
+const NEGATIVE_KEYWORDS = [
+  "soccer", "football", "premier league", "world cup", "fifa",
+  "champions league", "la liga", "bundesliga", "serie a",
+  "uefa", "afc", "match day", "goalkeeper", "striker", "midfielder",
+  "basketball", "nba", "cricket", "tennis", "boxing", "mma", "ufc",
+  "formula 1", "f1", "motogp",
+  "celebrity", "gossip", "k-pop", "kpop",
+  "movie review", "album release", "concert tour",
+  "reality show", "esports", "gaming tournament",
+] as const;
+
+const NEGATIVE_KEYWORD_PENALTY = -30;
+
+function containsSportsOrEntertainment(text: string): boolean {
+  const lower = text.toLowerCase();
+  return NEGATIVE_KEYWORDS.some((kw) => lower.includes(kw));
+}
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -261,8 +321,8 @@ const PACKAGE_DEFINITIONS: PackageDefinition[] = [
       "phuket-express",
     ],
     queries: [
-      "Phuket weather monsoon waves beach ferry pier",
-      "Phuket beach warning surf monsoon swell",
+      "Phuket weather monsoon waves beach ferry pier -soccer -football -sport -celebrity -gossip",
+      "Phuket beach warning surf monsoon swell -soccer -football -sport -celebrity -gossip",
       "site:thephuketnews.com Phuket weather ferry marine",
     ],
     focusTags: ["marine", "weather", "mobility"],
@@ -286,8 +346,8 @@ const PACKAGE_DEFINITIONS: PackageDefinition[] = [
       "nikkei-asia",
     ],
     queries: [
-      "Phuket arrivals airport hotel tourism demand",
-      "Phuket hotel occupancy flight demand Patong",
+      "Phuket arrivals airport hotel tourism demand -soccer -football -sport -celebrity -gossip",
+      "Phuket hotel occupancy flight demand Patong -soccer -football -sport -celebrity -gossip",
       "site:thephuketnews.com Phuket tourism hotel arrivals",
     ],
     focusTags: ["tourism", "economy", "mobility"],
@@ -310,8 +370,8 @@ const PACKAGE_DEFINITIONS: PackageDefinition[] = [
       "cna",
     ],
     queries: [
-      "Patong traffic crash rain Phuket road safety",
-      "Phuket airport road flooding transfer delays",
+      "Patong traffic crash rain Phuket road safety -soccer -football -sport -celebrity -gossip",
+      "Phuket airport road flooding transfer delays -soccer -football -sport -celebrity -gossip",
       "site:thephuketnews.com Phuket crash rain Patong Hill",
     ],
     focusTags: ["traffic", "weather", "mobility"],
@@ -334,9 +394,9 @@ const PACKAGE_DEFINITIONS: PackageDefinition[] = [
       "phuket-express",
     ],
     queries: [
-      "Phuket diesel prices baht tourism economy",
-      "Southern Thailand logistics Phuket cost pressure",
-      "Phuket hotel rates airline capacity tourism revenue",
+      "Phuket diesel prices baht tourism economy -soccer -football -sport -celebrity -gossip",
+      "Southern Thailand logistics Phuket cost pressure -soccer -football -sport -celebrity -gossip",
+      "Phuket hotel rates airline capacity tourism revenue -soccer -football -sport -celebrity -gossip",
     ],
     focusTags: ["economy", "tourism", "traffic"],
     anchorTags: ["economy", "tourism"],
@@ -361,7 +421,7 @@ const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 function buildGoogleNewsSearchUrl(queryText: string, locale = "en-TH") {
-  const [language = "en", country = "US"] = locale.split("-");
+  const [language = "en", country = "TH"] = locale.split("-");
   return `https://news.google.com/rss/search?q=${encodeURIComponent(queryText)}&hl=${language}&gl=${country}&ceid=${country}:${language}`;
 }
 
@@ -462,6 +522,11 @@ function isPriorityNewsRelevant(item: SeedItem) {
     return true;
   }
 
+  // Hard-reject sports/entertainment regardless of source or keywords
+  if (containsSportsOrEntertainment(`${item.title} ${item.summary}`)) {
+    return false;
+  }
+
   if (
     /phuket express|phuket news|thaiger|bangkok post|thai pbs|tat newsroom|channel newsasia|nikkei/i.test(
       item.source,
@@ -533,6 +598,11 @@ function readKeywordSignals(text: string, focusTags: string[] = []) {
 
     matched.add(group.tag);
     score += group.weight + hits.length + (focusTags.includes(group.tag) ? 8 : 0);
+  }
+
+  // Penalize sports/entertainment content
+  if (containsSportsOrEntertainment(text)) {
+    score += NEGATIVE_KEYWORD_PENALTY;
   }
 
   return {

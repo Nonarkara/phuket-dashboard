@@ -36,6 +36,7 @@ import {
   createIncidentLayer,
   createKilometerGridLayer,
   createMaritimeTrafficLayers,
+  createPksbBusLayers,
   createPksbRouteLayers,
   createPublicCameraLayer,
   createProvinceLabelsLayer,
@@ -70,6 +71,8 @@ import type {
   RegionBorderFeature,
   PksbRouteFeature,
   PksbStopFeature,
+  PksbBusPosition,
+  PksbBusPositionResponse,
   PksbTransitResponse,
   PublicCamera,
   PublicCameraResponse,
@@ -178,6 +181,15 @@ function isAirQualityPoint(value: unknown): value is AirQualityPoint {
   );
 }
 
+function isPksbBusPosition(value: unknown): value is PksbBusPosition {
+  return (
+    isRecord(value) &&
+    typeof value.licensePlate === "string" &&
+    typeof value.vehicleId === "string" &&
+    typeof value.lng === "number"
+  );
+}
+
 function isPksbRouteFeature(value: unknown): value is PksbRouteFeature {
   return (
     isRecord(value) &&
@@ -271,6 +283,10 @@ function getTooltipText(object: unknown): string | null {
     return `${object.label}: AQI ${Math.round(object.aqi)} / PM2.5 ${Math.round(object.pm25)}`;
   }
 
+  if (isPksbBusPosition(object)) {
+    return `Bus ${object.licensePlate} • ${object.routeId} • ${object.status}`;
+  }
+
   if (isPksbStopFeature(object)) {
     return `${object.properties.stopNameEn} • ${object.properties.routeLabel}`;
   }
@@ -329,7 +345,7 @@ export default function BorderMap({
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("esri-aerial");
 
   // ─── NASA GIBS imagery overlay (on top of basemap, pick one or none) ───
-  const [satelliteOpacity, setSatelliteOpacity] = useState(62);
+  const [satelliteOpacity, setSatelliteOpacity] = useState(45);
   const [gridScale, setGridScale] = useState<GridScale>(1);
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
@@ -347,6 +363,7 @@ export default function BorderMap({
     useState<PksbTransitResponse["routes"]>(EMPTY_PKSB_ROUTES);
   const [pksbStops, setPksbStops] =
     useState<PksbTransitResponse["stops"]>(EMPTY_PKSB_STOPS);
+  const [pksbBuses, setPksbBuses] = useState<PksbBusPosition[]>([]);
   const [publicCameras, setPublicCameras] = useState<PublicCamera[]>([]);
   const [tourismHotspots, setTourismHotspots] = useState<TourismHotspot[]>([]);
 
@@ -364,7 +381,7 @@ export default function BorderMap({
   const additionalOverlays = overlayCatalog.overlays.filter(
     (overlay) => overlay.role !== "base-option",
   );
-  const [satelliteOverlay, setSatelliteOverlay] = useState<string>("viirsTrueColor");
+  const [satelliteOverlay, setSatelliteOverlay] = useState<string>("none");
   const [enabledOverlays, setEnabledOverlays] = useState<Record<string, boolean>>(
     () =>
       overlayCatalog.overlays.reduce<Record<string, boolean>>((memo, overlay) => {
@@ -541,9 +558,21 @@ export default function BorderMap({
       setFlights(Array.isArray(flightData) ? flightData : []);
     }, 30000);
 
+    // Refresh PKSB bus positions every 15 seconds
+    const fetchBuses = async () => {
+      const busData = await fetchJson<PksbBusPositionResponse>(
+        "/api/transit/pksb/buses",
+        { generatedAt: new Date(0).toISOString(), buses: [] },
+      );
+      setPksbBuses(Array.isArray(busData.buses) ? busData.buses : []);
+    };
+    void fetchBuses();
+    const busInterval = setInterval(fetchBuses, 15000);
+
     return () => {
       clearInterval(mapDataInterval);
       clearInterval(flightInterval);
+      clearInterval(busInterval);
     };
   }, []);
 
@@ -571,6 +600,9 @@ export default function BorderMap({
     enabledOverlays.populationMovement ? createRefugeeLayer(refugees) : null,
     ...(enabledOverlays.pksbRoutes
       ? createPksbRouteLayers(pksbRoutes, pksbStops)
+      : []),
+    ...(enabledOverlays.pksbLiveBuses
+      ? createPksbBusLayers(pksbBuses)
       : []),
     ...(enabledOverlays.maritimeTraffic
       ? createMaritimeTrafficLayers(maritimeVessels)
