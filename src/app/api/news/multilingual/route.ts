@@ -11,7 +11,7 @@ const TIMEOUT_MS = 10_000;
 
 const SPORTS_FILTER_EN = /soccer|football|premier league|world cup|fifa|champions league|basketball|nba|cricket|tennis|boxing|mma|ufc|celebrity|gossip|k-pop|esports/i;
 const SPORTS_FILTER_TH = /ฟุตบอล|ลีก|นักเตะ|กีฬา|soccer|football|sport|บาส|มวย|celebrity|gossip|เชลซี|ลิเวอร์พูล|แมนยู|แมนซิตี้|บาร์เซโลนา|เรอัล|อาร์เซนอล|ท็อตแนม|เอฟเวอร์ตัน|มิลาน|ยูเวนตุส|บาเยิร์น|nba|ufc|boxing|everton|chelsea|liverpool|arsenal|tottenham|barcelona|juventus|bayern|milan|ฟูแล่ม|fulham|leverkusen|heidenheim|dortmund|premier league|champions league|la liga|bundesliga|serie a|standings|eredivisie|\bvs\b/i;
-const PHUKET_RELEVANCE_TH = /ภูเก็ต|ป่าตอง|กะตะ|กะรน|สนามบิน|เมืองเก่า|กระบี่|พังงา|เขาหลัก|ท่าเรือ|อันดามัน|ท่องเที่ยว|อากาศ|ฝน|น้ำท่วม|อุบัติเหตุ|จราจร|ผู้ว่า|รัฐมนตรี|นายก|ครม|เศรษฐกิจ|ท่องเที่ยว|สึนามิ|แผ่นดินไหว|พายุ|ดินถล่ม|ไฟไหม้|มลพิษ|ฝุ่น|pm2\.5|คมนาคม|ขนส่ง|phuket|patong|andaman|thailand tourism|thai economy/i;
+const PHUKET_RELEVANCE_TH = /ภูเก็ต|ป่าตอง|กะตะ|กะรน|สนามบิน|เมืองเก่า|กระบี่|พังงา|เขาหลัก|ท่าเรือ|อันดามัน|ท่องเที่ยว|อากาศ|ฝน|น้ำท่วม|อุบัติเหตุ|จราจร|ผู้ว่า|รัฐมนตรี|นายก|ครม|เศรษฐกิจ|สึนามิ|แผ่นดินไหว|พายุ|ดินถล่ม|ไฟไหม้|มลพิษ|ฝุ่น|pm2\.5|คมนาคม|ขนส่ง|ตำรวจ|อาชญากรรม|ยาเสพติด|ทุจริต|คอร์รัปชัน|งบประมาณ|ประชาชน|สาธารณสุข|โรงพยาบาล|โรงเรียน|การศึกษา|น้ำประปา|ไฟฟ้า|ถนน|สะพาน|เรือ|ประมง|ชาวเล|ทะเล|ชายหาด|นักท่องเที่ยว|โรงแรม|รีสอร์ท|ตุ๊กตุ๊ก|แท็กซี่|มอเตอร์ไซค์|ใบขับขี่|phuket|patong|andaman|thailand tourism|thai economy|thai government|southern thailand/i;
 
 interface MultilingualNewsItem {
   id: string;
@@ -106,9 +106,9 @@ async function fetchThaiSignals(): Promise<MultilingualNewsItem[]> {
     const traffic =
       itemXml.match(/<ht:approx_traffic>(.*?)<\/ht:approx_traffic>/)?.[1] ?? "";
 
-    // Reject sports/entertainment; also require some Thai relevance signal
-    // (Phuket, weather, tourism, safety, government, economy keywords)
-    if (title && !SPORTS_FILTER_TH.test(title) && PHUKET_RELEVANCE_TH.test(title)) {
+    // Whitelist-only: Thai Google Trends are dominated by sports/entertainment.
+    // Only accept items matching Phuket/governance/safety/tourism keywords.
+    if (title && PHUKET_RELEVANCE_TH.test(title) && !SPORTS_FILTER_TH.test(title)) {
       items.push({
         id: `th-${items.length + 1}`,
         lang: "th",
