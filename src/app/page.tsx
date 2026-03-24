@@ -9,6 +9,8 @@ import ProvinceDashboard from "../components/Analytics/ProvinceDashboard";
 import BorderMap from "../components/Map/BorderMap";
 import BottomRail from "../components/Intelligence/BottomRail";
 import NewsSidebar from "../components/Intelligence/NewsSidebar";
+import ModuleRail from "../components/Modules/ModuleRail";
+import ModuleSelector from "../components/Modules/ModuleSelector";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -39,6 +41,7 @@ export default function Dashboard() {
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isDataExplorerOpen, setIsDataExplorerOpen] = useState(false);
+  const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState(false);
   const [brief, setBrief] = useState<GovernorBrief | null>(null);
   const [disaster, setDisaster] = useState<DisasterFeedResponse | null>(null);
   const [maritimeSecurity, setMaritimeSecurity] =
@@ -123,6 +126,7 @@ export default function Dashboard() {
         onOpenManual={openManual}
         onOpenArchitecture={openArchitecture}
         onOpenDataExplorer={openDataExplorer}
+        onOpenModuleSelector={() => setIsModuleSelectorOpen(true)}
       />
 
       {/* ─── 3-column center: News | Map | Intelligence Panel ─── */}
@@ -191,6 +195,9 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* ─── Module Rail (Global Satellite Toolkit) ─── */}
+      <ModuleRail />
+
       <ProvinceDashboard
         province={selectedProvince}
         onClose={() => setSelectedProvince(null)}
@@ -207,6 +214,9 @@ export default function Dashboard() {
         isOpen={isDataExplorerOpen}
         onClose={() => setIsDataExplorerOpen(false)}
       />
+      {isModuleSelectorOpen && (
+        <ModuleSelector onClose={() => setIsModuleSelectorOpen(false)} />
+      )}
     </main>
   );
 }

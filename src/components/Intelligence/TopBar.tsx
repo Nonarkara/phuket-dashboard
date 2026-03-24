@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { BookOpen, Database, Network, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { BookOpen, Database, Layers, Network, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type {
   ExecutiveStatus,
   GovernorBrief,
@@ -16,6 +16,7 @@ interface TopBarProps {
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
+  onOpenModuleSelector?: () => void;
 }
 
 function formatMainClock() {
@@ -46,6 +47,7 @@ export default function TopBar({
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
+  onOpenModuleSelector,
 }: TopBarProps) {
   const [time, setTime] = useState("");
   const [narrative, setNarrative] = useState<GovernorNarrativeResponse | null>(null);
@@ -250,6 +252,16 @@ export default function TopBar({
           </div>
           <div className="hidden h-6 w-[1px] bg-[var(--line)] sm:block" />
           <div className="flex items-center gap-1">
+            {onOpenModuleSelector && (
+              <button
+                type="button"
+                onClick={onOpenModuleSelector}
+                className="p-1 text-[var(--cool)] hover:text-[var(--ink)] transition-colors"
+                title="Global Satellite Toolkit"
+              >
+                <Layers size={14} />
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenArchitecture}
