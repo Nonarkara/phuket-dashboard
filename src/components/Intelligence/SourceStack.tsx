@@ -3,12 +3,16 @@
 import { Anchor, CloudRain, MapPinned, MessageSquare, Radar, Waves } from "lucide-react";
 import { findCorridorById } from "../../lib/governor-config";
 import type {
+  DisasterAlert,
   DisasterFeedResponse,
   GovernorBrief,
   MaritimeSecurityResponse,
+  MaritimeVessel,
   MarineStatusResponse,
   MediaWatchResponse,
+  NarrativeSignal,
   PublicCameraResponse,
+  TourismHotspot,
   TourismHotspotsResponse,
 } from "../../types/dashboard";
 
@@ -33,6 +37,19 @@ export default function SourceStack({
   cameraPayload,
   selectedCorridorId,
 }: SourceStackProps) {
+  const compareByStatus = <
+    T extends { status: "intervene" | "watch" | "stable" },
+  >(
+    left: T,
+    right: T,
+  ) => {
+    const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+    return weight[right.status] - weight[left.status];
+  };
+  const compareDisasterAlerts = (left: DisasterAlert, right: DisasterAlert) => {
+    const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+    return weight[right.severity] - weight[left.severity];
+  };
   const corridor = findCorridorById(selectedCorridorId);
   const corridorBrief = brief?.corridorPriorities.find(
     (item) => item.id === selectedCorridorId,
@@ -44,10 +61,11 @@ export default function SourceStack({
         corridor?.aliases.some((alias) =>
           `${item.label} ${item.focusArea}`.toLowerCase().includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus) ?? [];
   const corridorSignals =
     mediaWatch
-      ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare].filter(
+      ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare]
+          .filter(
           (signal) =>
             corridor?.focusAreas.includes(signal.zone) ||
             corridor?.aliases.some((alias) =>
@@ -55,7 +73,8 @@ export default function SourceStack({
                 .toLowerCase()
                 .includes(alias.toLowerCase()),
             ),
-        )
+          )
+          .sort(compareByStatus as (left: NarrativeSignal, right: NarrativeSignal) => number)
       : [];
   const corridorDisasterAlerts =
     disaster?.alerts.filter(
@@ -66,7 +85,7 @@ export default function SourceStack({
             .toLowerCase()
             .includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareDisasterAlerts) ?? [];
   const corridorVessels =
     maritimeSecurity?.vessels.filter(
       (vessel) =>
@@ -80,7 +99,7 @@ export default function SourceStack({
             .toLowerCase()
             .includes(focusArea.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus as (left: MaritimeVessel, right: MaritimeVessel) => number) ?? [];
   const corridorTourismHotspots =
     tourismHotspots?.hotspots.filter(
       (hotspot) =>
@@ -90,7 +109,7 @@ export default function SourceStack({
             .toLowerCase()
             .includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus as (left: TourismHotspot, right: TourismHotspot) => number) ?? [];
   const corridorCameras =
     cameraPayload?.cameras.filter((camera) =>
       camera.corridorIds?.includes(selectedCorridorId),

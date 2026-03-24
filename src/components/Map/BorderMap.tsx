@@ -348,10 +348,18 @@ export default function BorderMap({
   onProvinceSelect,
   selectedCorridorId,
   onCorridorSelect,
+  disasterFeed,
+  maritimeSecurityFeed,
+  cameraFeed,
+  tourismFeed,
 }: {
   onProvinceSelect?: (province: ProvinceSelection) => void;
   selectedCorridorId?: string;
   onCorridorSelect?: (corridorId: string) => void;
+  disasterFeed?: DisasterFeedResponse | null;
+  maritimeSecurityFeed?: MaritimeSecurityResponse | null;
+  cameraFeed?: PublicCameraResponse | null;
+  tourismFeed?: TourismHotspotsResponse | null;
 }) {
   const [mounted, setMounted] = useState(false);
   const [webglSupported, setWebglSupported] = useState(true);
@@ -419,8 +427,6 @@ export default function BorderMap({
   const [refugees, setRefugees] = useState<RefugeeMovement[]>([]);
   const [rainfall, setRainfall] = useState<RainfallPoint[]>([]);
   const [airQuality, setAirQuality] = useState<AirQualityPoint[]>([]);
-  const [disasterAlerts, setDisasterAlerts] = useState<DisasterAlert[]>([]);
-  const [maritimeVessels, setMaritimeVessels] = useState<MaritimeVessel[]>([]);
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [borders, setBorders] = useState<RegionBorderCollection | null>(null);
   const [conflictZones, setConflictZones] =
@@ -430,8 +436,6 @@ export default function BorderMap({
   const [pksbStops, setPksbStops] =
     useState<PksbTransitResponse["stops"]>(EMPTY_PKSB_STOPS);
   const [pksbBuses, setPksbBuses] = useState<PksbBusPosition[]>([]);
-  const [publicCameras, setPublicCameras] = useState<PublicCamera[]>([]);
-  const [tourismHotspots, setTourismHotspots] = useState<TourismHotspot[]>([]);
   const [trafficEvents, setTrafficEvents] = useState<TrafficEvent[]>([]);
 
   const getSafeDate = () => {
@@ -459,6 +463,10 @@ export default function BorderMap({
   const activeSatelliteOverlay =
     baseOverlays.find((overlay) => overlay.id === satelliteOverlay) ??
     baseOverlays[0];
+  const disasterAlerts = disasterFeed?.alerts ?? [];
+  const maritimeVessels = maritimeSecurityFeed?.vessels ?? [];
+  const publicCameras = cameraFeed?.cameras ?? [];
+  const tourismHotspots = tourismFeed?.hotspots ?? [];
   const signalCount = incidents.length;
   const hotspotCount = fires.length;
   const rainCount = rainfall.length;
@@ -540,14 +548,10 @@ export default function BorderMap({
         refugeeData,
         rainfallData,
         airQualityData,
-        disasterData,
-        maritimeData,
         borderData,
         conflictZoneData,
         flightData,
         pksbTransitData,
-        publicCameraData,
-        tourismHotspotData,
         trafficData,
       ] = await Promise.all([
         fetchJson<IncidentFeature[]>("/api/incidents", []),
@@ -555,24 +559,6 @@ export default function BorderMap({
         fetchJson<RefugeeMovement[]>("/api/movements", []),
         fetchJson<RainfallPoint[]>("/api/rainfall", []),
         fetchJson<AirQualityPoint[]>("/api/air-quality", []),
-        fetchJson<DisasterFeedResponse>("/api/disaster/brief", {
-          generatedAt: new Date(0).toISOString(),
-          posture: "watch",
-          summary: "",
-          alerts: [],
-          layers: [],
-          rainfallNodes: 0,
-          sources: [],
-        }),
-        fetchJson<MaritimeSecurityResponse>("/api/maritime/security", {
-          generatedAt: new Date(0).toISOString(),
-          posture: "watch",
-          summary: "",
-          provider: "",
-          vessels: [],
-          chokepoints: [],
-          sources: [],
-        }),
         fetchJson<RegionBorderCollection>("/data/region_borders.geojson", EMPTY_BORDERS),
         fetchJson<ConflictZoneCollection>("/data/conflict_zones.geojson", EMPTY_CONFLICT_ZONES),
         fetchJson<FlightData[]>("/api/flights", []),
@@ -581,19 +567,6 @@ export default function BorderMap({
           source: [],
           routes: EMPTY_PKSB_ROUTES,
           stops: EMPTY_PKSB_STOPS,
-        }),
-        fetchJson<PublicCameraResponse>("/api/public-cameras", {
-          generatedAt: new Date(0).toISOString(),
-          source: [],
-          cameras: [],
-          scoutTargets: [],
-        }),
-        fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots", {
-          generatedAt: new Date(0).toISOString(),
-          summary: "",
-          provider: "",
-          hotspots: [],
-          sources: [],
         }),
         fetchJson<TrafficResponse>("/api/traffic", {
           generatedAt: new Date(0).toISOString(),
@@ -608,17 +581,11 @@ export default function BorderMap({
       setRefugees(Array.isArray(refugeeData) ? refugeeData : []);
       setRainfall(Array.isArray(rainfallData) ? rainfallData : []);
       setAirQuality(Array.isArray(airQualityData) ? airQualityData : []);
-      setDisasterAlerts(Array.isArray(disasterData.alerts) ? disasterData.alerts : []);
-      setMaritimeVessels(Array.isArray(maritimeData.vessels) ? maritimeData.vessels : []);
       setFlights(Array.isArray(flightData) ? flightData : []);
       setBorders(borderData);
       setConflictZones(conflictZoneData);
       setPksbRoutes(pksbTransitData.routes);
       setPksbStops(pksbTransitData.stops);
-      setPublicCameras(publicCameraData.cameras);
-      setTourismHotspots(
-        Array.isArray(tourismHotspotData.hotspots) ? tourismHotspotData.hotspots : [],
-      );
       setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
     };
 

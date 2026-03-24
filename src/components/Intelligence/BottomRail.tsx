@@ -16,13 +16,17 @@ import {
 import { findCorridorById, GOVERNOR_CORRIDORS } from "../../lib/governor-config";
 import type {
   CityVibesResponse,
+  DisasterAlert,
   DisasterFeedResponse,
   ExecutiveStatus,
   GovernorBrief,
   MaritimeSecurityResponse,
+  MaritimeVessel,
   MarineStatusResponse,
   MediaWatchResponse,
+  NarrativeSignal,
   PublicCameraResponse,
+  TourismHotspot,
   TourismHotspotsResponse,
 } from "../../types/dashboard";
 
@@ -58,6 +62,19 @@ export default function BottomRail({
   onSelectCorridor,
 }: BottomRailProps) {
   const [expanded, setExpanded] = useState(false);
+  const compareByStatus = <
+    T extends { status: "intervene" | "watch" | "stable" },
+  >(
+    left: T,
+    right: T,
+  ) => {
+    const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+    return weight[right.status] - weight[left.status];
+  };
+  const compareDisasterAlerts = (left: DisasterAlert, right: DisasterAlert) => {
+    const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+    return weight[right.severity] - weight[left.severity];
+  };
   const corridor = findCorridorById(selectedCorridorId);
   const corridorBrief = brief?.corridorPriorities.find(
     (item) => item.id === selectedCorridorId,
@@ -79,7 +96,7 @@ export default function BottomRail({
         corridor?.aliases.some((alias) =>
           `${item.label} ${item.focusArea}`.toLowerCase().includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus) ?? [];
 
   const leadMarine = corridorMarine[0];
 
@@ -92,7 +109,7 @@ export default function BottomRail({
             .toLowerCase()
             .includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareDisasterAlerts) ?? [];
 
   const corridorVessels =
     maritimeSecurity?.vessels.filter(
@@ -107,7 +124,7 @@ export default function BottomRail({
             .toLowerCase()
             .includes(focusArea.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus as (left: MaritimeVessel, right: MaritimeVessel) => number) ?? [];
 
   const corridorTourismHotspots =
     tourismHotspots?.hotspots.filter(
@@ -118,7 +135,7 @@ export default function BottomRail({
             .toLowerCase()
             .includes(alias.toLowerCase()),
         ),
-    ) ?? [];
+    ).sort(compareByStatus as (left: TourismHotspot, right: TourismHotspot) => number) ?? [];
 
   const vibeCards = cityVibes?.zones ?? [];
   const corridorVibes = corridor
@@ -130,13 +147,25 @@ export default function BottomRail({
           corridor.aliases.some((alias) =>
             `${zone.label} ${zone.summary}`.toLowerCase().includes(alias.toLowerCase()),
           ),
-      )
+      ).sort(compareByStatus)
     : [];
   const featuredVibes = corridorVibes.length > 0 ? corridorVibes : vibeCards.slice(0, 2);
 
-  const narrativeItems = mediaWatch
-    ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare].slice(0, 3)
-    : [];
+  const narrativeItems =
+    mediaWatch && corridor
+      ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare]
+          .filter(
+            (item) =>
+              corridor.focusAreas.includes(item.zone) ||
+              corridor.aliases.some((alias) =>
+                `${item.title} ${item.zone} ${item.summary}`
+                  .toLowerCase()
+                  .includes(alias.toLowerCase()),
+              ),
+          )
+          .sort(compareByStatus as (left: NarrativeSignal, right: NarrativeSignal) => number)
+          .slice(0, 3)
+      : [];
 
   return (
     <section className="shrink-0 border-t border-[var(--line)] bg-[var(--bg-raised)]">

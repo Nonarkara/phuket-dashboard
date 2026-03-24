@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { BookOpen, Database, Network, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type {
   ExecutiveStatus,
   GovernorBrief,
+  PhuketVisitorOriginsResponse,
 } from "../../types/dashboard";
 
 interface PopularityData {
@@ -13,10 +15,13 @@ interface PopularityData {
   sentiment: { positive: number; neutral: number; negative: number };
   mentionCount: number;
   articles: Array<{ title: string; url: string; source: string; tone: string; date: string }>;
+  isFallback?: boolean;
+  sources?: string[];
 }
 
 interface TopBarProps {
   brief: GovernorBrief | null;
+  visitorOrigins: PhuketVisitorOriginsResponse | null;
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
@@ -46,6 +51,7 @@ function statusClasses(status: ExecutiveStatus) {
 
 export default function TopBar({
   brief,
+  visitorOrigins,
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
@@ -85,6 +91,9 @@ export default function TopBar({
   }, []);
 
   const topConcerns = brief?.topConcerns ?? [];
+  const feederOrigins = visitorOrigins?.origins ?? [];
+  const visitorOriginSourceLabel =
+    visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
     <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1 backdrop-blur-xl sm:px-5">
@@ -93,9 +102,27 @@ export default function TopBar({
         <div className="flex min-w-0 items-center gap-3">
           {/* Logos */}
           <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-            <img src="/logos/slic.jpg" alt="SLIC" className="h-6 w-auto rounded-sm" />
-            <img src="/logos/depa.jpg" alt="depa" className="h-6 w-auto rounded-sm" />
-            <img src="/logos/smart-city-thailand.jpg" alt="Smart City Thailand" className="h-6 w-auto rounded-sm" />
+            <Image
+              src="/logos/slic.jpg"
+              alt="SLIC"
+              width={50}
+              height={24}
+              className="h-6 w-auto rounded-sm"
+            />
+            <Image
+              src="/logos/depa.jpg"
+              alt="depa"
+              width={50}
+              height={24}
+              className="h-6 w-auto rounded-sm"
+            />
+            <Image
+              src="/logos/smart-city-thailand.jpg"
+              alt="Smart City Thailand"
+              width={70}
+              height={24}
+              className="h-6 w-auto rounded-sm"
+            />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
           <div className="min-w-0 shrink-0">
@@ -121,7 +148,11 @@ export default function TopBar({
               <button
                 type="button"
                 onClick={() => setShowPopDetail(!showPopDetail)}
-                className="flex items-center gap-2 border border-[var(--line)] px-2.5 py-1 hover:border-[var(--line-bright)] transition-colors"
+                className={`flex items-center gap-2 border px-2.5 py-1 transition-colors ${
+                  popularity.isFallback
+                    ? "border-[#f59e0b] bg-[rgba(245,158,11,0.06)]"
+                    : "border-[var(--line)] hover:border-[var(--line-bright)]"
+                }`}
                 title="Governor public sentiment (social listening)"
               >
                 <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Approval</span>
@@ -146,6 +177,11 @@ export default function TopBar({
                   ) : (
                     <Minus size={10} className="text-[var(--dim)]" />
                   )}
+                  {popularity.isFallback && (
+                    <span className="border border-[#f59e0b] px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] text-[#f59e0b]">
+                      fallback
+                    </span>
+                  )}
                 </div>
               </button>
 
@@ -158,7 +194,11 @@ export default function TopBar({
                     </div>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="text-[20px] font-mono font-bold text-[var(--ink)]">{popularity.score}%</span>
-                      <span className="text-[9px] text-[var(--dim)]">approval (30-day GDELT analysis)</span>
+                      <span className="text-[9px] text-[var(--dim)]">
+                        {popularity.isFallback
+                          ? "fallback reading"
+                          : "approval (30-day GDELT analysis)"}
+                      </span>
                     </div>
                     <div className="mt-2 flex gap-2 text-[8px] font-bold uppercase tracking-wider">
                       <span className="text-[#22c55e]">{popularity.sentiment.positive}% pos</span>
@@ -251,6 +291,46 @@ export default function TopBar({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="mt-1 hidden min-w-0 items-center gap-2 overflow-x-auto border-t border-[var(--line)] pt-1 lg:flex">
+        <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+          Feeder markets
+        </span>
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+          {feederOrigins.length > 0 ? (
+            feederOrigins.map((origin) => (
+              <div
+                key={origin.countryCode}
+                className="flex shrink-0 items-center gap-2 border border-[var(--line)] px-2 py-1"
+              >
+                <Image
+                  src={origin.logo}
+                  alt={origin.country}
+                  width={14}
+                  height={14}
+                  className="h-3.5 w-3.5"
+                />
+                <div className="leading-tight">
+                  <div className="text-[9px] font-semibold text-[var(--ink)]">
+                    {origin.rank}. {origin.country}
+                  </div>
+                  <div className="text-[8px] font-mono text-[var(--dim)]">
+                    GDP/cap ${origin.gdpPerCapitaUsd ? Math.round(origin.gdpPerCapitaUsd).toLocaleString("en-US") : "--"}
+                    {origin.year ? ` • ${origin.year}` : ""}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="border border-[var(--line)] px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              Loading visitor origins
+            </div>
+          )}
+        </div>
+        <span className="shrink-0 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
+          {visitorOriginSourceLabel}
+        </span>
       </div>
     </header>
   );

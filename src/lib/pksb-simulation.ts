@@ -17,17 +17,6 @@ interface StopCoord {
   no: number;
 }
 
-interface RouteConfig {
-  id: string;
-  label: string;
-  color: string;
-  stops: StopCoord[];
-  startHour: number;
-  endHour: number;
-  frequencyMinutes: number;
-  licensePlates: string[];
-}
-
 interface SimulatedBus {
   id: string;
   routeId: string;

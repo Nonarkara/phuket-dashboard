@@ -45,6 +45,7 @@ interface PopularityResponse {
   };
   mentionCount: number;
   period: string;
+  isFallback: boolean;
   articles: Array<{
     title: string;
     url: string;
@@ -100,6 +101,7 @@ function getFallback(): PopularityResponse {
     sentiment: { positive: 38, neutral: 45, negative: 17 },
     mentionCount: 0,
     period: "30 days",
+    isFallback: true,
     articles: [],
     sources: ["GDELT DOC 2.0 (offline)"],
   };
@@ -160,6 +162,7 @@ export async function GET() {
     },
     mentionCount: totalMentions || articles.length,
     period: "30 days",
+    isFallback: false,
     articles: articles.map((a) => ({
       title: a.title!,
       url: a.url!,

@@ -15,6 +15,7 @@ import type {
   GovernorScenarioId,
   MaritimeSecurityResponse,
   MaritimeVessel,
+  PackageStatus,
   TourismHotspot,
   TourismHotspotsResponse,
 } from "../types/dashboard";
@@ -380,6 +381,11 @@ function buildScenarioDisasterFeed(
       layers: buildDisasterLayers(),
       rainfallNodes: 7,
       sources: ["Scenario / TMD / NDWC", "GISTDA layer catalog", "Rainfall fallback"],
+      providerHealth: {
+        gistda: "stale",
+        nsdc: "stale",
+        tmd: "live",
+      },
     };
   }
 
@@ -406,6 +412,11 @@ function buildScenarioDisasterFeed(
       layers: buildDisasterLayers(),
       rainfallNodes: 4,
       sources: ["Scenario / TMD / NDWC", "GISTDA layer catalog", "Rainfall fallback"],
+      providerHealth: {
+        gistda: "stale",
+        nsdc: "stale",
+        tmd: "live",
+      },
     };
   }
 
@@ -431,6 +442,11 @@ function buildScenarioDisasterFeed(
     layers: buildDisasterLayers(),
     rainfallNodes: 3,
     sources: ["Scenario / TMD / NDWC", "GISTDA layer catalog", "Rainfall fallback"],
+    providerHealth: {
+      gistda: "stale",
+      nsdc: "stale",
+      tmd: "live",
+    },
   };
 }
 
@@ -558,17 +574,23 @@ function extractFeatureCoordinates(item: Record<string, unknown>) {
   return { lat, lng };
 }
 
-async function fetchGistdaDisasterAlerts() {
+async function fetchGistdaDisasterAlerts(): Promise<{
+  alerts: DisasterAlert[];
+  health: PackageStatus;
+}> {
   const url = process.env.GISTDA_DISASTER_FEED_URL;
 
   if (!url) {
-    return [];
+    return { alerts: [] as DisasterAlert[], health: "stale" as PackageStatus };
   }
 
   const payload = await fetchJsonWithTimeout<unknown>(url, undefined, 9000);
+  if (!payload) {
+    return { alerts: [] as DisasterAlert[], health: "offline" as PackageStatus };
+  }
   const objects = extractObjectList(payload);
 
-  return objects
+  const alerts = objects
     .flatMap((item, index): DisasterAlert[] => {
       const position = extractFeatureCoordinates(item);
       const rawTitle =
@@ -622,6 +644,11 @@ async function fetchGistdaDisasterAlerts() {
       item.lng <= ANDAMAN_BOUNDS.maxLng,
     )
     .slice(0, 6);
+
+  return {
+    alerts,
+    health: alerts.length > 0 ? "live" : "stale",
+  };
 }
 
 export async function loadDisasterFeed(
@@ -633,15 +660,18 @@ export async function loadDisasterFeed(
     return buildScenarioDisasterFeed(scenario);
   }
 
-  const [tmdAlerts, gistdaAlerts] = await Promise.all([
+  const [tmdAlerts, gistdaResult] = await Promise.all([
     fetchTmdDisasterAlerts(),
     fetchGistdaDisasterAlerts(),
   ]);
-  const alerts = [...gistdaAlerts, ...tmdAlerts]
+  const alerts = [...gistdaResult.alerts, ...tmdAlerts]
     .sort((left, right) => STATUS_WEIGHT[right.severity] - STATUS_WEIGHT[left.severity])
     .slice(0, 8);
   const posture = topStatus(alerts.map((alert) => alert.severity));
   const configuredLayers = buildDisasterLayers();
+  const tmdHealth: PackageStatus = tmdAlerts.some((alert) => alert.source === "TMD Open Data")
+    ? "live"
+    : "stale";
 
   return {
     generatedAt: new Date().toISOString(),
@@ -660,6 +690,11 @@ export async function loadDisasterFeed(
       ...configuredLayers.map((layer) => layer.source),
       "Rainfall fallback",
     ]),
+    providerHealth: {
+      gistda: gistdaResult.health,
+      nsdc: process.env.GISTDA_STAC_URL ? gistdaResult.health : "offline",
+      tmd: tmdHealth,
+    },
   };
 }
 
@@ -796,6 +831,7 @@ function buildScenarioMaritimeSecurity(
       "Khao Lak coastal approaches",
     ],
     sources: [provider],
+    providerHealth: "live",
   };
 }
 
@@ -1138,6 +1174,7 @@ function buildScenarioTourismHotspots(
           : "Tourism hotspots have cooled into a manageable recovery posture.",
     hotspots,
     sources: [provider],
+    providerHealth: "live",
   };
 }
 
@@ -1338,6 +1375,12 @@ export async function loadTourismHotspots(
           : "Tourism hotspots are active but broadly steady across Phuket and the near Andaman ring.",
     hotspots,
     sources: [provider],
+    providerHealth:
+      provider === "Curated TAT / governor fallback"
+        ? "stale"
+        : hotspots.some((hotspot) => hotspot.source === provider)
+          ? "live"
+          : "stale",
   };
 }
 
@@ -1351,12 +1394,6 @@ export function buildWarRoomSourceEntries({
   tourism: TourismHotspotsResponse;
 }): ApiSourceEntry[] {
   const checkedAt = new Date().toISOString();
-  const gistdaConfigured = disaster.layers.some(
-    (layer) => layer.source.startsWith("GISTDA") && layer.configured,
-  );
-  const tatLive = tourism.provider.includes("TAT Data API");
-  const maritimeLive =
-    maritime.provider.includes("MarineTraffic") || maritime.provider.includes("AISHub");
 
   return [
     {
@@ -1366,7 +1403,7 @@ export function buildWarRoomSourceEntries({
         DEFAULT_GISTDA_PORTAL_URL,
       kind: "external",
       target: "GISTDA",
-      health: gistdaConfigured ? "live" : "stale",
+      health: disaster.providerHealth?.gistda ?? "stale",
       checkedAt,
     },
     {
@@ -1376,7 +1413,7 @@ export function buildWarRoomSourceEntries({
         DEFAULT_GISTDA_NSDC_URL,
       kind: "external",
       target: "GISTDA NSDC",
-      health: gistdaConfigured ? "live" : "offline",
+      health: disaster.providerHealth?.nsdc ?? "offline",
       checkedAt,
     },
     {
@@ -1386,7 +1423,7 @@ export function buildWarRoomSourceEntries({
         TMD_WARNING_URL,
       kind: "external",
       target: "TMD / NDWC",
-      health: disaster.alerts.length > 0 ? "live" : "stale",
+      health: disaster.providerHealth?.tmd ?? "stale",
       checkedAt,
     },
     {
@@ -1398,7 +1435,7 @@ export function buildWarRoomSourceEntries({
         "https://www.aishub.net/api",
       kind: "external",
       target: maritime.provider,
-      health: maritimeLive ? "live" : maritime.vessels.length > 0 ? "stale" : "offline",
+      health: maritime.providerHealth ?? "stale",
       checkedAt,
     },
     {
@@ -1407,7 +1444,7 @@ export function buildWarRoomSourceEntries({
       url: process.env.TAT_DATA_API_URL || DEFAULT_TAT_PORTAL_URL,
       kind: "external",
       target: "Tourism Authority of Thailand",
-      health: tatLive ? "live" : tourism.hotspots.length > 0 ? "stale" : "offline",
+      health: tourism.providerHealth ?? "stale",
       checkedAt,
     },
     {
@@ -1416,7 +1453,7 @@ export function buildWarRoomSourceEntries({
       url: DEFAULT_GDELT_URL,
       kind: "external",
       target: "GDELT",
-      health: "live",
+      health: "stale",
       checkedAt,
     },
     {
@@ -1425,7 +1462,7 @@ export function buildWarRoomSourceEntries({
       url: DEFAULT_GOOGLE_TRENDS_URL,
       kind: "external",
       target: "Google Trends",
-      health: "live",
+      health: "stale",
       checkedAt,
     },
     {

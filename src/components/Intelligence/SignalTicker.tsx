@@ -30,7 +30,12 @@ export default function SignalTicker({
 }: SignalTickerProps) {
   const topMarine = marine?.corridors[0];
   const topVibe = cityVibes?.zones[0];
-  const topMood = mediaWatch?.peopleTalkAbout[0] ?? mediaWatch?.peopleShare[0];
+  const topMood = mediaWatch
+    ? [...mediaWatch.peopleTalkAbout, ...mediaWatch.peopleShare].sort((left, right) => {
+        const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+        return weight[right.status] - weight[left.status];
+      })[0]
+    : null;
 
   const items = [
     {

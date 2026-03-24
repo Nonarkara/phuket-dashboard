@@ -20,11 +20,18 @@ function statusClasses(status: ExecutiveStatus) {
 }
 
 export default function NewsDesk({ mediaWatch, brief }: NewsDeskProps) {
+  const compareByStatus = (
+    left: { status: ExecutiveStatus },
+    right: { status: ExecutiveStatus },
+  ) => {
+    const weight = { intervene: 3, watch: 2, stable: 1 } as const;
+    return weight[right.status] - weight[left.status];
+  };
   const narrativeItems = mediaWatch
     ? [
-        ...mediaWatch.peopleTalkAbout.slice(0, 2),
-        ...mediaWatch.peopleShare.slice(0, 2),
-        ...mediaWatch.broadcastWatch.slice(0, 1),
+        ...[...mediaWatch.peopleTalkAbout].sort(compareByStatus).slice(0, 2),
+        ...[...mediaWatch.peopleShare].sort(compareByStatus).slice(0, 2),
+        ...[...mediaWatch.broadcastWatch].sort(compareByStatus).slice(0, 1),
       ]
     : [];
 

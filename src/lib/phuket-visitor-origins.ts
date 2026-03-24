@@ -114,6 +114,8 @@ export async function loadPhuketVisitorOrigins(): Promise<PhuketVisitorOriginsRe
   return {
     generatedAt: new Date().toISOString(),
     origins: results,
-    sources: Array.from(new Set(results.map((origin) => origin.source))),
+    sources: Array.from(
+      new Set(["Curated Phuket feeder ranking", ...results.map((origin) => origin.source)]),
+    ),
   };
 }

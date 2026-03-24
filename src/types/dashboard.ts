@@ -724,6 +724,11 @@ export interface DisasterFeedResponse {
   layers: DisasterLayerDescriptor[];
   rainfallNodes: number;
   sources: string[];
+  providerHealth?: {
+    gistda: PackageStatus;
+    nsdc: PackageStatus;
+    tmd: PackageStatus;
+  };
 }
 
 export interface MaritimeVessel {
@@ -750,6 +755,7 @@ export interface MaritimeSecurityResponse {
   vessels: MaritimeVessel[];
   chokepoints: string[];
   sources: string[];
+  providerHealth?: PackageStatus;
 }
 
 export interface TourismHotspot {
@@ -772,4 +778,5 @@ export interface TourismHotspotsResponse {
   provider: string;
   hotspots: TourismHotspot[];
   sources: string[];
+  providerHealth?: PackageStatus;
 }

@@ -16,6 +16,7 @@ import type {
   MaritimeSecurityResponse,
   MarineStatusResponse,
   MediaWatchResponse,
+  PhuketVisitorOriginsResponse,
   ProvinceSelection,
   PublicCameraResponse,
   TourismHotspotsResponse,
@@ -53,6 +54,8 @@ export default function Dashboard() {
   const [cameraPayload, setCameraPayload] = useState<PublicCameraResponse | null>(
     null,
   );
+  const [visitorOrigins, setVisitorOrigins] =
+    useState<PhuketVisitorOriginsResponse | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -65,6 +68,7 @@ export default function Dashboard() {
         nextCityVibes,
         nextMediaWatch,
         nextCameras,
+        nextVisitorOrigins,
       ] =
         await Promise.all([
           fetchJson<GovernorBrief>("/api/governor/brief"),
@@ -75,6 +79,7 @@ export default function Dashboard() {
           fetchJson<CityVibesResponse>("/api/city-vibes"),
           fetchJson<MediaWatchResponse>("/api/media-watch"),
           fetchJson<PublicCameraResponse>("/api/public-cameras"),
+          fetchJson<PhuketVisitorOriginsResponse>("/api/visitor-origins"),
         ]);
 
       if (nextBrief) setBrief(nextBrief);
@@ -85,6 +90,7 @@ export default function Dashboard() {
       if (nextCityVibes) setCityVibes(nextCityVibes);
       if (nextMediaWatch) setMediaWatch(nextMediaWatch);
       if (nextCameras) setCameraPayload(nextCameras);
+      if (nextVisitorOrigins) setVisitorOrigins(nextVisitorOrigins);
     };
 
     void load();
@@ -120,6 +126,7 @@ export default function Dashboard() {
     >
       <TopBar
         brief={brief}
+        visitorOrigins={visitorOrigins}
         onOpenManual={openManual}
         onOpenArchitecture={openArchitecture}
         onOpenDataExplorer={openDataExplorer}
@@ -138,6 +145,10 @@ export default function Dashboard() {
             onProvinceSelect={setSelectedProvince}
             selectedCorridorId={selectedCorridorId}
             onCorridorSelect={setSelectedCorridorId}
+            disasterFeed={disaster}
+            maritimeSecurityFeed={maritimeSecurity}
+            cameraFeed={cameraPayload}
+            tourismFeed={tourismHotspots}
           />
         </div>
       </section>

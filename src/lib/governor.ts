@@ -100,6 +100,10 @@ function compareByStatus<T extends { status: ExecutiveStatus }>(left: T, right: 
   return STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status];
 }
 
+function compareDisasterAlerts(left: DisasterAlert, right: DisasterAlert) {
+  return STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity];
+}
+
 function formatCompact(value: number) {
   return new Intl.NumberFormat("en-US", {
     notation: "compact",
@@ -1034,12 +1038,12 @@ export async function loadCityVibes(
         zone.aliases.some((alias) =>
           corridor.focusArea.toLowerCase().includes(alias.toLowerCase()),
         ),
-    );
+    ).sort(compareByStatus);
     const zoneSignals = allSignals.filter(
       (signal) =>
         signal.zone === zone.label ||
         matchAny(`${signal.title} ${signal.summary} ${signal.zone}`, zone.aliases),
-    );
+    ).sort(compareByStatus);
     const zoneIncidents = incidents.filter((incident) =>
       matchAny(
         `${incident.properties.location} ${incident.properties.notes} ${incident.properties.title}`,
@@ -1134,14 +1138,12 @@ function describeCorridorLead(
   vibeCards: CityVibeCard[],
   signals: NarrativeSignal[],
 ) {
-  const disasterLead = disasterAlerts.sort(
-    (left, right) => STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity],
-  )[0];
-  const maritimeLead = maritimeContacts.sort(compareByStatus)[0];
-  const marineLead = marineCorridors.sort(compareByStatus)[0];
-  const tourismLead = tourismHotspots.sort(compareByStatus)[0];
-  const vibeLead = vibeCards.sort(compareByStatus)[0];
-  const narrativeLead = signals.sort(compareByStatus)[0];
+  const disasterLead = [...disasterAlerts].sort(compareDisasterAlerts)[0];
+  const maritimeLead = [...maritimeContacts].sort(compareByStatus)[0];
+  const marineLead = [...marineCorridors].sort(compareByStatus)[0];
+  const tourismLead = [...tourismHotspots].sort(compareByStatus)[0];
+  const vibeLead = [...vibeCards].sort(compareByStatus)[0];
+  const narrativeLead = [...signals].sort(compareByStatus)[0];
 
   return disasterLead?.severity === "intervene"
     ? disasterLead.summary
@@ -1192,7 +1194,7 @@ function buildCorridorPriorities({
       (alert) =>
         corridor.focusAreas.includes(alert.area) ||
         matchAny(`${alert.title} ${alert.summary} ${alert.area}`, corridor.aliases),
-    );
+    ).sort(compareDisasterAlerts);
     const maritimeContacts = maritimeSecurity.vessels.filter(
       (vessel) =>
         matchAny(
@@ -1204,17 +1206,17 @@ function buildCorridorPriorities({
             .toLowerCase()
             .includes(focusArea.toLowerCase()),
         ),
-    );
+    ).sort(compareByStatus);
     const marineCorridors = marine.corridors.filter(
       (item) =>
         corridor.focusAreas.includes(item.focusArea) ||
         matchAny(`${item.label} ${item.locationLabel} ${item.focusArea}`, corridor.aliases),
-    );
+    ).sort(compareByStatus);
     const vibeCards = cityVibes.zones.filter(
       (zone) =>
         corridor.focusAreas.some((focusArea) => zone.label.includes(focusArea)) ||
         matchAny(`${zone.label} ${zone.summary} ${zone.whyNow}`, corridor.aliases),
-    );
+    ).sort(compareByStatus);
     const tourismNodes = tourismHotspots.hotspots.filter(
       (hotspot) =>
         corridor.focusAreas.includes(hotspot.area) ||
@@ -1222,12 +1224,12 @@ function buildCorridorPriorities({
           `${hotspot.label} ${hotspot.area} ${hotspot.summary} ${hotspot.strategicNote}`,
           corridor.aliases,
         ),
-    );
+    ).sort(compareByStatus);
     const signals = allSignals.filter(
       (signal) =>
         matchAny(`${signal.title} ${signal.summary} ${signal.zone}`, corridor.aliases) ||
         corridor.focusAreas.includes(signal.zone),
-    );
+    ).sort(compareByStatus);
     const corridorIncidents = incidents.filter((incident) =>
       matchAny(
         `${incident.properties.location} ${incident.properties.notes} ${incident.properties.title}`,
