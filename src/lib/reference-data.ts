@@ -278,25 +278,35 @@ export async function fetchAseanGdpSnapshot(): Promise<AseanGdpDatum[]> {
 
 export async function fetchReferenceApiCatalog(): Promise<ApiSourceResponse> {
   // Standalone: return local API catalog without external dashboard dependency
+  const generatedAt = new Date().toISOString();
   const sources = [
-    { id: "fx-rates", label: "FX Rates", url: DEFAULT_FX_RATES_URL, kind: "external", target: "Market Data" },
-    { id: "binance-btc", label: "Binance BTC/USD", url: DEFAULT_BINANCE_TICKER_URL, kind: "external", target: "Market Data" },
-    { id: "world-bank-gdp", label: "World Bank GDP", url: DEFAULT_WORLD_BANK_API_URL, kind: "external", target: "Economic Data" },
-    { id: "usgs-earthquakes", label: "USGS Earthquakes", url: "https://earthquake.usgs.gov/fdsnws/event/1/query", kind: "external", target: "Global Feeds" },
-    { id: "nasa-eonet", label: "NASA EONET", url: "https://eonet.gsfc.nasa.gov/api/v2.1/events", kind: "external", target: "Global Feeds" },
-    { id: "open-meteo-flood", label: "Open-Meteo Flood", url: "https://flood-api.open-meteo.com/v1/flood", kind: "external", target: "Global Feeds" },
-    { id: "reliefweb", label: "ReliefWeb", url: "https://api.reliefweb.int/v1/reports", kind: "external", target: "Global Feeds" },
-    { id: "gdacs", label: "GDACS Disasters", url: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH", kind: "external", target: "Global Feeds" },
-    { id: "satellite-toolkit", label: "DrNon Global Satellite Toolkit", url: "https://github.com/Nonarkara/DrNon-Global-Satellite-Toolkit", kind: "toolkit", target: "Satellite Imagery" },
-    { id: "nasa-firms", label: "NASA FIRMS Fire Detection", url: "https://firms.modaps.eosdis.nasa.gov/api/", kind: "external", target: "Satellite Imagery" },
-    { id: "eox-sentinel2", label: "EOX Sentinel-2 Cloudless", url: "https://tiles.maps.eox.at/wmts", kind: "external", target: "Satellite Imagery" },
-    { id: "jrc-water", label: "JRC Global Surface Water", url: "https://storage.googleapis.com/global-surface-water/tiles2021/occurrence", kind: "external", target: "Satellite Imagery" },
-    { id: "emodnet-bathy", label: "EMODnet Bathymetry", url: "https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator", kind: "external", target: "Satellite Imagery" },
+    { id: "fx-rates", label: "FX Rates", url: DEFAULT_FX_RATES_URL, kind: "external", target: "Market Data", classification: "reference" as const },
+    { id: "binance-btc", label: "Binance BTC/USD", url: DEFAULT_BINANCE_TICKER_URL, kind: "external", target: "Market Data", classification: "reference" as const },
+    { id: "world-bank-gdp", label: "World Bank GDP", url: DEFAULT_WORLD_BANK_API_URL, kind: "external", target: "Economic Data", classification: "reference" as const },
+    { id: "usgs-earthquakes", label: "USGS Earthquakes", url: "https://earthquake.usgs.gov/fdsnws/event/1/query", kind: "external", target: "Global Feeds", classification: "reference" as const },
+    { id: "nasa-eonet", label: "NASA EONET", url: "https://eonet.gsfc.nasa.gov/api/v2.1/events", kind: "external", target: "Global Feeds", classification: "reference" as const },
+    { id: "open-meteo-flood", label: "Open-Meteo Flood", url: "https://flood-api.open-meteo.com/v1/flood", kind: "external", target: "Global Feeds", classification: "reference" as const },
+    { id: "reliefweb", label: "ReliefWeb", url: "https://api.reliefweb.int/v1/reports", kind: "external", target: "Global Feeds", classification: "reference" as const },
+    { id: "gdacs", label: "GDACS Disasters", url: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH", kind: "external", target: "Global Feeds", classification: "reference" as const },
+    { id: "satellite-toolkit", label: "DrNon Global Satellite Toolkit", url: "https://github.com/Nonarkara/DrNon-Global-Satellite-Toolkit", kind: "toolkit", target: "Satellite Imagery", classification: "reference" as const },
+    { id: "nasa-firms", label: "NASA FIRMS Fire Detection", url: "https://firms.modaps.eosdis.nasa.gov/api/", kind: "external", target: "Satellite Imagery", classification: "reference" as const },
+    { id: "eox-sentinel2", label: "EOX Sentinel-2 Cloudless", url: "https://tiles.maps.eox.at/wmts", kind: "external", target: "Satellite Imagery", classification: "reference" as const },
+    { id: "jrc-water", label: "JRC Global Surface Water", url: "https://storage.googleapis.com/global-surface-water/tiles2021/occurrence", kind: "external", target: "Satellite Imagery", classification: "reference" as const },
+    { id: "emodnet-bathy", label: "EMODnet Bathymetry", url: "https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator", kind: "external", target: "Satellite Imagery", classification: "reference" as const },
   ];
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     sources,
+    freshness: {
+      checkedAt: generatedAt,
+      observedAt: null,
+      ageMinutes: null,
+      maxAgeMinutes: 24 * 60,
+      isFresh: false,
+      fallbackTier: "reference",
+      sourceIds: ["Phuket Dashboard reference catalog"],
+    },
   };
 }
 

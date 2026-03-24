@@ -22,6 +22,7 @@
     "@luma.gl/core": "9.2.6",
     "@luma.gl/engine": "9.2.6",
     "@luma.gl/webgl": "9.2.6",
+    "@supabase/supabase-js": "^2.100.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",

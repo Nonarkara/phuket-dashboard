@@ -4,7 +4,7 @@ import {
   MARINE_POINTS,
   textMatchesAliases,
 } from "./governor-config";
-import { fallbackRainfall } from "./mock-data";
+import { buildFreshness, summarizeFreshness } from "./freshness";
 import type {
   ApiSourceEntry,
   Coordinates,
@@ -15,6 +15,7 @@ import type {
   GovernorScenarioId,
   MaritimeSecurityResponse,
   MaritimeVessel,
+  MediaWatchResponse,
   PackageStatus,
   TourismHotspot,
   TourismHotspotsResponse,
@@ -154,6 +155,36 @@ async function fetchTextWithTimeout(url: string, timeoutMs = 8000) {
     return await response.text();
   } catch {
     return null;
+  }
+}
+
+async function probeSourceHealth(url: string, timeoutMs = 8000) {
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        Accept: "text/html,application/json,text/plain,*/*",
+        "User-Agent": "PhuketGovernorWarRoom/1.0",
+      },
+      cache: "no-store",
+    });
+
+    const lastModified = response.headers.get("last-modified");
+
+    return {
+      health: response.ok ? ("live" as const) : ("offline" as const),
+      checkedAt,
+      observedAt: lastModified ? new Date(lastModified).toISOString() : checkedAt,
+    };
+  } catch {
+    return {
+      health: "offline" as const,
+      checkedAt,
+      observedAt: null,
+    };
   }
 }
 
@@ -386,6 +417,12 @@ function buildScenarioDisasterFeed(
         nsdc: "stale",
         tmd: "live",
       },
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario / TMD / NDWC"],
+      }),
     };
   }
 
@@ -417,6 +454,12 @@ function buildScenarioDisasterFeed(
         nsdc: "stale",
         tmd: "live",
       },
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario / TMD / NDWC"],
+      }),
     };
   }
 
@@ -447,39 +490,24 @@ function buildScenarioDisasterFeed(
       nsdc: "stale",
       tmd: "live",
     },
+    freshness: buildFreshness({
+      checkedAt: generatedAt,
+      observedAt: generatedAt,
+      fallbackTier: "scenario",
+      sourceIds: ["Scenario / TMD / NDWC"],
+    }),
   };
 }
 
-async function fetchTmdDisasterAlerts() {
+async function fetchTmdDisasterAlerts(): Promise<{
+  alerts: DisasterAlert[];
+  health: PackageStatus;
+}> {
+  const checkedAt = new Date().toISOString();
   const payloadText = await fetchTextWithTimeout(TMD_WARNING_URL);
 
   if (!payloadText) {
-    return [
-      {
-        id: "tmd-fallback-1",
-        title: "Andaman monsoon watch",
-        severity: "watch" as const,
-        area: "Patong coast",
-        summary:
-          "TMD fallback wording keeps west-coast beach safety and rough-sea awareness on watch.",
-        lat: 7.8964,
-        lng: 98.2961,
-        issuedAt: new Date().toISOString(),
-        source: "TMD Open Data fallback",
-      },
-      {
-        id: "tmd-fallback-2",
-        title: "Northbound runoff watch",
-        severity: "watch" as const,
-        area: "Khao Lak",
-        summary:
-          "Rainfall fallback keeps coach access and beach safety north of Phuket under watch.",
-        lat: 8.6367,
-        lng: 98.2487,
-        issuedAt: new Date().toISOString(),
-        source: "TMD Open Data fallback",
-      },
-    ] satisfies DisasterAlert[];
+    return { alerts: [], health: "offline" };
   }
 
   const payload = safeJsonParse(payloadText) ?? payloadText;
@@ -494,35 +522,11 @@ async function fetchTmdDisasterAlerts() {
   ).slice(0, 6);
 
   if (entries.length === 0) {
-    return [
-      {
-        id: "tmd-fallback-1",
-        title: "Andaman monsoon watch",
-        severity: "watch" as const,
-        area: "Patong coast",
-        summary:
-          "TMD fallback wording keeps west-coast beach safety and rough-sea awareness on watch.",
-        lat: 7.8964,
-        lng: 98.2961,
-        issuedAt: new Date().toISOString(),
-        source: "TMD Open Data fallback",
-      },
-      {
-        id: "tmd-fallback-2",
-        title: "Northbound runoff watch",
-        severity: "watch" as const,
-        area: "Khao Lak",
-        summary:
-          "Rainfall fallback keeps coach access and beach safety north of Phuket under watch.",
-        lat: 8.6367,
-        lng: 98.2487,
-        issuedAt: new Date().toISOString(),
-        source: "TMD Open Data fallback",
-      },
-    ] satisfies DisasterAlert[];
+    return { alerts: [], health: "stale" };
   }
 
-  return entries.map((entry, index) => {
+  return {
+    alerts: entries.map((entry, index) => {
     const area = findAreaMatch(entry);
 
     return {
@@ -533,10 +537,18 @@ async function fetchTmdDisasterAlerts() {
       summary: entry,
       lat: area.center[1],
       lng: area.center[0],
-      issuedAt: new Date().toISOString(),
+      issuedAt: checkedAt,
       source: "TMD Open Data",
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: checkedAt,
+        fallbackTier: "live",
+        sourceIds: ["TMD Open Data"],
+      }),
     } satisfies DisasterAlert;
-  });
+    }),
+    health: "live",
+  };
 }
 
 function extractFeatureCoordinates(item: Record<string, unknown>) {
@@ -578,6 +590,7 @@ async function fetchGistdaDisasterAlerts(): Promise<{
   alerts: DisasterAlert[];
   health: PackageStatus;
 }> {
+  const checkedAt = new Date().toISOString();
   const url = process.env.GISTDA_DISASTER_FEED_URL;
 
   if (!url) {
@@ -631,9 +644,23 @@ async function fetchGistdaDisasterAlerts(): Promise<{
               ? item.updatedAt
               : typeof item.timestamp === "string"
                 ? item.timestamp
-                : new Date().toISOString(),
+                : checkedAt,
           source: "GISTDA Disaster API",
           url: typeof item.url === "string" ? item.url : undefined,
+          freshness: buildFreshness({
+            checkedAt,
+            observedAt:
+              typeof item.updatedAt === "string"
+                ? item.updatedAt
+                : typeof item.timestamp === "string"
+                  ? item.timestamp
+                  : null,
+            fallbackTier:
+              typeof item.updatedAt === "string" || typeof item.timestamp === "string"
+                ? "live"
+                : "unavailable",
+            sourceIds: ["GISTDA Disaster API"],
+          }),
         } satisfies DisasterAlert,
       ];
     })
@@ -660,41 +687,53 @@ export async function loadDisasterFeed(
     return buildScenarioDisasterFeed(scenario);
   }
 
-  const [tmdAlerts, gistdaResult] = await Promise.all([
+  const checkedAt = new Date().toISOString();
+  const [tmdResult, gistdaResult] = await Promise.all([
     fetchTmdDisasterAlerts(),
     fetchGistdaDisasterAlerts(),
   ]);
-  const alerts = [...gistdaResult.alerts, ...tmdAlerts]
+  const alerts = [...gistdaResult.alerts, ...tmdResult.alerts]
     .sort((left, right) => STATUS_WEIGHT[right.severity] - STATUS_WEIGHT[left.severity])
     .slice(0, 8);
   const posture = topStatus(alerts.map((alert) => alert.severity));
   const configuredLayers = buildDisasterLayers();
-  const tmdHealth: PackageStatus = tmdAlerts.some((alert) => alert.source === "TMD Open Data")
-    ? "live"
-    : "stale";
+  const tmdHealth: PackageStatus = tmdResult.health;
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     posture,
     summary:
-      posture === "intervene"
+      alerts.length === 0
+        ? "Disaster sources are missing fresh Phuket-area warnings right now. Keep layers available, but do not infer a quiet posture from missing data."
+        : posture === "intervene"
         ? `Disaster posture is elevated across Phuket-linked corridors with ${alerts.filter((alert) => alert.severity !== "stable").length} active warnings to clear today.`
         : posture === "watch"
           ? `Weather and warning posture is elevated but manageable with targeted checks across beaches, piers, and northbound access.`
           : `Disaster posture is broadly steady with only light warning pressure in the Phuket-Andaman operating area.`,
     alerts,
     layers: configuredLayers,
-    rainfallNodes: fallbackRainfall.length,
+    rainfallNodes: null,
     sources: uniqueStrings([
       ...alerts.map((alert) => alert.source),
       ...configuredLayers.map((layer) => layer.source),
-      "Rainfall fallback",
     ]),
     providerHealth: {
       gistda: gistdaResult.health,
       nsdc: process.env.GISTDA_STAC_URL ? gistdaResult.health : "offline",
       tmd: tmdHealth,
     },
+    freshness: summarizeFreshness(
+      [
+        ...alerts.map((alert) => alert.freshness),
+        buildFreshness({
+          checkedAt,
+          observedAt: alerts[0]?.issuedAt ?? null,
+          fallbackTier: alerts.length > 0 ? "live" : "unavailable",
+          sourceIds: ["GISTDA Disaster API", "TMD Open Data"],
+        }),
+      ],
+      checkedAt,
+    ),
   };
 }
 
@@ -832,90 +871,13 @@ function buildScenarioMaritimeSecurity(
     ],
     sources: [provider],
     providerHealth: "live",
+    freshness: buildFreshness({
+      checkedAt: generatedAt,
+      observedAt: generatedAt,
+      fallbackTier: "scenario",
+      sourceIds: [provider],
+    }),
   };
-}
-
-function buildFallbackMaritimeVessels(provider: string, generatedAt: string) {
-  return [
-    {
-      id: "fallback-rassada-ferry",
-      name: "Rassada Ferry 07",
-      type: "ferry",
-      lat: 7.8795,
-      lng: 98.4213,
-      speedKnots: 1.1,
-      heading: 78,
-      lastSeen: generatedAt,
-      flag: "TH",
-      destination: "Phi Phi",
-      source: provider,
-      strategicNote:
-        "Use this lane to read ferry density and whether queueing is building into island access pressure.",
-    },
-    {
-      id: "fallback-ao-po-anchorage",
-      name: "Ao Po Marina Anchorage",
-      type: "passenger",
-      lat: 8.0708,
-      lng: 98.459,
-      speedKnots: 2.4,
-      heading: 10,
-      lastSeen: generatedAt,
-      flag: "SG",
-      destination: "Ao Po Marina",
-      source: provider,
-      strategicNote:
-        "Anchorage pressure at Ao Po is a good proxy for premium marine tourism tempo and marina congestion.",
-    },
-    {
-      id: "fallback-patong-patrol",
-      name: "West Beach Patrol",
-      type: "patrol",
-      lat: 7.898,
-      lng: 98.286,
-      speedKnots: 12.3,
-      heading: 164,
-      lastSeen: generatedAt,
-      flag: "TH",
-      destination: "Patong coast",
-      source: provider,
-      strategicNote:
-        "Patrol presence supports beach-safety enforcement and visible reassurance during rough-sea periods.",
-    },
-    {
-      id: "fallback-khaolak-fishing",
-      name: "Unknown Fishing Contact",
-      type: "fishing",
-      lat: 8.611,
-      lng: 98.198,
-      speedKnots: 1.5,
-      heading: 232,
-      lastSeen: generatedAt,
-      flag: null,
-      destination: "Khao Lak coast",
-      source: provider,
-      strategicNote:
-        "Slow movement near the northbound coast is worth checking for loitering or unplanned small-boat activity.",
-    },
-    {
-      id: "fallback-ao-nang-passenger",
-      name: "Ao Nang Passenger Run",
-      type: "passenger",
-      lat: 8.031,
-      lng: 98.826,
-      speedKnots: 6.4,
-      heading: 95,
-      lastSeen: generatedAt,
-      flag: "TH",
-      destination: "Ao Nang",
-      source: provider,
-      strategicNote:
-        "Ao Nang movement is a useful proxy for Krabi-side tour tempo feeding Phuket's shared visitor ecosystem.",
-    },
-  ].map((vessel) => ({
-    ...vessel,
-    status: statusFromVessel(vessel),
-  })) satisfies MaritimeVessel[];
 }
 
 async function fetchMaritimeVessels() {
@@ -923,18 +885,26 @@ async function fetchMaritimeVessels() {
   const marineTrafficKey = process.env.MARINETRAFFIC_API_KEY;
   const aishubUrl = process.env.AISHUB_API_URL;
   const aishubKey = process.env.AISHUB_API_KEY;
+  const checkedAt = new Date().toISOString();
   const provider = marineTrafficUrl
     ? "MarineTraffic AIS"
     : aishubUrl
       ? "AISHub"
-      : "Fallback AIS pattern model";
+      : "AIS provider unavailable";
   const url = marineTrafficUrl || aishubUrl;
   const apiKey = marineTrafficKey || aishubKey;
 
   if (!url) {
     return {
       provider,
-      vessels: buildFallbackMaritimeVessels(provider, new Date().toISOString()),
+      vessels: [] as MaritimeVessel[],
+      providerHealth: "offline" as PackageStatus,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: [provider],
+      }),
     };
   }
 
@@ -952,7 +922,7 @@ async function fetchMaritimeVessels() {
     10000,
   );
   const objects = extractObjectList(payload);
-  const generatedAt = new Date().toISOString();
+  const generatedAt = checkedAt;
   const vessels = objects
     .flatMap((item, index): MaritimeVessel[] => {
       const position = extractFeatureCoordinates(item);
@@ -1021,6 +991,20 @@ async function fetchMaritimeVessels() {
         status: "stable" as const,
         source: provider,
         strategicNote,
+        freshness: buildFreshness({
+          checkedAt: generatedAt,
+          observedAt:
+            typeof item.lastSeen === "string"
+              ? item.lastSeen
+              : typeof item.timestamp === "string"
+                ? item.timestamp
+                : null,
+          fallbackTier:
+            typeof item.lastSeen === "string" || typeof item.timestamp === "string"
+              ? "live"
+              : "unavailable",
+          sourceIds: [provider],
+        }),
       } satisfies MaritimeVessel;
 
       return [{ ...vessel, status: statusFromVessel(vessel) }];
@@ -1036,10 +1020,12 @@ async function fetchMaritimeVessels() {
 
   return {
     provider,
-    vessels:
-      vessels.length > 0
-        ? vessels
-        : buildFallbackMaritimeVessels(`${provider} fallback`, generatedAt),
+    vessels,
+    providerHealth: vessels.length > 0 ? ("live" as PackageStatus) : ("stale" as PackageStatus),
+    freshness: summarizeFreshness(
+      vessels.map((vessel) => vessel.freshness),
+      generatedAt,
+    ),
   };
 }
 
@@ -1052,14 +1038,16 @@ export async function loadMaritimeSecurity(
     return buildScenarioMaritimeSecurity(scenario);
   }
 
-  const { provider, vessels } = await fetchMaritimeVessels();
+  const { provider, vessels, providerHealth, freshness } = await fetchMaritimeVessels();
   const posture = topStatus(vessels.map((vessel) => vessel.status));
 
   return {
     generatedAt: new Date().toISOString(),
     posture,
     summary:
-      posture === "intervene"
+      vessels.length === 0
+        ? "AIS data are currently unavailable for the Phuket-Andaman watchline. Keep chokepoints visible, but do not infer calm from missing vessel data."
+        : posture === "intervene"
         ? "AIS posture shows at least one vessel pattern or pier cluster that merits a governor-level cross-check today."
         : posture === "watch"
           ? "AIS posture is elevated around Phuket-linked ferry lanes, anchorages, or slower contacts."
@@ -1074,6 +1062,8 @@ export async function loadMaritimeSecurity(
       "Khao Lak coastal approaches",
     ],
     sources: [provider],
+    providerHealth,
+    freshness,
   };
 }
 
@@ -1175,93 +1165,32 @@ function buildScenarioTourismHotspots(
     hotspots,
     sources: [provider],
     providerHealth: "live",
+    freshness: buildFreshness({
+      checkedAt: generatedAt,
+      observedAt: generatedAt,
+      fallbackTier: "scenario",
+      sourceIds: [provider],
+    }),
   };
-}
-
-function buildFallbackTourismHotspots(provider: string): TourismHotspot[] {
-  return [
-    {
-      id: "fallback-patong",
-      label: "Patong Beachfront",
-      kind: "beach",
-      lat: 7.8964,
-      lng: 98.2961,
-      area: "Patong",
-      summary:
-        "Patong remains the lead tourism temperature read for the island's public-facing visitor economy.",
-      status: "watch",
-      source: provider,
-      strategicNote:
-        "Cross-check beach density, nightlife optics, and surf safety before shaping the governor's visitor message.",
-    },
-    {
-      id: "fallback-old-town",
-      label: "Phuket Old Town",
-      kind: "old-town",
-      lat: 7.884,
-      lng: 98.3923,
-      area: "Phuket Old Town",
-      summary:
-        "Old Town is a reliable read on civic mood, market activity, and whether local narrative is calm.",
-      status: "stable",
-      source: provider,
-      strategicNote:
-        "Use downtown tempo to separate island-wide issues from localized beach or airport noise.",
-    },
-    {
-      id: "fallback-rassada",
-      label: "Rassada Pier",
-      kind: "pier",
-      lat: 7.8799,
-      lng: 98.4215,
-      area: "Chalong / Rassada / Ao Po",
-      summary:
-        "Rassada is the cleanest tourism-and-marine crossover hotspot for passenger density and schedule reliability.",
-      status: "watch",
-      source: provider,
-      strategicNote:
-        "If this node gets messy, both tourism flow and governor optics deteriorate quickly.",
-    },
-    {
-      id: "fallback-ao-nang",
-      label: "Ao Nang Waterfront",
-      kind: "beach",
-      lat: 8.0323,
-      lng: 98.8237,
-      area: "Ao Nang",
-      summary:
-        "Ao Nang gives the war room a direct line of sight into Krabi-side tourism pressure affecting Phuket-linked operators.",
-      status: "watch",
-      source: provider,
-      strategicNote:
-        "Useful for reading longtail, beachfront, and cross-Andaman excursion tempo.",
-    },
-    {
-      id: "fallback-khao-lak",
-      label: "Khao Lak Resort Strip",
-      kind: "attraction",
-      lat: 8.6367,
-      lng: 98.2487,
-      area: "Khao Lak",
-      summary:
-        "Khao Lak is a northbound tourism and coach-access proxy that matters when weather or road pressure rises.",
-      status: "stable",
-      source: provider,
-      strategicNote:
-        "When this strip turns noisy, it usually reflects broader Phang Nga access stress rather than isolated resort issues.",
-    },
-  ];
 }
 
 async function fetchTatHotspots() {
   const url = process.env.TAT_DATA_API_URL;
   const apiKey = process.env.TAT_DATA_API_KEY;
-  const provider = url ? "TAT Data API" : "Curated TAT / governor fallback";
+  const checkedAt = new Date().toISOString();
+  const provider = url ? "TAT Data API" : "TAT Data API unavailable";
 
   if (!url) {
     return {
       provider,
-      hotspots: buildFallbackTourismHotspots(provider),
+      hotspots: [] as TourismHotspot[],
+      providerHealth: "offline" as PackageStatus,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: [provider],
+      }),
     };
   }
 
@@ -1333,10 +1262,17 @@ async function fetchTatHotspots() {
           status,
           source: provider,
           url: typeof item.url === "string" ? item.url : undefined,
+          coordinateAccuracy: extractFeatureCoordinates(item) ? "verified" : "estimated",
           strategicNote:
             typeof item.strategicNote === "string"
               ? item.strategicNote
               : `${label} is a useful tourism pressure proxy for governor briefing and corridor scoring.`,
+          freshness: buildFreshness({
+            checkedAt,
+            observedAt: checkedAt,
+            fallbackTier: "live",
+            sourceIds: [provider],
+          }),
         } satisfies TourismHotspot,
       ];
     })
@@ -1344,10 +1280,12 @@ async function fetchTatHotspots() {
 
   return {
     provider,
-    hotspots:
-      hotspots.length > 0
-        ? hotspots
-        : buildFallbackTourismHotspots(`${provider} fallback`),
+    hotspots,
+    providerHealth: hotspots.length > 0 ? ("live" as PackageStatus) : ("stale" as PackageStatus),
+    freshness: summarizeFreshness(
+      hotspots.map((hotspot) => hotspot.freshness),
+      checkedAt,
+    ),
   };
 }
 
@@ -1360,7 +1298,7 @@ export async function loadTourismHotspots(
     return buildScenarioTourismHotspots(scenario);
   }
 
-  const { provider, hotspots } = await fetchTatHotspots();
+  const { provider, hotspots, providerHealth, freshness } = await fetchTatHotspots();
   const topHotspot =
     [...hotspots].sort((left, right) => STATUS_WEIGHT[right.status] - STATUS_WEIGHT[left.status])[0];
 
@@ -1368,32 +1306,35 @@ export async function loadTourismHotspots(
     generatedAt: new Date().toISOString(),
     provider,
     summary:
-      topHotspot?.status === "intervene"
+      hotspots.length === 0
+        ? "Tourism hotspot feeds are currently unavailable. Rely on cameras, media watch, and corridor cards until fresh hotspot data return."
+        : topHotspot?.status === "intervene"
         ? `${topHotspot.label} is the lead tourism pressure zone and should shape today's tourism coordination.`
         : topHotspot?.status === "watch"
           ? `${topHotspot?.label ?? "Patong"} is the lead visitor-pressure zone, but conditions remain manageable with early operator coordination.`
           : "Tourism hotspots are active but broadly steady across Phuket and the near Andaman ring.",
     hotspots,
     sources: [provider],
-    providerHealth:
-      provider === "Curated TAT / governor fallback"
-        ? "stale"
-        : hotspots.some((hotspot) => hotspot.source === provider)
-          ? "live"
-          : "stale",
+    providerHealth,
+    freshness,
   };
 }
 
-export function buildWarRoomSourceEntries({
+export async function buildWarRoomSourceEntries({
   disaster,
   maritime,
   tourism,
+  mediaWatch,
 }: {
   disaster: DisasterFeedResponse;
   maritime: MaritimeSecurityResponse;
   tourism: TourismHotspotsResponse;
-}): ApiSourceEntry[] {
+  mediaWatch: MediaWatchResponse;
+}): Promise<ApiSourceEntry[]> {
   const checkedAt = new Date().toISOString();
+  const dataGoThProbe = await probeSourceHealth(
+    process.env.DATA_GO_TH_CKAN_URL || DEFAULT_DATA_GO_TH_URL,
+  );
 
   return [
     {
@@ -1404,7 +1345,9 @@ export function buildWarRoomSourceEntries({
       kind: "external",
       target: "GISTDA",
       health: disaster.providerHealth?.gistda ?? "stale",
-      checkedAt,
+      checkedAt: disaster.freshness.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: disaster.freshness,
     },
     {
       id: "war-room-nsdc",
@@ -1414,7 +1357,9 @@ export function buildWarRoomSourceEntries({
       kind: "external",
       target: "GISTDA NSDC",
       health: disaster.providerHealth?.nsdc ?? "offline",
-      checkedAt,
+      checkedAt: disaster.freshness.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: disaster.freshness,
     },
     {
       id: "war-room-tmd",
@@ -1424,7 +1369,9 @@ export function buildWarRoomSourceEntries({
       kind: "external",
       target: "TMD / NDWC",
       health: disaster.providerHealth?.tmd ?? "stale",
-      checkedAt,
+      checkedAt: disaster.freshness.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: disaster.freshness,
     },
     {
       id: "war-room-maritime-ais",
@@ -1436,7 +1383,9 @@ export function buildWarRoomSourceEntries({
       kind: "external",
       target: maritime.provider,
       health: maritime.providerHealth ?? "stale",
-      checkedAt,
+      checkedAt: maritime.freshness.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: maritime.freshness,
     },
     {
       id: "war-room-tat",
@@ -1445,7 +1394,9 @@ export function buildWarRoomSourceEntries({
       kind: "external",
       target: "Tourism Authority of Thailand",
       health: tourism.providerHealth ?? "stale",
-      checkedAt,
+      checkedAt: tourism.freshness.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: tourism.freshness,
     },
     {
       id: "war-room-gdelt",
@@ -1453,8 +1404,14 @@ export function buildWarRoomSourceEntries({
       url: DEFAULT_GDELT_URL,
       kind: "external",
       target: "GDELT",
-      health: "stale",
-      checkedAt,
+      health: mediaWatch.providerHealth?.gdelt.isFresh
+        ? "live"
+        : mediaWatch.providerHealth?.gdelt.fallbackTier === "unavailable"
+          ? "offline"
+          : "stale",
+      checkedAt: mediaWatch.providerHealth?.gdelt.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: mediaWatch.providerHealth?.gdelt,
     },
     {
       id: "war-room-google-trends",
@@ -1462,8 +1419,14 @@ export function buildWarRoomSourceEntries({
       url: DEFAULT_GOOGLE_TRENDS_URL,
       kind: "external",
       target: "Google Trends",
-      health: "stale",
-      checkedAt,
+      health: mediaWatch.providerHealth?.googleTrends.isFresh
+        ? "live"
+        : mediaWatch.providerHealth?.googleTrends.fallbackTier === "unavailable"
+          ? "offline"
+          : "stale",
+      checkedAt: mediaWatch.providerHealth?.googleTrends.checkedAt ?? checkedAt,
+      classification: "operational",
+      freshness: mediaWatch.providerHealth?.googleTrends,
     },
     {
       id: "war-room-data-go-th",
@@ -1471,8 +1434,15 @@ export function buildWarRoomSourceEntries({
       url: process.env.DATA_GO_TH_CKAN_URL || DEFAULT_DATA_GO_TH_URL,
       kind: "external",
       target: "Thailand Open Data",
-      health: process.env.DATA_GO_TH_CKAN_URL ? "live" : "stale",
-      checkedAt,
+      health: dataGoThProbe.health,
+      checkedAt: dataGoThProbe.checkedAt,
+      classification: "operational",
+      freshness: buildFreshness({
+        checkedAt: dataGoThProbe.checkedAt,
+        observedAt: dataGoThProbe.observedAt,
+        fallbackTier: dataGoThProbe.health === "live" ? "live" : "unavailable",
+        sourceIds: ["Thailand Open Data"],
+      }),
     },
   ];
 }

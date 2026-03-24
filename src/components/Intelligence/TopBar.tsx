@@ -52,6 +52,20 @@ export default function TopBar({
   const [time, setTime] = useState("");
   const [narrative, setNarrative] = useState<GovernorNarrativeResponse | null>(null);
   const [showNarrativeDetail, setShowNarrativeDetail] = useState(false);
+  const [trendRange, setTrendRange] = useState<string>("30d");
+  const [trendData, setTrendData] = useState<{
+    dataPoints: { date: string; positivePct: number }[];
+    changeFromStart: number | null;
+    trend: string;
+    source: string;
+  } | null>(null);
+
+  const loadTrend = async (range: string) => {
+    try {
+      const res = await fetch(`/api/governor/trend?range=${range}`);
+      if (res.ok) setTrendData(await res.json());
+    } catch { /* silent */ }
+  };
 
   useEffect(() => {
     const tick = () => {
@@ -137,23 +151,28 @@ export default function TopBar({
               {brief?.posture.label ?? "Loading"}
             </span>
           </div>
-          {/* Governor narrative bar */}
+          {/* Governor approval bar */}
           {narrative && (
             <div className="relative hidden sm:block">
               <button
                 type="button"
-                onClick={() => setShowNarrativeDetail(!showNarrativeDetail)}
+                onClick={() => {
+                  setShowNarrativeDetail(!showNarrativeDetail);
+                  if (!showNarrativeDetail && !trendData) loadTrend(trendRange);
+                }}
                 className={`flex items-center gap-2 border px-2.5 py-1 transition-colors ${
                   narrative.freshness.isFresh
                     ? "border-[var(--line)] hover:border-[var(--line-bright)]"
                     : "border-[#f59e0b] bg-[rgba(245,158,11,0.06)]"
                 }`}
-                title="Governor narrative signal"
+                title="Governor approval rating (GDELT sentiment analysis)"
               >
-                <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Narrative</span>
+                <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Approval</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-mono font-bold text-[var(--ink)]">
-                    {narrative.freshness.isFresh ? `${narrative.mentionCount}` : "n/a"}
+                  <span className={`text-[13px] font-mono font-bold ${
+                    (narrative.positivePct ?? 0) >= 50 ? "text-[#22c55e]" : "text-[#ef4444]"
+                  }`}>
+                    {narrative.freshness.isFresh ? `${narrative.positivePct ?? "--"}%` : "n/a"}
                   </span>
                   {narrative.trend === "rising" ? (
                     <TrendingUp size={10} className="text-[#22c55e]" />
@@ -162,42 +181,76 @@ export default function TopBar({
                   ) : (
                     <Minus size={10} className="text-[var(--dim)]" />
                   )}
-                  {!narrative.freshness.isFresh && (
-                    <span className="border border-[#f59e0b] px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] text-[#f59e0b]">
-                      unavailable
-                    </span>
-                  )}
                 </div>
               </button>
 
-              {/* Dropdown detail */}
+              {/* Dropdown: approval trend chart + articles */}
               {showNarrativeDetail && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-72 border border-[var(--line)] bg-[var(--bg-raised)] shadow-lg">
+                <div className="absolute left-0 top-full z-50 mt-1 w-80 border border-[var(--line)] bg-[var(--bg-raised)] shadow-lg">
+                  {/* Approval header */}
                   <div className="px-3 py-2 border-b border-[var(--line)]">
                     <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-                      Governor narrative signal
+                      Governor approval rating
                     </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="text-[20px] font-mono font-bold text-[var(--ink)]">
-                        {narrative.freshness.isFresh ? narrative.mentionCount.toLocaleString("en-US") : "--"}
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className={`text-[28px] font-mono font-bold ${
+                        (narrative.positivePct ?? 0) >= 50 ? "text-[#22c55e]" : "text-[#ef4444]"
+                      }`}>
+                        {narrative.positivePct ?? "--"}%
                       </span>
-                      <span className="text-[9px] text-[var(--dim)]">
-                        {narrative.freshness.isFresh
-                          ? "mentions (30-day GDELT analysis)"
-                          : "fresh narrative data unavailable"}
-                      </span>
+                      {trendData?.changeFromStart != null && (
+                        <span className={`text-[11px] font-mono font-bold ${
+                          trendData.changeFromStart > 0 ? "text-[#22c55e]" : trendData.changeFromStart < 0 ? "text-[#ef4444]" : "text-[var(--dim)]"
+                        }`}>
+                          {trendData.changeFromStart > 0 ? "+" : ""}{trendData.changeFromStart}%
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-2 flex gap-2 text-[8px] font-bold uppercase tracking-wider">
+                    <div className="text-[8px] text-[var(--dim)]">
+                      Based on {narrative.mentionCount} media mentions (GDELT sentiment)
+                    </div>
+                    <div className="mt-1.5 flex gap-2 text-[8px] font-bold uppercase tracking-wider">
                       <span className="text-[#22c55e]">{narrative.positivePct ?? "--"}% pos</span>
                       <span className="text-[var(--dim)]">{narrative.neutralPct ?? "--"}% neutral</span>
                       <span className="text-[#ef4444]">{narrative.negativePct ?? "--"}% neg</span>
                     </div>
-                    <div className="mt-1 text-[8px] text-[var(--dim)]">
-                      Avg tone {narrative.avgTone ?? "--"} / 30d delta {narrative.trendDelta30d ?? "--"}
-                    </div>
                   </div>
+
+                  {/* Sparkline chart */}
+                  <div className="px-3 py-2 border-b border-[var(--line)]">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                        Trend {trendData?.source === "mock" ? "(simulated)" : ""}
+                      </span>
+                      <div className="flex gap-1">
+                        {(["7d", "30d", "90d"] as const).map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setTrendRange(r); loadTrend(r); }}
+                            className={`px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider border transition-colors ${
+                              trendRange === r
+                                ? "border-[var(--ink)] text-[var(--ink)]"
+                                : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {trendData && trendData.dataPoints.length > 1 ? (
+                      <ApprovalSparkline data={trendData.dataPoints} />
+                    ) : (
+                      <div className="h-[60px] flex items-center justify-center text-[9px] text-[var(--dim)]">
+                        Loading trend data...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Articles */}
                   {narrative.articles.length > 0 && (
-                    <div className="max-h-48 overflow-y-auto px-3 py-2 space-y-1.5">
+                    <div className="max-h-40 overflow-y-auto px-3 py-2 space-y-1.5">
                       {narrative.articles.slice(0, 5).map((art, idx) => (
                         <a
                           key={idx}
@@ -330,5 +383,66 @@ export default function TopBar({
         </span>
       </div>
     </header>
+  );
+}
+
+/** SVG sparkline for approval trend */
+function ApprovalSparkline({ data }: { data: { date: string; positivePct: number }[] }) {
+  const W = 260;
+  const H = 60;
+  const PAD = 4;
+
+  const pcts = data.map((d) => d.positivePct);
+  const minVal = Math.min(...pcts) - 3;
+  const maxVal = Math.max(...pcts) + 3;
+  const range = maxVal - minVal || 1;
+
+  const points = data.map((d, i) => {
+    const x = PAD + (i / (data.length - 1)) * (W - 2 * PAD);
+    const y = H - PAD - ((d.positivePct - minVal) / range) * (H - 2 * PAD);
+    return `${x},${y}`;
+  });
+
+  const last = data[data.length - 1];
+  const lastX = W - PAD;
+  const lastY = H - PAD - ((last.positivePct - minVal) / range) * (H - 2 * PAD);
+  const isPositive = last.positivePct >= 50;
+
+  // Area fill
+  const areaPoints = `${PAD},${H - PAD} ${points.join(" ")} ${lastX},${H - PAD}`;
+
+  return (
+    <svg width={W} height={H} className="w-full" viewBox={`0 0 ${W} ${H}`}>
+      {/* 50% reference line */}
+      <line
+        x1={PAD} y1={H - PAD - ((50 - minVal) / range) * (H - 2 * PAD)}
+        x2={W - PAD} y2={H - PAD - ((50 - minVal) / range) * (H - 2 * PAD)}
+        stroke="var(--line)" strokeDasharray="2,2"
+      />
+      <text
+        x={W - PAD - 1} y={H - PAD - ((50 - minVal) / range) * (H - 2 * PAD) - 2}
+        textAnchor="end" className="fill-[var(--dim)]" fontSize={7}
+      >
+        50%
+      </text>
+      {/* Area */}
+      <polygon points={areaPoints} fill={isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)"} />
+      {/* Line */}
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke={isPositive ? "#22c55e" : "#ef4444"}
+        strokeWidth={1.5}
+      />
+      {/* Current dot */}
+      <circle cx={lastX} cy={lastY} r={3} fill={isPositive ? "#22c55e" : "#ef4444"} />
+      <text
+        x={lastX - 4} y={lastY - 5}
+        textAnchor="end" fontSize={8} fontWeight="bold"
+        className={isPositive ? "fill-[#22c55e]" : "fill-[#ef4444]"}
+      >
+        {last.positivePct}%
+      </text>
+    </svg>
   );
 }

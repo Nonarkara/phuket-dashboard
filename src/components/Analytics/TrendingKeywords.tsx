@@ -71,17 +71,28 @@ export default function TrendingKeywords({
                   {zone.label}
                 </div>
                 <span className={`text-[9px] font-mono font-bold ${statusTone(zone.status)}`}>
-                  {zone.score}
+                  {zone.pulseIndex ?? "n/a"}
                 </span>
               </div>
               <p className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
                 {zone.summary}
               </p>
               <div className="pt-2 grid grid-cols-2 gap-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-                <span>{zone.cameraFreshness}</span>
-                <span>{zone.trendTraffic}</span>
-                <span>{zone.tvCoverage}</span>
-                <span>{zone.mobilityPressure}</span>
+                <span>Camera {zone.cameraCoveragePct ?? "--"}%</span>
+                <span>{zone.narrativeSignals24h} narrative / 24h</span>
+                <span>{zone.weatherExposure}</span>
+                <span>{zone.mobilityLoad}</span>
+              </div>
+              <div className="pt-1 text-[8px] leading-4 text-[var(--dim)]">
+                {zone.pulseIndex !== null && zone.pulseIndex !== undefined
+                  ? zone.pulseFormula ??
+                    "Pulse index = weighted mean of fresh camera, narrative, mobility, weather, and incident inputs."
+                  : "Data unavailable. Index withheld until fresh source-backed inputs are available."}
+              </div>
+              <div className="pt-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                {zone.freshness.isFresh
+                  ? `Observed ${zone.freshness.observedAt?.slice(11, 16) ?? "recently"}`
+                  : "Freshness over 24h or source unavailable"}
               </div>
             </article>
           ))}

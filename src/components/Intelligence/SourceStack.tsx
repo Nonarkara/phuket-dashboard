@@ -114,12 +114,14 @@ export default function SourceStack({
     cameraPayload?.cameras.filter((camera) =>
       camera.corridorIds?.includes(selectedCorridorId),
     ) ?? [];
+  const corridorScouts =
+    cameraPayload?.scoutTargets.filter((camera) =>
+      camera.corridorIds?.includes(selectedCorridorId),
+    ) ?? [];
   const verifiedCount = corridorCameras.filter(
-    (camera) => camera.validationState === "verified",
+    (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
   ).length;
-  const scoutCount = corridorCameras.filter(
-    (camera) => camera.validationState === "candidate",
-  ).length;
+  const scoutCount = corridorScouts.length;
   const leadDisaster = corridorDisasterAlerts[0];
   const leadVessel = corridorVessels[0];
   const leadMarine = corridorMarine[0];

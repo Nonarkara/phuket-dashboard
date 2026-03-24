@@ -1,4 +1,11 @@
-import type { CameraScoutItem, PublicCamera } from "../types/dashboard";
+import { buildFreshness, summarizeFreshness } from "./freshness";
+import type {
+  CameraScoutItem,
+  PublicCamera,
+  PublicCameraResponse,
+} from "../types/dashboard";
+
+const CAMERA_TIMEOUT_MS = 8_000;
 
 export const phuketPublicCameras: PublicCamera[] = [
   {
@@ -18,7 +25,8 @@ export const phuketPublicCameras: PublicCamera[] = [
       "Verified west-coast camera with direct value for surf condition, crowd temperature, and the public optics of sea safety messaging.",
     accessUrl: "https://webcam.scs.com.ua/en/asia/thailand/phuket/coast/",
     corridorIds: ["airport-patong", "west-beaches"],
-    lastValidatedAt: "2026-03-15T00:00:00.000Z",
+    operationalState: "candidate",
+    validationMethod: "HTTP page validation",
   },
   {
     id: "karon-panorama-verified",
@@ -37,7 +45,8 @@ export const phuketPublicCameras: PublicCamera[] = [
       "Verified panorama for Karon's shoreline, surf conditions, and broad beachfront activity.",
     accessUrl: "https://webcam.scs.com.ua/en/asia/thailand/phuket/karon/",
     corridorIds: ["west-beaches"],
-    lastValidatedAt: "2026-03-15T00:00:00.000Z",
+    operationalState: "candidate",
+    validationMethod: "HTTP page validation",
   },
   {
     id: "kata-beach-verified",
@@ -56,7 +65,8 @@ export const phuketPublicCameras: PublicCamera[] = [
       "Verified live beach camera for Kata with good visibility into waves, rain bands, and public crowding.",
     accessUrl: "https://www.sssphuket.com/kata-beach-live-cam/",
     corridorIds: ["west-beaches"],
-    lastValidatedAt: "2026-03-15T00:00:00.000Z",
+    operationalState: "candidate",
+    validationMethod: "HTTP page validation",
   },
   {
     id: "bangla-road-verified",
@@ -75,7 +85,8 @@ export const phuketPublicCameras: PublicCamera[] = [
       "Verified street-facing camera for Patong's highest-visibility nightlife block.",
     accessUrl: "https://webcam.scs.com.ua/en/asia/thailand/phuket/banglaroud/",
     corridorIds: ["west-beaches"],
-    lastValidatedAt: "2026-03-15T00:00:00.000Z",
+    operationalState: "candidate",
+    validationMethod: "HTTP page validation",
   },
   {
     id: "old-town-verified",
@@ -94,8 +105,12 @@ export const phuketPublicCameras: PublicCamera[] = [
       "Verified old-town camera useful for civic mood, access, and downtown event posture.",
     accessUrl: "https://webcam.scs.com.ua/en/asia/thailand/phuket/oldtown/",
     corridorIds: ["old-town"],
-    lastValidatedAt: "2026-03-15T00:00:00.000Z",
+    operationalState: "candidate",
+    validationMethod: "HTTP page validation",
   },
+];
+
+export const cameraScoutTargets: CameraScoutItem[] = [
   {
     id: "airport-access-scout",
     label: "Airport Access Scout",
@@ -110,10 +125,13 @@ export const phuketPublicCameras: PublicCamera[] = [
     strategicNote:
       "Highest-priority scout slot for seeing queue build-up, transfer pace, and weather-linked road disruption at the airport end.",
     notes:
-      "Candidate source pending validation. Keep the slot visible so the governor sees the surveillance gap in the arrival corridor.",
-    accessUrl: null,
+      "Public webcam candidate near Phuket Airport discovered via Webcam Galore (Nai Yang / Phuket Lotus Lodge). Keep this in scout status until the angle is confirmed useful for airport-road operations.",
+    accessUrl: "https://www.webcamgalore.com/webcam/Thailand/Nai-Yang-Phuket/345.html",
     corridorIds: ["airport-patong"],
-    candidateSourceNote: "Candidate source pending validation",
+    candidateSourceNote:
+      "Public webcam candidate discovered near Phuket Airport; validate angle and uptime before promoting.",
+    operationalState: "candidate",
+    validationMethod: "Public webcam scout page validation",
   },
   {
     id: "chalong-pier-scout",
@@ -129,10 +147,13 @@ export const phuketPublicCameras: PublicCamera[] = [
     strategicNote:
       "Needed to verify departure tempo, rain exposure, and queue pressure on the Chalong side.",
     notes:
-      "Candidate source pending validation for the governor's east-coast pier watch.",
-    accessUrl: null,
+      "Public webcam candidate discovered for Chalong Bay / Phuket Fish Market. Keep it in scout status until the angle proves operationally useful for pier monitoring.",
+    accessUrl: "https://www.webcamgalore.com/webcam/Thailand/Chalong-Bay-Phuket/29105.html",
     corridorIds: ["east-coast-ports"],
-    candidateSourceNote: "Candidate source pending validation",
+    candidateSourceNote:
+      "Public Chalong Bay webcam discovered; validate pier relevance and uptime before promoting.",
+    operationalState: "candidate",
+    validationMethod: "Public webcam scout page validation",
   },
   {
     id: "rassada-pier-scout",
@@ -152,6 +173,8 @@ export const phuketPublicCameras: PublicCamera[] = [
     accessUrl: null,
     corridorIds: ["east-coast-ports"],
     candidateSourceNote: "Candidate source pending validation",
+    operationalState: "candidate",
+    validationMethod: "Scout slot",
   },
   {
     id: "ao-po-marina-scout",
@@ -171,6 +194,8 @@ export const phuketPublicCameras: PublicCamera[] = [
     accessUrl: null,
     corridorIds: ["east-coast-ports"],
     candidateSourceNote: "Candidate source pending validation",
+    operationalState: "candidate",
+    validationMethod: "Scout slot",
   },
   {
     id: "ao-nang-scout",
@@ -186,10 +211,13 @@ export const phuketPublicCameras: PublicCamera[] = [
     strategicNote:
       "Needed to read Krabi-side visitor density, longtail queueing, and open-water conditions that directly feed Phuket ferries and tours.",
     notes:
-      "Candidate source pending validation for the Krabi-facing tourism corridor.",
-    accessUrl: null,
+      "Public webcam candidate discovered for Ao Nang / Poseidon Dive Center. Keep it in scout status until the current uptime and vantage are confirmed.",
+    accessUrl: "https://www.webcamgalore.com/webcam/Thailand/Ao-Nang/6115.html",
     corridorIds: ["ao-nang-krabi"],
-    candidateSourceNote: "Candidate source pending validation",
+    candidateSourceNote:
+      "Public Ao Nang webcam discovered; validate coastline relevance and uptime before promoting.",
+    operationalState: "candidate",
+    validationMethod: "Public webcam scout page validation",
   },
   {
     id: "khao-lak-scout",
@@ -205,13 +233,172 @@ export const phuketPublicCameras: PublicCamera[] = [
     strategicNote:
       "Needed to confirm coast conditions, beach posture, and resort-side public narrative north of Phuket.",
     notes:
-      "Candidate source pending validation for the Khao Lak and Phang Nga watchline.",
-    accessUrl: null,
+      "Public webcam candidate discovered for Khao Lak via Vision Environnement. Keep it in scout status until the view and update behavior are confirmed.",
+    accessUrl: "https://www.vision-environnement.com/de/livecams/webcam.php?webcam=khaolak",
     corridorIds: ["khao-lak-phang-nga"],
-    candidateSourceNote: "Candidate source pending validation",
+    candidateSourceNote:
+      "Public Khao Lak webcam discovered; validate coastal usefulness and uptime before promoting.",
+    operationalState: "candidate",
+    validationMethod: "Public webcam scout page validation",
   },
 ];
 
-export const cameraScoutTargets: CameraScoutItem[] = phuketPublicCameras.filter(
-  (camera): camera is CameraScoutItem => camera.validationState === "candidate",
-);
+function contentLooksLive(contentType: string | null, body: string) {
+  if (!contentType) {
+    return /webcam|live cam|livestream|stream|player|iframe|youtube|video/i.test(body);
+  }
+
+  if (/image|video|application\/vnd\.apple\.mpegurl|application\/x-mpegurl/i.test(contentType)) {
+    return true;
+  }
+
+  if (/text\/html/i.test(contentType)) {
+    return /webcam|live cam|livestream|stream|player|iframe|youtube|video/i.test(body);
+  }
+
+  return false;
+}
+
+async function validateCamera(camera: PublicCamera) {
+  const checkedAt = new Date().toISOString();
+
+  if (!camera.accessUrl) {
+    return {
+      ...camera,
+      operationalState: "offline" as const,
+      lastCheckedAt: checkedAt,
+      lastHttpStatus: null,
+      lastFrameAt: null,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: [camera.provider],
+      }),
+    };
+  }
+
+  try {
+    const response = await fetch(camera.accessUrl, {
+      signal: AbortSignal.timeout(CAMERA_TIMEOUT_MS),
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,image/*,video/*,*/*",
+        "User-Agent": "PhuketGovernorWarRoom/1.0",
+      },
+    });
+
+    const contentType = response.headers.get("content-type");
+    const lastModified = response.headers.get("last-modified");
+    const body = contentType?.includes("text/html")
+      ? (await response.text()).slice(0, 10_000)
+      : "";
+    const operationalState = response.ok
+      ? contentLooksLive(contentType, body)
+        ? "live"
+        : "reachable"
+      : "offline";
+    const observedAt = lastModified
+      ? new Date(lastModified).toISOString()
+      : operationalState === "offline"
+        ? null
+        : checkedAt;
+
+    return {
+      ...camera,
+      operationalState,
+      contentType,
+      lastCheckedAt: checkedAt,
+      lastValidatedAt: response.ok ? checkedAt : camera.lastValidatedAt,
+      lastFrameAt: observedAt,
+      lastHttpStatus: response.status,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt,
+        fallbackTier: response.ok ? "live" : "unavailable",
+        sourceIds: [camera.provider],
+      }),
+    } satisfies PublicCamera;
+  } catch {
+    return {
+      ...camera,
+      operationalState: "offline" as const,
+      lastCheckedAt: checkedAt,
+      lastHttpStatus: null,
+      lastFrameAt: null,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: [camera.provider],
+      }),
+    } satisfies PublicCamera;
+  }
+}
+
+async function hydrateScoutTarget(
+  camera: CameraScoutItem,
+  checkedAt: string,
+): Promise<CameraScoutItem> {
+  if (camera.accessUrl) {
+    const validated = await validateCamera({
+      ...camera,
+      validationState: "candidate",
+    });
+
+    return {
+      ...validated,
+      validationState: "candidate" as const,
+      candidateSourceNote: camera.candidateSourceNote,
+    };
+  }
+
+  return {
+    ...camera,
+    operationalState: "candidate",
+    lastCheckedAt: checkedAt,
+    lastFrameAt: null,
+    lastHttpStatus: null,
+    freshness: buildFreshness({
+      checkedAt,
+      observedAt: null,
+      fallbackTier: "reference",
+      sourceIds: [camera.provider],
+    }),
+  } satisfies CameraScoutItem;
+}
+
+export async function loadPublicCameraFeed(): Promise<PublicCameraResponse> {
+  const generatedAt = new Date().toISOString();
+  const validatedCameras = await Promise.all(phuketPublicCameras.map(validateCamera));
+  const checkedAt = new Date().toISOString();
+  const hydratedScoutTargets = await Promise.all(
+    cameraScoutTargets.map((camera) => hydrateScoutTarget(camera, checkedAt)),
+  );
+  const liveOrReachable = validatedCameras.filter(
+    (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
+  );
+
+  return {
+    generatedAt,
+    source: [
+      "SCS Phuket public webcams",
+      "SSS Phuket Kata Beach live cam",
+      "Governor scout targets pending validation",
+    ],
+    cameras: validatedCameras,
+    scoutTargets: hydratedScoutTargets,
+    freshness: summarizeFreshness(
+      validatedCameras.map((camera) => camera.freshness),
+      checkedAt,
+    ),
+    lastSweepAt: checkedAt,
+    expectedVerifiedFeeds: phuketPublicCameras.length,
+    verifiedLiveCount: liveOrReachable.length,
+    reachableCount: validatedCameras.filter(
+      (camera) => camera.operationalState === "reachable",
+    ).length,
+    scoutCount: hydratedScoutTargets.length,
+  };
+}

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { query } from "./db";
 import { getErrorMessage } from "./errors";
+import { buildFreshness, summarizeFreshness } from "./freshness";
 import {
   loadCachedIntelligencePayload,
   storeCachedIntelligencePayload,
@@ -16,6 +17,7 @@ import {
   fallbackTicker,
 } from "./mock-data";
 import { fetchReferenceApiCatalog } from "./reference-data";
+import { loadMediaWatch } from "./governor";
 import {
   loadThailandEconomics,
   loadThailandIncidents,
@@ -1801,8 +1803,21 @@ export async function buildLatestBriefing(): Promise<BriefingPayload> {
 }
 
 export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
-  const [referenceCatalog, packages, disaster, maritime, tourism] = await Promise.all([
-    fetchReferenceApiCatalog().catch(() => ({ generatedAt: new Date().toISOString(), sources: [] })),
+  const checkedAt = new Date().toISOString();
+  const [referenceCatalog, packages, disaster, maritime, tourism, mediaWatch] = await Promise.all([
+    fetchReferenceApiCatalog().catch(() => {
+      const checkedAt = new Date().toISOString();
+      return {
+        generatedAt: checkedAt,
+        sources: [],
+        freshness: buildFreshness({
+          checkedAt,
+          observedAt: null,
+          fallbackTier: "reference",
+          sourceIds: ["Phuket Dashboard reference catalog"],
+        }),
+      };
+    }),
     loadIntelligencePackages(),
     loadDisasterFeed().catch(() => ({
       generatedAt: new Date().toISOString(),
@@ -1810,8 +1825,14 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
       summary: "Fallback disaster posture",
       alerts: [],
       layers: [],
-      rainfallNodes: 0,
+      rainfallNodes: null,
       sources: ["Disaster fallback"],
+      freshness: buildFreshness({
+        checkedAt: new Date().toISOString(),
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["Disaster fallback"],
+      }),
     })),
     loadMaritimeSecurity().catch(() => ({
       generatedAt: new Date().toISOString(),
@@ -1821,6 +1842,12 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
       vessels: [],
       chokepoints: [],
       sources: ["AIS fallback"],
+      freshness: buildFreshness({
+        checkedAt: new Date().toISOString(),
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["AIS fallback"],
+      }),
     })),
     loadTourismHotspots().catch(() => ({
       generatedAt: new Date().toISOString(),
@@ -1828,6 +1855,48 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
       provider: "Tourism fallback",
       hotspots: [],
       sources: ["Tourism fallback"],
+      freshness: buildFreshness({
+        checkedAt: new Date().toISOString(),
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["Tourism fallback"],
+      }),
+    })),
+    loadMediaWatch().catch(() => ({
+      generatedAt: new Date().toISOString(),
+      scenario: "live" as const,
+      postureSummary:
+        "Public narrative data are currently unavailable; do not infer mood from stale or missing feeds.",
+      peopleTalkAbout: [],
+      peopleShare: [],
+      broadcastWatch: [],
+      sources: [],
+      providerHealth: {
+        googleTrends: buildFreshness({
+          checkedAt: new Date().toISOString(),
+          observedAt: null,
+          fallbackTier: "unavailable",
+          sourceIds: ["Google Trends TH"],
+        }),
+        gdelt: buildFreshness({
+          checkedAt: new Date().toISOString(),
+          observedAt: null,
+          fallbackTier: "unavailable",
+          sourceIds: ["GDELT DOC 2"],
+        }),
+        tvWall: buildFreshness({
+          checkedAt: new Date().toISOString(),
+          observedAt: null,
+          fallbackTier: "unavailable",
+          sourceIds: ["Thailand TV wall"],
+        }),
+      },
+      freshness: buildFreshness({
+        checkedAt: new Date().toISOString(),
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["Google Trends TH", "GDELT DOC 2", "Thailand TV wall"],
+      }),
     })),
   ]);
 
@@ -1840,15 +1909,52 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
     target: "Phuket Intelligence",
     health: healthById.get(source.id)?.status,
     checkedAt: healthById.get(source.id)?.checkedAt,
+    classification: "operational" as const,
+    freshness: buildFreshness({
+      checkedAt: healthById.get(source.id)?.checkedAt ?? packages.generatedAt,
+      observedAt: healthById.get(source.id)?.checkedAt ?? null,
+      fallbackTier:
+        healthById.get(source.id)?.status === "live"
+          ? "live"
+          : healthById.get(source.id)?.status === "stale"
+            ? "cache"
+            : "unavailable",
+      sourceIds: [source.label],
+    }),
   }));
-  const warRoomSources = buildWarRoomSourceEntries({
+  const warRoomSources = await buildWarRoomSourceEntries({
     disaster,
     maritime,
     tourism,
+    mediaWatch,
   });
+  const referenceSources = referenceCatalog.sources.map((source) => ({
+    ...source,
+    classification: source.classification ?? ("reference" as const),
+    freshness:
+      source.freshness ??
+      buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "reference",
+        sourceIds: [source.label],
+      }),
+  }));
 
   return {
-    generatedAt: packages.generatedAt || referenceCatalog.generatedAt,
-    sources: [...derivedFeedSources, ...warRoomSources, ...referenceCatalog.sources],
+    generatedAt: checkedAt,
+    freshness: summarizeFreshness(
+      [
+        referenceCatalog.freshness,
+        disaster.freshness,
+        maritime.freshness,
+        tourism.freshness,
+        mediaWatch.freshness,
+        ...derivedFeedSources.map((source) => source.freshness),
+        ...warRoomSources.map((source) => source.freshness),
+      ],
+      checkedAt,
+    ),
+    sources: [...derivedFeedSources, ...warRoomSources, ...referenceSources],
   };
 }

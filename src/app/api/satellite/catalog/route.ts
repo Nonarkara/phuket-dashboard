@@ -1,76 +1,113 @@
 import { NextResponse } from "next/server";
 
-/**
- * Unified Satellite Catalog API
- *
- * Builds the catalog directly (no self-fetch) so it works on
- * Render free tier where loopback requests can time out.
- */
-
 interface ProviderSummary {
   id: string;
   name: string;
   country: string;
-  liveProducts: number;
-  totalProducts: number;
+  capabilityCount: number;
+  primaryEndpoint: string;
+  accessLevel: string;
+  notes: string;
+  health: "live" | "stale" | "offline";
+  checkedAt: string;
+}
+
+interface ProviderDefinition {
+  id: string;
+  name: string;
+  country: string;
+  capabilityCount: number;
   primaryEndpoint: string;
   accessLevel: string;
   notes: string;
 }
 
-export async function GET() {
-  const providers: ProviderSummary[] = [
-    {
-      id: "jaxa",
-      name: "JAXA",
-      country: "Japan",
-      liveProducts: 4,
-      totalProducts: 6,
-      primaryEndpoint: "https://gportal.jaxa.jp/gpr/search",
-      accessLevel: process.env.JAXA_GPORTAL_USER ? "authenticated" : "public-only",
-      notes: "Himawari-9 geostationary + ALOS-2 SAR + GSMaP rainfall + AMSR-2 soil moisture",
-    },
-    {
-      id: "eumetsat",
-      name: "EUMETSAT",
-      country: "Europe",
-      liveProducts: 2,
-      totalProducts: 4,
-      primaryEndpoint: "https://api.eumetsat.int/data/download/1.0.0/",
-      accessLevel: process.env.EUMETSAT_KEY ? "authenticated" : "public-only",
-      notes: "MSG SEVIRI fire/cloud for Indian Ocean + MetOp aerosol",
-    },
-    {
-      id: "isro",
-      name: "ISRO",
-      country: "India",
-      liveProducts: 3,
-      totalProducts: 4,
-      primaryEndpoint: "https://bhuvan-vec2.nrsc.gov.in/bhuvan/wms",
-      accessLevel: "public-wms",
-      notes: "Resourcesat AWiFS, Cartosat DEM, LISS land-use baselines",
-    },
-    {
-      id: "roscosmos",
-      name: "Roscosmos",
-      country: "Russia",
-      liveProducts: 2,
-      totalProducts: 4,
-      primaryEndpoint: "https://stacindex.org/catalogs/ers-open-data",
-      accessLevel: "public-stac",
-      notes: "Elektro-L geostationary + Meteor-M polar for Indian Ocean weather",
-    },
-  ];
+const PROVIDERS: ProviderDefinition[] = [
+  {
+    id: "jaxa",
+    name: "JAXA",
+    country: "Japan",
+    capabilityCount: 6,
+    primaryEndpoint: "https://gportal.jaxa.jp/gpr/search",
+    accessLevel: process.env.JAXA_GPORTAL_USER ? "authenticated" : "public-only",
+    notes: "Himawari-9 geostationary, ALOS-2 SAR, GSMaP rainfall, and AMSR-2 support.",
+  },
+  {
+    id: "eumetsat",
+    name: "EUMETSAT",
+    country: "Europe",
+    capabilityCount: 4,
+    primaryEndpoint: "https://api.eumetsat.int/data/download/1.0.0/",
+    accessLevel: process.env.EUMETSAT_KEY ? "authenticated" : "public-only",
+    notes: "MSG SEVIRI fire and cloud products plus MetOp aerosol coverage.",
+  },
+  {
+    id: "isro",
+    name: "ISRO",
+    country: "India",
+    capabilityCount: 4,
+    primaryEndpoint: "https://bhuvan-vec2.nrsc.gov.in/bhuvan/wms",
+    accessLevel: "public-wms",
+    notes: "Resourcesat AWiFS, Cartosat DEM, and LISS land-use baselines.",
+  },
+  {
+    id: "roscosmos",
+    name: "Roscosmos",
+    country: "Russia",
+    capabilityCount: 4,
+    primaryEndpoint: "https://stacindex.org/catalogs/ers-open-data",
+    accessLevel: "public-stac",
+    notes: "Elektro-L and Meteor-M references for Indian Ocean weather context.",
+  },
+];
 
-  const totalLive = providers.reduce((s, p) => s + p.liveProducts, 0);
-  const totalAll = providers.reduce((s, p) => s + p.totalProducts, 0);
+async function probeEndpoint(url: string) {
+  const checkedAt = new Date().toISOString();
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(8_000),
+      cache: "no-store",
+      headers: {
+        Accept: "*/*",
+        "User-Agent": "PhuketGovernorWarRoom/1.0",
+      },
+    });
+
+    return {
+      checkedAt,
+      health: response.ok ? ("live" as const) : ("offline" as const),
+    };
+  } catch {
+    return {
+      checkedAt,
+      health: "offline" as const,
+    };
+  }
+}
+
+export async function GET() {
+  const providers: ProviderSummary[] = await Promise.all(
+    PROVIDERS.map(async (provider) => {
+      const probe = await probeEndpoint(provider.primaryEndpoint);
+      return {
+        ...provider,
+        health: probe.health,
+        checkedAt: probe.checkedAt,
+      };
+    }),
+  );
 
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     summary: {
       totalProviders: providers.length,
-      totalLiveProducts: totalLive,
-      totalProducts: totalAll,
+      liveProviders: providers.filter((provider) => provider.health === "live").length,
+      offlineProviders: providers.filter((provider) => provider.health === "offline").length,
+      totalCapabilities: providers.reduce(
+        (sum, provider) => sum + provider.capabilityCount,
+        0,
+      ),
     },
     providers,
   });

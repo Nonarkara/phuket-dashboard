@@ -7,19 +7,21 @@ interface ProviderSummary {
   id: string;
   name: string;
   country: string;
-  liveProducts: number;
-  totalProducts: number;
+  capabilityCount: number;
   primaryEndpoint: string;
   accessLevel: string;
   notes: string;
+  health: "live" | "stale" | "offline";
+  checkedAt: string;
 }
 
 interface CatalogPayload {
   generatedAt: string;
   summary: {
     totalProviders: number;
-    totalLiveProducts: number;
-    totalProducts: number;
+    liveProviders: number;
+    offlineProviders: number;
+    totalCapabilities: number;
   };
   providers: ProviderSummary[];
 }
@@ -87,12 +89,12 @@ export default function SatelliteStatusPanel() {
               <div className="text-[12px] font-mono font-bold text-[var(--ink)]">{payload.summary.totalProviders}</div>
             </div>
             <div className="border border-[var(--line)] px-1.5 py-1 text-center">
-              <div className="text-[7px] font-bold uppercase tracking-[0.12em] text-[var(--dim)]">Live</div>
-              <div className="text-[12px] font-mono font-bold text-[#22c55e]">{payload.summary.totalLiveProducts}</div>
+              <div className="text-[7px] font-bold uppercase tracking-[0.12em] text-[var(--dim)]">Reachable</div>
+              <div className="text-[12px] font-mono font-bold text-[#22c55e]">{payload.summary.liveProviders}</div>
             </div>
             <div className="border border-[var(--line)] px-1.5 py-1 text-center">
-              <div className="text-[7px] font-bold uppercase tracking-[0.12em] text-[var(--dim)]">Total</div>
-              <div className="text-[12px] font-mono font-bold text-[var(--ink)]">{payload.summary.totalProducts}</div>
+              <div className="text-[7px] font-bold uppercase tracking-[0.12em] text-[var(--dim)]">Catalog</div>
+              <div className="text-[12px] font-mono font-bold text-[var(--ink)]">{payload.summary.totalCapabilities}</div>
             </div>
           </div>
 
@@ -103,7 +105,7 @@ export default function SatelliteStatusPanel() {
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        provider.liveProducts > 0 ? "bg-[#22c55e] animate-pulse" : "bg-[var(--dim)]"
+                        provider.health === "live" ? "bg-[#22c55e] animate-pulse" : "bg-[var(--dim)]"
                       }`}
                     />
                     <span className="text-[9px] font-bold text-[var(--ink)]">{provider.name}</span>
@@ -111,9 +113,11 @@ export default function SatelliteStatusPanel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-[8px] font-mono font-bold text-[#22c55e]">{provider.liveProducts}</span>
+                  <span className={`text-[8px] font-mono font-bold ${provider.health === "live" ? "text-[#22c55e]" : "text-[var(--dim)]"}`}>
+                    {provider.health}
+                  </span>
                   <span className="text-[7px] text-[var(--dim)]">/</span>
-                  <span className="text-[8px] font-mono text-[var(--dim)]">{provider.totalProducts}</span>
+                  <span className="text-[8px] font-mono text-[var(--dim)]">{provider.capabilityCount}</span>
                 </div>
               </div>
             ))}

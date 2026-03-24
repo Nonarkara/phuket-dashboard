@@ -5,8 +5,14 @@ import {
   MARINE_POINTS,
   textMatchesAliases,
 } from "./governor-config";
-import { fallbackIncidents } from "./mock-data";
-import { phuketPublicCameras } from "./public-cameras";
+import {
+  GOVERNOR_MAX_AGE_MINUTES,
+  buildFreshness,
+  isFreshTimestamp,
+  newestObservedAt,
+  summarizeFreshness,
+} from "./freshness";
+import { loadPublicCameraFeed } from "./public-cameras";
 import { loadThailandIncidents } from "./thailand-monitor";
 import {
   loadDisasterFeed,
@@ -16,6 +22,7 @@ import {
 import type {
   CityVibeCard,
   CityVibesResponse,
+  DataFreshness,
   DisasterAlert,
   DisasterFeedResponse,
   ExecutiveStatus,
@@ -23,12 +30,13 @@ import type {
   GovernorConcern,
   GovernorCorridorPriority,
   GovernorScenarioId,
+  IncidentFeature,
+  MetricEvidence,
   MaritimeSecurityResponse,
   MarineCorridorStatus,
   MarineStatusResponse,
   MediaWatchResponse,
   NarrativeSignal,
-  PublicCamera,
   TourismHotspot,
   TourismHotspotsResponse,
 } from "../types/dashboard";
@@ -46,11 +54,12 @@ interface GovernorDataOptions {
 }
 
 interface AirspacePressure {
-  count: number;
+  count: number | null;
   status: ExecutiveStatus;
   summary: string;
   updatedAt: string;
   sources: string[];
+  freshness: DataFreshness;
 }
 
 type MediaWatchOptions = GovernorDataOptions;
@@ -59,7 +68,14 @@ interface CityVibeOptions extends GovernorDataOptions {
   marine?: MarineStatusResponse;
   mediaWatch?: MediaWatchResponse;
   airspace?: AirspacePressure;
-  incidents?: typeof fallbackIncidents;
+  incidents?: IncidentFeature[];
+  cameraFeed?: Awaited<ReturnType<typeof loadPublicCameraFeed>>;
+}
+
+interface NarrativeFeedResult {
+  signals: NarrativeSignal[];
+  freshness: DataFreshness;
+  source: string;
 }
 
 const STATUS_PRIORITY: Record<ExecutiveStatus, number> = {
@@ -84,12 +100,6 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function statusLabel(status: ExecutiveStatus) {
-  if (status === "intervene") return "intervene";
-  if (status === "watch") return "watch";
-  return "stable";
-}
-
 function statusFromScore(score: number): ExecutiveStatus {
   if (score >= 72) return "intervene";
   if (score >= 44) return "watch";
@@ -100,15 +110,14 @@ function compareByStatus<T extends { status: ExecutiveStatus }>(left: T, right: 
   return STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status];
 }
 
-function compareDisasterAlerts(left: DisasterAlert, right: DisasterAlert) {
-  return STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity];
+function topStatus(statuses: ExecutiveStatus[]) {
+  return [...statuses].sort(
+    (left, right) => STATUS_PRIORITY[right] - STATUS_PRIORITY[left],
+  )[0] ?? "stable";
 }
 
-function formatCompact(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
+function compareDisasterAlerts(left: DisasterAlert, right: DisasterAlert) {
+  return STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity];
 }
 
 function formatMetric(value: number | null, suffix = "", digits = 1) {
@@ -162,7 +171,7 @@ function inferMarineStatus({
 >): ExecutiveStatus {
   if (
     alerts.length > 0 ||
-    (waveHeightMeters ?? 0) >= 2.6 ||
+    (waveHeightMeters ?? 0) >= 2.5 ||
     (windSpeedKph ?? 0) >= 30 ||
     (gustSpeedKph ?? 0) >= 40
   ) {
@@ -170,14 +179,38 @@ function inferMarineStatus({
   }
 
   if (
-    (waveHeightMeters ?? 0) >= 1.6 ||
-    (windSpeedKph ?? 0) >= 22 ||
+    (waveHeightMeters ?? 0) >= 1.5 ||
+    (windSpeedKph ?? 0) >= 20 ||
     (gustSpeedKph ?? 0) >= 30
   ) {
     return "watch";
   }
 
   return "stable";
+}
+
+function buildEvidence(
+  input: Omit<MetricEvidence, "freshness"> & { freshness?: DataFreshness },
+): MetricEvidence {
+  return {
+    ...input,
+    freshness:
+      input.freshness ??
+      buildFreshness({
+        observedAt: input.observedAt ?? null,
+        checkedAt: new Date().toISOString(),
+        fallbackTier: "unavailable",
+        sourceIds: [input.source],
+      }),
+  };
+}
+
+function determineStatusFromNormalizedIndex(index: number | null): ExecutiveStatus {
+  if (index === null) {
+    return "stable";
+  }
+
+  return statusFromScore(index);
 }
 
 function safeJsonParse(value: string): unknown {
@@ -248,15 +281,19 @@ function flattenWarningEntries(value: unknown): string[] {
 }
 
 async function fetchTmdWarnings() {
+  const checkedAt = new Date().toISOString();
   const payloadText = await fetchTextWithTimeout(TMD_WARNING_URL);
 
   if (!payloadText) {
     return {
-      entries: [
-        "TMD monsoon watch remains in effect for Phuket, Phang Nga, and Krabi coastal waters.",
-        "TMD rain advisory highlights short-burst runoff and rough-sea risk along the Andaman side.",
-      ],
-      source: "TMD Open Data fallback",
+      entries: [] as string[],
+      source: "TMD Open Data",
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["TMD Open Data"],
+      }),
     };
   }
 
@@ -272,13 +309,14 @@ async function fetchTmdWarnings() {
   ).slice(0, 8);
 
   return {
-    entries:
-      entries.length > 0
-        ? entries
-        : [
-            "TMD warning parsing fell back to baseline Andaman watch wording for Phuket-linked corridors.",
-          ],
+    entries,
     source: "TMD Open Data",
+    freshness: buildFreshness({
+      checkedAt,
+      observedAt: entries.length > 0 ? checkedAt : null,
+      fallbackTier: entries.length > 0 ? "live" : "unavailable",
+      sourceIds: ["TMD Open Data"],
+    }),
   };
 }
 
@@ -327,10 +365,48 @@ function buildDefaultMarineCorridors(updatedAt = new Date().toISOString()) {
       rainfallMm: metrics.rain,
       alerts: [],
       recommendedAction: point.defaultAction,
-      sources: ["Open-Meteo Marine fallback", "Open-Meteo forecast fallback"],
+      sources: ["Scenario marine model"],
       updatedAt,
+      formula:
+        "Intervene if alert or wave>=2.5m or wind>=30kph or gust>=40kph; watch if wave>=1.5m or wind>=20kph or gust>=30kph.",
+      freshness: buildFreshness({
+        checkedAt: updatedAt,
+        observedAt: updatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario marine model"],
+      }),
     } satisfies MarineCorridorStatus;
   });
+}
+
+function buildUnavailableMarineCorridors(updatedAt = new Date().toISOString()) {
+  return MARINE_POINTS.map((point) => ({
+    id: point.id,
+    label: point.label,
+    locationLabel: point.locationLabel,
+    focusArea: point.focusArea,
+    center: point.center,
+    status: "stable" as const,
+    summary: `${point.label} is missing fresh marine data. Keep this corridor visible, but do not treat it as an operational read.`,
+    alertPosture: "Data unavailable",
+    waveHeightMeters: null,
+    swellHeightMeters: null,
+    windSpeedKph: null,
+    gustSpeedKph: null,
+    rainfallMm: null,
+    alerts: [],
+    recommendedAction: point.defaultAction,
+    sources: ["Open-Meteo Marine", "Open-Meteo forecast", "TMD Open Data"],
+    updatedAt,
+    formula:
+      "Intervene if alert or wave>=2.5m or wind>=30kph or gust>=40kph; watch if wave>=1.5m or wind>=20kph or gust>=30kph.",
+    freshness: buildFreshness({
+      checkedAt: updatedAt,
+      observedAt: null,
+      fallbackTier: "unavailable",
+      sourceIds: ["Open-Meteo Marine", "Open-Meteo forecast", "TMD Open Data"],
+    }),
+  })) satisfies MarineCorridorStatus[];
 }
 
 function applyMarineScenario(
@@ -421,7 +497,7 @@ async function fetchLiveMarineCorridors() {
   const tmd = await fetchTmdWarnings();
   const tmdWarnings = tmd.entries;
 
-  const liveCorridors = await Promise.all(
+  const liveCorridors: MarineCorridorStatus[] = await Promise.all(
     MARINE_POINTS.map(async (point) => {
       const [marinePayload, weatherPayload] = await Promise.all([
         fetchJsonWithTimeout<{
@@ -455,6 +531,7 @@ async function fetchLiveMarineCorridors() {
       const alerts = tmdWarnings.filter((warning) =>
         matchAny(warning, point.aliases),
       );
+      const checkedAt = new Date().toISOString();
 
       if (
         waveHeightMeters === null &&
@@ -462,7 +539,12 @@ async function fetchLiveMarineCorridors() {
         windSpeedKph === null &&
         gustSpeedKph === null
       ) {
-        return null;
+        return {
+          ...buildUnavailableMarineCorridors(checkedAt).find(
+            (corridor) => corridor.id === point.id,
+          )!,
+          sources: uniqueStrings(["Open-Meteo Marine", "Open-Meteo forecast", tmd.source]),
+        };
       }
 
       const status = inferMarineStatus({
@@ -499,27 +581,84 @@ async function fetchLiveMarineCorridors() {
         alerts,
         recommendedAction: point.defaultAction,
         sources: uniqueStrings(["Open-Meteo Marine", "Open-Meteo forecast", tmd.source]),
-        updatedAt: new Date().toISOString(),
+        updatedAt: checkedAt,
+        formula:
+          "Intervene if alert or wave>=2.5m or wind>=30kph or gust>=40kph; watch if wave>=1.5m or wind>=20kph or gust>=30kph.",
+        evidence: [
+          buildEvidence({
+            id: `${point.id}-wave`,
+            label: "Wave height",
+            value: waveHeightMeters,
+            displayValue: formatMetric(waveHeightMeters, "m"),
+            unit: "m",
+            source: "Open-Meteo Marine",
+            observedAt: checkedAt,
+            freshness: buildFreshness({
+              checkedAt,
+              observedAt: checkedAt,
+              fallbackTier: "live",
+              sourceIds: ["Open-Meteo Marine"],
+            }),
+          }),
+          buildEvidence({
+            id: `${point.id}-wind`,
+            label: "Wind speed",
+            value: windSpeedKph,
+            displayValue: formatMetric(windSpeedKph, "kph", 0),
+            unit: "kph",
+            source: "Open-Meteo forecast",
+            observedAt: checkedAt,
+            freshness: buildFreshness({
+              checkedAt,
+              observedAt: checkedAt,
+              fallbackTier: "live",
+              sourceIds: ["Open-Meteo forecast"],
+            }),
+          }),
+        ],
+        freshness: summarizeFreshness(
+          [
+            buildFreshness({
+              checkedAt,
+              observedAt: checkedAt,
+              fallbackTier: marinePayload?.current ? "live" : "unavailable",
+              sourceIds: ["Open-Meteo Marine"],
+            }),
+            buildFreshness({
+              checkedAt,
+              observedAt: checkedAt,
+              fallbackTier: weatherPayload?.current ? "live" : "unavailable",
+              sourceIds: ["Open-Meteo forecast"],
+            }),
+            tmd.freshness,
+          ],
+          checkedAt,
+        ),
       } satisfies MarineCorridorStatus;
     }),
   );
 
-  return liveCorridors.filter((corridor): corridor is MarineCorridorStatus => Boolean(corridor));
+  return liveCorridors;
 }
 
 export async function loadMarineStatus(
   options: GovernorDataOptions = {},
 ): Promise<MarineStatusResponse> {
   const scenario = resolveScenario(options.scenario);
-  const liveCorridors = await fetchLiveMarineCorridors();
+  const checkedAt = new Date().toISOString();
+  const liveCorridors = scenario === "live" ? await fetchLiveMarineCorridors() : [];
   const baseCorridors =
-    liveCorridors.length > 0
+    scenario === "live"
       ? liveCorridors
-      : buildDefaultMarineCorridors(new Date().toISOString());
-  const corridors = applyMarineScenario(baseCorridors, scenario).sort(compareByStatus);
+      : buildDefaultMarineCorridors(checkedAt);
+  const fallbackCorridors =
+    scenario === "live" && liveCorridors.length === 0
+      ? buildUnavailableMarineCorridors(checkedAt)
+      : baseCorridors;
+  const corridors = applyMarineScenario(fallbackCorridors, scenario).sort(compareByStatus);
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     scenario,
     corridors,
     sources: uniqueStrings(corridors.flatMap((corridor) => corridor.sources)),
@@ -527,55 +666,30 @@ export async function loadMarineStatus(
       "Add AISHub or MarineTraffic to score Phuket ferry lanes and anchorage pressure.",
       "Keep premium AIS and scheduled-arrivals feeds optional until the governor wants SLA-grade depth.",
     ],
+    freshness: summarizeFreshness(
+      corridors.map((corridor) => corridor.freshness),
+      checkedAt,
+    ),
   };
 }
 
-function buildFallbackTalkSignals(observedAt = new Date().toISOString()) {
-  return [
-    {
-      id: "talk-phuket-weather",
-      kind: "talk" as const,
-      title: "Phuket weather and surf safety",
-      zone: "Patong",
-      status: "watch" as const,
-      summary: "Search attention is leaning toward waves, rain, and practical beach safety.",
-      volumeLabel: "120K+",
-      source: "Google Trends TH fallback",
-      observedAt,
-    },
-    {
-      id: "talk-airport-arrivals",
-      kind: "talk" as const,
-      title: "Phuket airport arrivals",
-      zone: "Airport corridor",
-      status: "watch" as const,
-      summary: "Transfer logistics and arrival timing remain a visible public topic.",
-      volumeLabel: "60K+",
-      source: "Google Trends TH fallback",
-      observedAt,
-    },
-    {
-      id: "talk-bangla-crowds",
-      kind: "talk" as const,
-      title: "Patong crowd vibe",
-      zone: "Patong",
-      status: "stable" as const,
-      summary: "Patong's crowd temperature is active but not yet narrative-dominant.",
-      volumeLabel: "18K+",
-      source: "Google Trends TH fallback",
-      observedAt,
-    },
-  ];
-}
-
-async function fetchGoogleTrendSignals() {
+async function fetchGoogleTrendSignals(): Promise<NarrativeFeedResult> {
+  const checkedAt = new Date().toISOString();
   const xml = await fetchTextWithTimeout(GOOGLE_TRENDS_RSS_TH);
   if (!xml) {
-    return buildFallbackTalkSignals();
+    return {
+      signals: [],
+      source: "Google Trends TH",
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["Google Trends TH"],
+      }),
+    };
   }
 
   const itemRegex = /<item>[\s\S]*?<\/item>/g;
-  const observedAt = new Date().toISOString();
   const items: NarrativeSignal[] = [];
   let match: RegExpExecArray | null;
 
@@ -590,6 +704,8 @@ async function fetchGoogleTrendSignals() {
     const traffic =
       itemXml.match(/<ht:approx_traffic>(.*?)<\/ht:approx_traffic>/)?.[1] ??
       "10K+";
+    const pubDate = itemXml.match(/<pubDate>(.*?)<\/pubDate>/)?.[1];
+    const parsedPubDate = pubDate ? new Date(pubDate) : null;
 
     if (
       !title ||
@@ -601,6 +717,10 @@ async function fetchGoogleTrendSignals() {
       continue;
     }
 
+    const observedAt =
+      parsedPubDate && Number.isFinite(parsedPubDate.getTime())
+        ? parsedPubDate.toISOString()
+        : checkedAt;
     items.push({
       id: `talk-${items.length + 1}`,
       kind: "talk",
@@ -611,44 +731,33 @@ async function fetchGoogleTrendSignals() {
       volumeLabel: traffic,
       source: "Google Trends TH",
       observedAt,
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt,
+        fallbackTier: "live",
+        sourceIds: ["Google Trends TH"],
+      }),
     });
 
     match = itemRegex.exec(xml);
   }
 
-  return items.length > 0 ? items.slice(0, 8) : buildFallbackTalkSignals(observedAt);
+  const signals = items.slice(0, 8);
+
+  return {
+    signals,
+    source: "Google Trends TH",
+    freshness: buildFreshness({
+      checkedAt,
+      observedAt: newestObservedAt(signals.map((item) => item.observedAt)) ?? checkedAt,
+      fallbackTier: "live",
+      sourceIds: ["Google Trends TH"],
+    }),
+  };
 }
 
-function buildFallbackShareSignals(observedAt = new Date().toISOString()) {
-  return [
-    {
-      id: "share-marine-warning",
-      kind: "share" as const,
-      title: "Andaman surf warnings lead Phuket-linked sharing",
-      zone: "Patong",
-      status: "watch" as const,
-      summary: "Shared headlines are leaning toward practical weather and sea access guidance.",
-      volumeLabel: "Regional share",
-      source: "GDELT fallback",
-      observedAt,
-      url: "https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
-    },
-    {
-      id: "share-tourism-weekend",
-      kind: "share" as const,
-      title: "Visitor flow stories keep Patong and airport traffic visible",
-      zone: "Airport corridor",
-      status: "stable" as const,
-      summary: "Tourism demand is present in shared coverage without overt panic framing.",
-      volumeLabel: "Cross-platform share",
-      source: "GDELT fallback",
-      observedAt,
-      url: "https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
-    },
-  ];
-}
-
-async function fetchGdeltSignals() {
+async function fetchGdeltSignals(): Promise<NarrativeFeedResult> {
+  const checkedAt = new Date().toISOString();
   const payload = await fetchJsonWithTimeout<{
     articles?: Array<{
       title?: string;
@@ -663,11 +772,20 @@ async function fetchGdeltSignals() {
     )}&mode=ArtList&format=json&maxrecords=10&sort=datedesc&timespan=7days`,
   );
 
-  if (!payload?.articles?.length) {
-    return buildFallbackShareSignals();
+  if (!payload) {
+    return {
+      signals: [],
+      source: "GDELT DOC 2",
+      freshness: buildFreshness({
+        checkedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["GDELT DOC 2"],
+      }),
+    };
   }
 
-  const signals = payload.articles
+  const signals = (payload.articles ?? [])
     .flatMap((article, index): NarrativeSignal[] => {
       if (!article.title || !article.url) {
         return [];
@@ -694,14 +812,31 @@ async function fetchGdeltSignals() {
           source: source.toUpperCase(),
           observedAt: article.seendate
             ? new Date(article.seendate).toISOString()
-            : new Date().toISOString(),
+            : checkedAt,
           url: article.url,
+          freshness: buildFreshness({
+            checkedAt,
+            observedAt: article.seendate
+              ? new Date(article.seendate).toISOString()
+              : checkedAt,
+            fallbackTier: "live",
+            sourceIds: [source.toUpperCase()],
+          }),
         },
       ];
     })
     .slice(0, 6);
 
-  return signals.length > 0 ? signals : buildFallbackShareSignals();
+  return {
+    signals,
+    source: "GDELT DOC 2",
+    freshness: buildFreshness({
+      checkedAt,
+      observedAt: newestObservedAt(signals.map((item) => item.observedAt)) ?? checkedAt,
+      fallbackTier: "live",
+      sourceIds: ["GDELT DOC 2"],
+    }),
+  };
 }
 
 function buildBroadcastSignals(
@@ -727,8 +862,18 @@ function buildBroadcastSignals(
         volumeLabel: "6 live channels",
         source: "Thailand TV wall",
         observedAt,
+        freshness: buildFreshness({
+          checkedAt: observedAt,
+          observedAt,
+          fallbackTier: "scenario",
+          sourceIds: ["Thailand TV wall"],
+        }),
       },
     ];
+  }
+
+  if (scenario === "live" && talkSignals.length === 0 && shareSignals.length === 0) {
+    return [] as NarrativeSignal[];
   }
 
   return LIVE_TV_CHANNELS.slice(0, 3).map((channel, index) => ({
@@ -744,6 +889,12 @@ function buildBroadcastSignals(
     volumeLabel: "Live wall",
     source: channel.name,
     observedAt,
+    freshness: buildFreshness({
+      checkedAt: observedAt,
+      observedAt,
+      fallbackTier: scenario === "live" ? "live" : "scenario",
+      sourceIds: [channel.name],
+    }),
   }));
 }
 
@@ -799,6 +950,12 @@ function scenarioMediaWatch(scenario: GovernorScenarioId): MediaWatchResponse | 
       peopleShare: share,
       broadcastWatch: buildBroadcastSignals(talk, share, scenario),
       sources: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      }),
     };
   }
 
@@ -851,6 +1008,12 @@ function scenarioMediaWatch(scenario: GovernorScenarioId): MediaWatchResponse | 
       peopleShare: share,
       broadcastWatch: buildBroadcastSignals(talk, share, scenario),
       sources: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      }),
     };
   }
 
@@ -892,6 +1055,12 @@ function scenarioMediaWatch(scenario: GovernorScenarioId): MediaWatchResponse | 
       peopleShare: share,
       broadcastWatch: buildBroadcastSignals(talk, share, scenario),
       sources: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["Scenario / Google Trends TH", "Scenario / GDELT", "Thailand TV wall"],
+      }),
     };
   }
 
@@ -908,19 +1077,32 @@ export async function loadMediaWatch(
     return scenarioPayload;
   }
 
-  const [talkSignals, shareSignals] = await Promise.all([
+  const [talkFeed, shareFeed] = await Promise.all([
     fetchGoogleTrendSignals(),
     fetchGdeltSignals(),
   ]);
+  const talkSignals = talkFeed.signals;
+  const shareSignals = shareFeed.signals;
   const broadcastWatch = buildBroadcastSignals(talkSignals, shareSignals, scenario);
   const strongestStatus =
     [...talkSignals, ...shareSignals].sort(compareByStatus)[0]?.status ?? "stable";
+  const checkedAt = new Date().toISOString();
+  const tvWallFreshness = summarizeFreshness(
+    broadcastWatch.map((signal) => signal.freshness),
+    checkedAt,
+  );
+  const noSignals = talkSignals.length + shareSignals.length === 0;
+  const feedsFresh = talkFeed.freshness.isFresh || shareFeed.freshness.isFresh;
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     scenario,
     postureSummary:
-      strongestStatus === "intervene"
+      noSignals && feedsFresh
+        ? "Fresh public narrative feeds show no Phuket-linked spike large enough to flag right now."
+        : noSignals
+        ? "Public narrative data are currently unavailable; do not infer mood from stale or missing feeds."
+        : strongestStatus === "intervene"
         ? "Narrative heat is high enough to justify a governor line today."
         : strongestStatus === "watch"
           ? "Narrative heat is elevated but still manageable with targeted messaging."
@@ -933,6 +1115,19 @@ export async function loadMediaWatch(
       ...shareSignals.map((signal) => signal.source),
       "Thailand TV wall",
     ]),
+    providerHealth: {
+      googleTrends: talkFeed.freshness,
+      gdelt: shareFeed.freshness,
+      tvWall: tvWallFreshness,
+    },
+    freshness: summarizeFreshness(
+      [
+        talkFeed.freshness,
+        shareFeed.freshness,
+        tvWallFreshness,
+      ],
+      checkedAt,
+    ),
   };
 }
 
@@ -949,6 +1144,12 @@ async function loadAirspacePressure(
       summary: "The live sky posture suggests Phuket is entering a dense arrival bank.",
       updatedAt: generatedAt,
       sources: ["OpenSky scenario"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["OpenSky scenario"],
+      }),
     };
   }
 
@@ -959,6 +1160,12 @@ async function loadAirspacePressure(
       summary: "Arrivals are still active, but weather-driven transfer reliability matters more than raw volume.",
       updatedAt: generatedAt,
       sources: ["OpenSky scenario"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["OpenSky scenario"],
+      }),
     };
   }
 
@@ -969,6 +1176,12 @@ async function loadAirspacePressure(
       summary: "Airspace posture is steady and should not dominate the governor day.",
       updatedAt: generatedAt,
       sources: ["OpenSky scenario"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: ["OpenSky scenario"],
+      }),
     };
   }
 
@@ -977,11 +1190,17 @@ async function loadAirspacePressure(
 
   if (count === 0) {
     return {
-      count: 16,
-      status: "watch",
-      summary: "Fallback sky posture keeps airport pressure on watch, not yet on intervene.",
+      count: null,
+      status: "stable",
+      summary: "OpenSky is unavailable, so airport pressure is not being quantified right now.",
       updatedAt: generatedAt,
-      sources: ["OpenSky fallback"],
+      sources: ["OpenSky"],
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: null,
+        fallbackTier: "unavailable",
+        sourceIds: ["OpenSky"],
+      }),
     };
   }
 
@@ -995,21 +1214,45 @@ async function loadAirspacePressure(
           ? "The sky posture points to a busier-than-routine airport corridor."
           : "Flight density is modest and should stay manageable.",
     updatedAt: generatedAt,
-    sources: ["OpenSky live"],
+    sources: ["OpenSky"],
+    freshness: buildFreshness({
+      checkedAt: generatedAt,
+      observedAt: generatedAt,
+      fallbackTier: "live",
+      sourceIds: ["OpenSky"],
+    }),
   };
 }
 
-function cameraCoverageSummary(cameras: PublicCamera[]) {
-  const verified = cameras.filter((camera) => camera.validationState === "verified").length;
-  const candidates = cameras.filter((camera) => camera.validationState === "candidate").length;
-  return { verified, candidates };
+function getFreshGovernorIncidents(incidents: IncidentFeature[]) {
+  return incidents.filter((incident) =>
+    isFreshTimestamp(incident.properties.eventDate, GOVERNOR_MAX_AGE_MINUTES),
+  );
+}
+
+function cameraCoverageSummary(
+  cameras: Awaited<ReturnType<typeof loadPublicCameraFeed>>["cameras"],
+  expectedVerifiedFeeds: number,
+) {
+  const operationalFeeds = cameras.filter(
+    (camera) =>
+      (camera.operationalState === "live" || camera.operationalState === "reachable") &&
+      camera.freshness?.isFresh,
+  ).length;
+
+  return {
+    verifiedLive: operationalFeeds,
+    expectedVerifiedFeeds,
+    coveragePct:
+      expectedVerifiedFeeds > 0 ? operationalFeeds / expectedVerifiedFeeds : null,
+  };
 }
 
 export async function loadCityVibes(
   options: CityVibeOptions = {},
 ): Promise<CityVibesResponse> {
   const scenario = resolveScenario(options.scenario);
-  const [marine, mediaWatch, airspace, incidents] = await Promise.all([
+  const [marine, mediaWatch, airspace, incidents, cameraFeed] = await Promise.all([
     options.marine ? Promise.resolve(options.marine) : loadMarineStatus({ scenario }),
     options.mediaWatch
       ? Promise.resolve(options.mediaWatch)
@@ -1017,17 +1260,20 @@ export async function loadCityVibes(
     options.airspace ? Promise.resolve(options.airspace) : loadAirspacePressure({ scenario }),
     options.incidents
       ? Promise.resolve(options.incidents)
-      : loadThailandIncidents().catch(() => fallbackIncidents),
+      : loadThailandIncidents().catch(() => [] as IncidentFeature[]),
+    options.cameraFeed ? Promise.resolve(options.cameraFeed) : loadPublicCameraFeed(),
   ]);
 
+  const checkedAt = new Date().toISOString();
   const allSignals = [
     ...mediaWatch.peopleTalkAbout,
     ...mediaWatch.peopleShare,
     ...mediaWatch.broadcastWatch,
   ];
+  const freshIncidents = getFreshGovernorIncidents(incidents);
 
   const zones = CITY_ZONES.map((zone) => {
-    const zoneCameras = phuketPublicCameras.filter(
+    const zoneCameras = cameraFeed.cameras.filter(
       (camera) =>
         zone.focusAreas.includes(camera.focusArea) ||
         zone.aliases.some((alias) => camera.focusArea.toLowerCase().includes(alias.toLowerCase())),
@@ -1044,43 +1290,186 @@ export async function loadCityVibes(
         signal.zone === zone.label ||
         matchAny(`${signal.title} ${signal.summary} ${signal.zone}`, zone.aliases),
     ).sort(compareByStatus);
-    const zoneIncidents = incidents.filter((incident) =>
+    const zoneIncidents = freshIncidents.filter((incident) =>
       matchAny(
         `${incident.properties.location} ${incident.properties.notes} ${incident.properties.title}`,
         zone.aliases,
       ),
     );
-    const trendTrafficTotal = zoneSignals
-      .filter((signal) => signal.kind === "talk")
-      .reduce((sum, signal) => sum + parseTrafficVolume(signal.volumeLabel), 0);
-    const marineScore = zoneMarine.reduce(
-      (sum, corridor) => sum + STATUS_PRIORITY[corridor.status] * 8,
-      0,
-    );
-    const signalScore = zoneSignals.reduce(
-      (sum, signal) => sum + narrativeWeight(signal.status),
-      0,
-    );
-    const incidentScore = zoneIncidents.reduce(
-      (sum, incident) => sum + 8 + incident.properties.fatalities * 6,
-      0,
-    );
-    const cameraSummary = cameraCoverageSummary(zoneCameras);
-    const airportBoost = zone.id === "airport-corridor" ? airspace.count * 1.2 : 0;
-    const tourismBoost = ["patong", "ao-nang", "khao-lak"].includes(zone.id) ? 12 : 0;
-    const score = Math.min(
-      100,
-      cameraSummary.verified * 14 +
-        cameraSummary.candidates * 5 +
-        signalScore +
-        marineScore +
-        incidentScore +
-        Math.min(18, trendTrafficTotal / 12_000) +
-        airportBoost +
-        tourismBoost,
-    );
-    const status = statusFromScore(score);
+    const freshSignals = zoneSignals.filter((signal) => signal.freshness?.isFresh);
+    const freshMarine = zoneMarine.filter((corridor) => corridor.freshness?.isFresh);
+    const leadMarine = freshMarine[0];
+    const leadSignal = freshSignals[0];
+    const cameraSummary = cameraCoverageSummary(zoneCameras, zoneCameras.length);
+    const cameraCoveragePct = cameraSummary.coveragePct;
+    const narrativeSignals24h = freshSignals.filter((signal) =>
+      isFreshTimestamp(signal.observedAt, GOVERNOR_MAX_AGE_MINUTES),
+    ).length;
+    const incidentCount24h = zoneIncidents.length;
+    const mobilityRatio =
+      zone.id === "airport-corridor" && airspace.freshness.isFresh && airspace.count !== null
+        ? Math.min(1, airspace.count / 30)
+        : null;
+    const weatherRatio = leadMarine
+      ? leadMarine.status === "intervene"
+        ? 1
+        : leadMarine.status === "watch"
+          ? 0.6
+          : 0.25
+      : null;
+    const incidentRatio = Math.min(1, incidentCount24h / 3);
+    const narrativeRatio = Math.min(1, narrativeSignals24h / 10);
+    const componentCandidates: Array<{ weight: number; value: number; evidence: MetricEvidence }> = [];
+
+    if (cameraFeed.freshness.isFresh && cameraCoveragePct !== null) {
+      componentCandidates.push({
+        weight: 0.25,
+        value: cameraCoveragePct,
+        evidence: buildEvidence({
+          id: `${zone.id}-camera-coverage`,
+          label: "Camera coverage",
+          value: Math.round(cameraCoveragePct * 100),
+          displayValue: `${Math.round(cameraCoveragePct * 100)}%`,
+          unit: "%",
+          source: "Public camera validation",
+          observedAt: cameraFeed.lastSweepAt,
+          formula: "verified live feeds / expected verified feeds",
+          freshness: cameraFeed.freshness,
+        }),
+      });
+    }
+
+    if (mediaWatch.freshness.isFresh) {
+      componentCandidates.push({
+        weight: 0.25,
+        value: narrativeRatio,
+        evidence: buildEvidence({
+          id: `${zone.id}-narrative`,
+          label: "Narrative signals (24h)",
+          value: narrativeSignals24h,
+          displayValue: `${narrativeSignals24h}`,
+          source: "Google Trends / GDELT / TV wall",
+          observedAt: freshSignals[0]?.observedAt ?? null,
+          formula: "min(1, narrativeSignals24h / 10)",
+          freshness:
+            freshSignals.length > 0
+              ? summarizeFreshness(freshSignals.map((signal) => signal.freshness), checkedAt)
+              : mediaWatch.freshness,
+        }),
+      });
+    }
+
+    if (mobilityRatio !== null) {
+      componentCandidates.push({
+        weight: 0.2,
+        value: mobilityRatio,
+        evidence: buildEvidence({
+          id: `${zone.id}-mobility`,
+          label: "Mobility load",
+          value: airspace.count,
+          displayValue: airspace.count === null ? "Data unavailable" : `${airspace.count} aircraft`,
+          source: airspace.sources[0] ?? "OpenSky",
+          observedAt: airspace.updatedAt,
+          formula: "min(1, aircraftCount / 30)",
+          freshness: airspace.freshness,
+        }),
+      });
+    }
+
+    if (weatherRatio !== null && leadMarine) {
+      componentCandidates.push({
+        weight: 0.15,
+        value: weatherRatio,
+        evidence: buildEvidence({
+          id: `${zone.id}-weather`,
+          label: "Weather exposure",
+          value: leadMarine.status,
+          displayValue: leadMarine.alertPosture,
+          source: leadMarine.sources[0] ?? "Open-Meteo Marine",
+          observedAt: leadMarine.updatedAt,
+          formula: "stable=0.25, watch=0.6, intervene=1.0",
+          freshness: leadMarine.freshness,
+        }),
+      });
+    }
+
+    if (freshIncidents.length > 0) {
+      componentCandidates.push({
+        weight: 0.15,
+        value: incidentRatio,
+        evidence: buildEvidence({
+          id: `${zone.id}-incidents`,
+          label: "Incidents (24h)",
+          value: incidentCount24h,
+          displayValue: `${incidentCount24h}`,
+          source: "Thailand monitor incidents",
+          observedAt: zoneIncidents[0]?.properties.eventDate ?? null,
+          formula: "min(1, incidentCount24h / 3)",
+          freshness:
+            zoneIncidents.length > 0
+              ? summarizeFreshness(
+                  zoneIncidents.map((incident) =>
+                    buildFreshness({
+                      checkedAt,
+                      observedAt: incident.properties.eventDate,
+                      fallbackTier: "database",
+                      sourceIds: ["Thailand monitor incidents"],
+                    }),
+                  ),
+                  checkedAt,
+                )
+              : buildFreshness({
+                  checkedAt,
+                  observedAt: checkedAt,
+                  fallbackTier: "database",
+                  sourceIds: ["Thailand monitor incidents"],
+                }),
+        }),
+      });
+    }
+
+    const presentWeight = componentCandidates.reduce((sum, component) => sum + component.weight, 0);
+    const pulseIndex =
+      presentWeight > 0
+        ? Math.round(
+            100 *
+              (componentCandidates.reduce(
+                (sum, component) => sum + component.value * component.weight,
+                0,
+              ) /
+                presentWeight),
+          )
+        : null;
+    const componentEvidence = componentCandidates.map((component) => component.evidence);
+    const derivedStatusInputs: ExecutiveStatus[] = [];
+
+    if (leadMarine?.freshness?.isFresh) {
+      derivedStatusInputs.push(leadMarine.status);
+    }
+    if (leadSignal?.freshness?.isFresh) {
+      derivedStatusInputs.push(leadSignal.status);
+    }
+    if (incidentCount24h >= 2) {
+      derivedStatusInputs.push("intervene");
+    } else if (incidentCount24h === 1) {
+      derivedStatusInputs.push("watch");
+    }
+    if (zone.id === "airport-corridor" && airspace.freshness.isFresh) {
+      derivedStatusInputs.push(airspace.status);
+    }
+
+    const status =
+      derivedStatusInputs.length > 0
+        ? topStatus(derivedStatusInputs)
+        : determineStatusFromNormalizedIndex(pulseIndex);
     const broadcastCount = zoneSignals.filter((signal) => signal.kind === "broadcast").length;
+    const zoneFreshness = summarizeFreshness(
+      [
+        ...componentEvidence.map((component) => component.freshness),
+        cameraFeed.freshness,
+      ],
+      checkedAt,
+    );
 
     return {
       id: zone.id,
@@ -1091,42 +1480,74 @@ export async function loadCityVibes(
           ? `${zone.label} is running hot enough to affect the governor story today.`
           : status === "watch"
             ? `${zone.label} is active and worth a closer read before the next field round.`
-            : `${zone.label} feels broadly manageable with low narrative friction.`,
+            : zoneFreshness.isFresh
+              ? `${zone.label} feels broadly manageable with low narrative friction.`
+              : `${zone.label} has incomplete fresh inputs; use raw feeds before calling it stable.`,
       whyNow:
         zone.id === "airport-corridor"
           ? airspace.summary
-          : zoneMarine[0]?.summary ??
-            zoneSignals[0]?.summary ??
-            "No single signal dominates; this is a blended city-vibe read.",
-      score: Math.round(score),
-      cameraFreshness: `${cameraSummary.verified} verified / ${cameraSummary.candidates} scout`,
-      trendTraffic:
-        trendTrafficTotal > 0
-          ? `${formatCompact(trendTrafficTotal)} search load`
-          : "Quiet search load",
-      tvCoverage: `${Math.max(1, broadcastCount)} channels in watch rotation`,
-      mobilityPressure:
+          : leadMarine?.summary ??
+            leadSignal?.summary ??
+            "No single fresh signal dominates; read the component metrics directly.",
+      pulseIndex,
+      pulseFormula:
+        pulseIndex === null
+          ? null
+          : "weightedMean(camera 0.25, narrative 0.25, mobility 0.20, weather 0.15, incidents 0.15) over fresh components only",
+      cameraCoveragePct:
+        cameraCoveragePct === null ? null : Math.round(cameraCoveragePct * 100),
+      narrativeSignals24h,
+      mobilityLoad:
         zone.id === "airport-corridor"
-          ? `${airspace.count} aircraft in Phuket sky posture`
-          : zoneMarine[0]
-            ? `${statusLabel(zoneMarine[0].status)} marine effect`
-            : `${zoneSignals.length} narrative signals`,
+          ? airspace.count === null || !airspace.freshness.isFresh
+            ? "Data unavailable"
+            : `${airspace.count} aircraft`
+          : "Data unavailable",
+      weatherExposure:
+        leadMarine && leadMarine.freshness?.isFresh
+          ? `${leadMarine.alertPosture} / ${formatMetric(leadMarine.waveHeightMeters, "m")}`
+          : "Data unavailable",
+      incidentCount24h,
       recommendedAction: zone.defaultAction,
       sources: uniqueStrings([
         ...zoneCameras.map((camera) => camera.provider),
-        ...zoneMarine.flatMap((corridor) => corridor.sources),
-        ...zoneSignals.map((signal) => signal.source),
+        ...freshMarine.flatMap((corridor) => corridor.sources),
+        ...freshSignals.map((signal) => signal.source),
         ...(zone.id === "airport-corridor" ? airspace.sources : []),
+        ...(incidentCount24h > 0 ? ["Thailand monitor incidents"] : []),
       ]),
-      updatedAt: new Date().toISOString(),
+      updatedAt: checkedAt,
+      components: [
+        ...componentEvidence,
+        buildEvidence({
+          id: `${zone.id}-broadcast`,
+          label: "Broadcast watch",
+          value: broadcastCount,
+          displayValue: `${broadcastCount} channels`,
+          source: "Thailand TV wall",
+          observedAt: checkedAt,
+          freshness: mediaWatch.freshness,
+        }),
+      ],
+      freshness: zoneFreshness,
     } satisfies CityVibeCard;
-  }).sort((left, right) => right.score - left.score);
+  }).sort((left, right) => {
+    if (STATUS_PRIORITY[right.status] !== STATUS_PRIORITY[left.status]) {
+      return STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status];
+    }
+
+    return (right.pulseIndex ?? -1) - (left.pulseIndex ?? -1);
+  });
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     scenario,
     zones,
     sources: uniqueStrings(zones.flatMap((zone) => zone.sources)),
+    freshness: summarizeFreshness(
+      zones.map((zone) => zone.freshness),
+      checkedAt,
+    ),
   };
 }
 
@@ -1181,8 +1602,9 @@ function buildCorridorPriorities({
   cityVibes: CityVibesResponse;
   mediaWatch: MediaWatchResponse;
   airspace: AirspacePressure;
-  incidents: typeof fallbackIncidents;
+  incidents: IncidentFeature[];
 }) {
+  const checkedAt = new Date().toISOString();
   const allSignals = [
     ...mediaWatch.peopleTalkAbout,
     ...mediaWatch.peopleShare,
@@ -1194,7 +1616,7 @@ function buildCorridorPriorities({
       (alert) =>
         corridor.focusAreas.includes(alert.area) ||
         matchAny(`${alert.title} ${alert.summary} ${alert.area}`, corridor.aliases),
-    ).sort(compareDisasterAlerts);
+    ).filter((alert) => alert.freshness?.isFresh).sort(compareDisasterAlerts);
     const maritimeContacts = maritimeSecurity.vessels.filter(
       (vessel) =>
         matchAny(
@@ -1206,17 +1628,17 @@ function buildCorridorPriorities({
             .toLowerCase()
             .includes(focusArea.toLowerCase()),
         ),
-    ).sort(compareByStatus);
+    ).filter((vessel) => vessel.freshness?.isFresh).sort(compareByStatus);
     const marineCorridors = marine.corridors.filter(
       (item) =>
         corridor.focusAreas.includes(item.focusArea) ||
         matchAny(`${item.label} ${item.locationLabel} ${item.focusArea}`, corridor.aliases),
-    ).sort(compareByStatus);
+    ).filter((item) => item.freshness?.isFresh).sort(compareByStatus);
     const vibeCards = cityVibes.zones.filter(
       (zone) =>
         corridor.focusAreas.some((focusArea) => zone.label.includes(focusArea)) ||
         matchAny(`${zone.label} ${zone.summary} ${zone.whyNow}`, corridor.aliases),
-    ).sort(compareByStatus);
+    ).filter((zone) => zone.freshness.isFresh).sort(compareByStatus);
     const tourismNodes = tourismHotspots.hotspots.filter(
       (hotspot) =>
         corridor.focusAreas.includes(hotspot.area) ||
@@ -1224,12 +1646,12 @@ function buildCorridorPriorities({
           `${hotspot.label} ${hotspot.area} ${hotspot.summary} ${hotspot.strategicNote}`,
           corridor.aliases,
         ),
-    ).sort(compareByStatus);
+    ).filter((hotspot) => hotspot.freshness?.isFresh).sort(compareByStatus);
     const signals = allSignals.filter(
       (signal) =>
         matchAny(`${signal.title} ${signal.summary} ${signal.zone}`, corridor.aliases) ||
         corridor.focusAreas.includes(signal.zone),
-    ).sort(compareByStatus);
+    ).filter((signal) => signal.freshness?.isFresh).sort(compareByStatus);
     const corridorIncidents = incidents.filter((incident) =>
       matchAny(
         `${incident.properties.location} ${incident.properties.notes} ${incident.properties.title}`,
@@ -1253,7 +1675,7 @@ function buildCorridorPriorities({
         (sum, incident) => sum + 10 + incident.properties.fatalities * 6,
         0,
       ) +
-      (corridor.id === "airport-patong" ? airspace.count * 1.4 : 0);
+      (corridor.id === "airport-patong" ? (airspace.count ?? 0) * 1.4 : 0);
     const status =
       disasterAlerts.some((item) => item.severity === "intervene") ||
       maritimeContacts.some((item) => item.status === "intervene") ||
@@ -1297,10 +1719,42 @@ function buildCorridorPriorities({
         ...maritimeContacts.map((item) => item.type),
         ...marineCorridors.map((item) => item.alertPosture),
         ...tourismNodes.map((item) => item.kind),
-        ...vibeCards.map((item) => item.mobilityPressure),
+        ...vibeCards.map((item) => item.mobilityLoad),
         ...signals.map((item) => item.kind),
       ]).slice(0, 3),
       focusAreas: corridor.focusAreas,
+      freshness: summarizeFreshness(
+        [
+          disaster.freshness,
+          maritimeSecurity.freshness,
+          marine.freshness,
+          tourismHotspots.freshness,
+          cityVibes.freshness,
+          mediaWatch.freshness,
+          airspace.freshness,
+        ],
+        checkedAt,
+      ),
+      evidence: [
+        buildEvidence({
+          id: `${corridor.id}-signals`,
+          label: "Narrative signals",
+          value: signals.length,
+          displayValue: `${signals.length}`,
+          source: "Media watch",
+          observedAt: signals[0]?.observedAt ?? null,
+          freshness: mediaWatch.freshness,
+        }),
+        buildEvidence({
+          id: `${corridor.id}-marine`,
+          label: "Fresh marine corridors",
+          value: marineCorridors.length,
+          displayValue: `${marineCorridors.length}`,
+          source: "Marine status",
+          observedAt: marineCorridors[0]?.updatedAt ?? null,
+          freshness: marine.freshness,
+        }),
+      ],
     } satisfies GovernorCorridorPriority;
   });
 }
@@ -1377,21 +1831,34 @@ export async function buildGovernorBrief(
   options: GovernorDataOptions = {},
 ): Promise<GovernorBrief> {
   const scenario = resolveScenario(options.scenario);
-  const [disaster, maritimeSecurity, marine, tourismHotspots, mediaWatch, airspace, incidents] = await Promise.all([
+  const [
+    disaster,
+    maritimeSecurity,
+    marine,
+    tourismHotspots,
+    mediaWatch,
+    airspace,
+    incidents,
+    cameraFeed,
+  ] = await Promise.all([
     loadDisasterFeed({ scenario }),
     loadMaritimeSecurity({ scenario }),
     loadMarineStatus({ scenario }),
     loadTourismHotspots({ scenario }),
     loadMediaWatch({ scenario }),
     loadAirspacePressure({ scenario }),
-    loadThailandIncidents().catch(() => fallbackIncidents),
+    loadThailandIncidents().catch(() => [] as IncidentFeature[]),
+    loadPublicCameraFeed(),
   ]);
+  const checkedAt = new Date().toISOString();
+  const freshIncidents = getFreshGovernorIncidents(incidents);
   const cityVibes = await loadCityVibes({
     scenario,
     marine,
     mediaWatch,
     airspace,
-    incidents,
+    incidents: freshIncidents,
+    cameraFeed,
   });
 
   const corridorPriorities = buildCorridorPriorities({
@@ -1402,32 +1869,37 @@ export async function buildGovernorBrief(
     cityVibes,
     mediaWatch,
     airspace,
-    incidents,
+    incidents: freshIncidents,
   });
-  const topMarine = marine.corridors.sort(compareByStatus)[0];
+  const topMarine = marine.corridors.filter((corridor) => corridor.freshness?.isFresh).sort(compareByStatus)[0] ??
+    marine.corridors.sort(compareByStatus)[0];
   const topDisaster = [...disaster.alerts].sort(
     (left, right) => STATUS_PRIORITY[right.severity] - STATUS_PRIORITY[left.severity],
   )[0];
-  const topMaritimeContact = [...maritimeSecurity.vessels].sort(compareByStatus)[0];
+  const topMaritimeContact = [...maritimeSecurity.vessels]
+    .filter((vessel) => vessel.freshness?.isFresh)
+    .sort(compareByStatus)[0];
   const portCorridors = marine.corridors.filter((corridor) =>
     ["Chalong / Rassada / Ao Po", "Phi Phi corridor", "Ao Nang", "Khao Lak"].includes(
       corridor.focusArea,
     ),
-  );
+  ).filter((corridor) => corridor.freshness?.isFresh);
   const roadCorridors = corridorPriorities.filter((corridor) =>
     ["airport-patong", "old-town"].includes(corridor.id),
   );
   const tourismZones = cityVibes.zones.filter((zone) =>
     ["Patong", "Ao Nang", "Khao Lak"].includes(zone.label),
-  );
+  ).filter((zone) => zone.freshness.isFresh);
   const activeTourismHotspots = tourismHotspots.hotspots.filter(
-    (hotspot) => hotspot.status !== "stable",
+    (hotspot) => hotspot.status !== "stable" && hotspot.freshness?.isFresh,
   );
-  const topTourismHotspot = [...tourismHotspots.hotspots].sort(compareByStatus)[0];
+  const topTourismHotspot = [...tourismHotspots.hotspots]
+    .filter((hotspot) => hotspot.freshness?.isFresh)
+    .sort(compareByStatus)[0];
   const publicMoodLead = [
     ...mediaWatch.peopleTalkAbout,
     ...mediaWatch.peopleShare,
-  ].sort(compareByStatus)[0];
+  ].filter((signal) => signal.freshness?.isFresh).sort(compareByStatus)[0];
   const roadLead = roadCorridors.sort(compareByStatus)[0] ?? corridorPriorities[0];
   const roadDisasterLead =
     disaster.alerts.find((alert) =>
@@ -1449,6 +1921,8 @@ export async function buildGovernorBrief(
     metric: { label: string; value: string };
     action: string;
     sources: string[];
+    freshness?: DataFreshness;
+    evidence?: MetricEvidence[];
   }> = [
     {
       id: "monsoon-risk",
@@ -1463,10 +1937,14 @@ export async function buildGovernorBrief(
         `${topMarine.label} is the current marine-weather lead.`,
       metric: concernMetric(
         "Wave / alerts",
-        `${formatMetric(topMarine.waveHeightMeters, "m")} / ${disaster.alerts.filter((alert) => alert.severity !== "stable").length}`,
+        topMarine.freshness?.isFresh
+          ? `${formatMetric(topMarine.waveHeightMeters, "m")} / ${disaster.alerts.filter((alert) => alert.severity !== "stable").length}`
+          : "Data unavailable",
       ),
       action: actionFromDisasterAlert(topDisaster) ?? topMarine.recommendedAction,
       sources: uniqueStrings([...topMarine.sources, ...disaster.sources]),
+      freshness: summarizeFreshness([topMarine.freshness, disaster.freshness], checkedAt),
+      evidence: topMarine.evidence,
     },
     {
       id: "marine-route-status",
@@ -1489,7 +1967,9 @@ export async function buildGovernorBrief(
         "East coast and open-water corridors are inside normal watch.",
       metric: concernMetric(
         "Corridors / vessels",
-        `${portCorridors.filter((item) => item.status !== "stable").length}/${portCorridors.length} • ${maritimeSecurity.vessels.length}`,
+        !maritimeSecurity.freshness.isFresh && !marine.freshness.isFresh
+          ? "Data unavailable"
+          : `${portCorridors.filter((item) => item.status !== "stable").length}/${portCorridors.length} • ${maritimeSecurity.vessels.length}`,
       ),
       action:
         actionFromMaritimeContact(topMaritimeContact) ??
@@ -1499,6 +1979,10 @@ export async function buildGovernorBrief(
         ...portCorridors.flatMap((item) => item.sources),
         ...maritimeSecurity.sources,
       ]),
+      freshness: summarizeFreshness(
+        [maritimeSecurity.freshness, marine.freshness],
+        checkedAt,
+      ),
     },
     {
       id: "airport-arrivals-pressure",
@@ -1508,11 +1992,15 @@ export async function buildGovernorBrief(
       whyNow:
         corridorPriorities.find((item) => item.id === "airport-patong")?.whyNow ??
         airspace.summary,
-      metric: concernMetric("Aircraft", `${airspace.count}`),
+      metric: concernMetric(
+        "Aircraft",
+        airspace.count === null || !airspace.freshness.isFresh ? "Data unavailable" : `${airspace.count}`,
+      ),
       action:
         corridorPriorities.find((item) => item.id === "airport-patong")?.action ??
         "Clear airport road access and watch transfer queues.",
       sources: airspace.sources,
+      freshness: airspace.freshness,
     },
     {
       id: "road-bottlenecks",
@@ -1530,15 +2018,18 @@ export async function buildGovernorBrief(
       whyNow: roadDisasterLead?.summary ?? roadLead.whyNow,
       metric: concernMetric(
         "Road corridors",
-        `${roadCorridors.filter((item) => item.status !== "stable").length}/${roadCorridors.length}`,
+        !roadLead?.freshness?.isFresh && !disaster.freshness.isFresh
+          ? "Data unavailable"
+          : `${roadCorridors.filter((item) => item.status !== "stable").length}/${roadCorridors.length}`,
       ),
       action: actionFromDisasterAlert(roadDisasterLead) ?? roadLead.action,
       sources: uniqueStrings([
-        "Camera proxy",
+        "Camera validation",
         "Local incidents",
         "Governor corridor model",
         ...disaster.sources,
       ]),
+      freshness: summarizeFreshness([cameraFeed.freshness, disaster.freshness], checkedAt),
     },
     {
       id: "tourism-pulse",
@@ -1560,7 +2051,9 @@ export async function buildGovernorBrief(
         "Tourism demand is present, but not yet dislocating operations.",
       metric: concernMetric(
         "Active hotspots",
-        `${activeTourismHotspots.length}/${tourismHotspots.hotspots.length}`,
+        !tourismHotspots.freshness.isFresh && !cityVibes.freshness.isFresh
+          ? "Data unavailable"
+          : `${activeTourismHotspots.length}/${tourismHotspots.hotspots.length}`,
       ),
       action:
         actionFromTourismHotspot(topTourismHotspot) ??
@@ -1570,6 +2063,10 @@ export async function buildGovernorBrief(
         ...tourismZones.flatMap((zone) => zone.sources),
         ...tourismHotspots.sources,
       ]),
+      freshness: summarizeFreshness(
+        [tourismHotspots.freshness, cityVibes.freshness],
+        checkedAt,
+      ),
     },
     {
       id: "public-mood",
@@ -1581,13 +2078,16 @@ export async function buildGovernorBrief(
       whyNow: mediaWatch.postureSummary,
       metric: concernMetric(
         "Narrative heat",
-        `${mediaWatch.peopleTalkAbout.length + mediaWatch.peopleShare.length}`,
+        mediaWatch.freshness.isFresh
+          ? `${mediaWatch.peopleTalkAbout.length + mediaWatch.peopleShare.length}`
+          : "Data unavailable",
       ),
       action:
         publicMoodLead?.status === "intervene" || publicMoodLead?.status === "watch"
           ? "Calm misinformation early and keep the public line practical."
           : "Reinforce calm, factual messaging and let field conditions do the talking.",
       sources: mediaWatch.sources,
+      freshness: mediaWatch.freshness,
     },
   ];
 
@@ -1602,6 +2102,8 @@ export async function buildGovernorBrief(
       metricValue: concern.metric.value,
       action: concern.action,
       sources: concern.sources,
+      freshness: concern.freshness,
+      evidence: concern.evidence,
     }),
   );
 
@@ -1622,7 +2124,7 @@ export async function buildGovernorBrief(
   ).slice(0, 5);
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     scenario,
     posture: {
       level: postureLevel,
@@ -1638,7 +2140,19 @@ export async function buildGovernorBrief(
           : postureLevel === "watch"
             ? `The island is manageable, but one or more corridors need a tighter watch cycle and visible executive intent.`
             : `The island is broadly stable; use the war room to confirm, not chase, isolated noise.`,
-      updatedAt: new Date().toISOString(),
+      updatedAt: checkedAt,
+      freshness: summarizeFreshness(
+        [
+          disaster.freshness,
+          maritimeSecurity.freshness,
+          marine.freshness,
+          tourismHotspots.freshness,
+          cityVibes.freshness,
+          mediaWatch.freshness,
+          airspace.freshness,
+        ],
+        checkedAt,
+      ),
     },
     topConcerns,
     corridorPriorities,
@@ -1652,6 +2166,18 @@ export async function buildGovernorBrief(
       ...mediaWatch.sources,
       ...airspace.sources,
     ]),
+    freshness: summarizeFreshness(
+      [
+        disaster.freshness,
+        maritimeSecurity.freshness,
+        marine.freshness,
+        tourismHotspots.freshness,
+        cityVibes.freshness,
+        mediaWatch.freshness,
+        airspace.freshness,
+      ],
+      checkedAt,
+    ),
   };
 }
 

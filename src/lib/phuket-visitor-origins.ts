@@ -1,3 +1,4 @@
+import { buildFreshness, summarizeFreshness } from "./freshness";
 import type {
   PhuketVisitorOrigin,
   PhuketVisitorOriginsResponse,
@@ -39,17 +40,6 @@ const TOP_PHUKET_VISITOR_ORIGINS: Array<
     logo: "/logos/markets/de.svg",
   },
 ];
-
-const FALLBACK_GDP_PER_CAPITA: Record<
-  string,
-  { gdpPerCapitaUsd: number; year: number }
-> = {
-  RUS: { gdpPerCapitaUsd: 14_400, year: 2024 },
-  CHN: { gdpPerCapitaUsd: 12_700, year: 2024 },
-  IND: { gdpPerCapitaUsd: 2_700, year: 2024 },
-  GBR: { gdpPerCapitaUsd: 49_500, year: 2024 },
-  DEU: { gdpPerCapitaUsd: 54_300, year: 2024 },
-};
 
 interface WorldBankValue {
   countryiso3code?: string;
@@ -97,25 +87,35 @@ async function fetchCountryGdpPerCapita(countryCode: string) {
 }
 
 export async function loadPhuketVisitorOrigins(): Promise<PhuketVisitorOriginsResponse> {
+  const checkedAt = new Date().toISOString();
   const results = await Promise.all(
     TOP_PHUKET_VISITOR_ORIGINS.map(async (origin) => {
       const live = await fetchCountryGdpPerCapita(origin.countryCode);
-      const fallback = FALLBACK_GDP_PER_CAPITA[origin.countryCode];
 
       return {
         ...origin,
-        gdpPerCapitaUsd: live?.gdpPerCapitaUsd ?? fallback?.gdpPerCapitaUsd ?? null,
-        year: live?.year ?? fallback?.year ?? null,
-        source: live?.source ?? "Fallback macro snapshot",
+        gdpPerCapitaUsd: live?.gdpPerCapitaUsd ?? null,
+        year: live?.year ?? null,
+        source: live?.source ?? "World Bank WDI unavailable",
+        freshness: buildFreshness({
+          checkedAt,
+          observedAt: live?.year ? `${live.year}-12-31T00:00:00.000Z` : null,
+          fallbackTier: live ? "reference" : "unavailable",
+          sourceIds: ["World Bank WDI"],
+        }),
       } satisfies PhuketVisitorOrigin;
     }),
   );
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: checkedAt,
     origins: results,
     sources: Array.from(
       new Set(["Curated Phuket feeder ranking", ...results.map((origin) => origin.source)]),
+    ),
+    freshness: summarizeFreshness(
+      results.map((origin) => origin.freshness),
+      checkedAt,
     ),
   };
 }

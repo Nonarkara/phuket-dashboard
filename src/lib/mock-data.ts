@@ -337,6 +337,15 @@ export const fallbackBriefing: BriefingPayload = {
 
 export const fallbackSources: ApiSourceResponse = {
   generatedAt: "2026-03-11T09:00:00.000Z",
+  freshness: {
+    checkedAt: "2026-03-11T09:00:00.000Z",
+    observedAt: null,
+    ageMinutes: null,
+    maxAgeMinutes: 24 * 60,
+    isFresh: false,
+    fallbackTier: "reference",
+    sourceIds: ["Phuket Dashboard reference catalog"],
+  },
   sources: [
     {
       id: "source-01",
@@ -344,6 +353,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://phuket-dashboard.local/api/briefings/latest",
       kind: "internal",
       target: "Phuket Dashboard",
+      classification: "reference",
     },
     {
       id: "source-02",
@@ -351,6 +361,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://phuket-dashboard.local/api/markets",
       kind: "internal",
       target: "Phuket Dashboard",
+      classification: "reference",
     },
     {
       id: "source-03",
@@ -358,6 +369,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://phuket-dashboard.local/api/ticker",
       kind: "internal",
       target: "Phuket Dashboard",
+      classification: "reference",
     },
     {
       id: "source-04",
@@ -365,6 +377,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://api.open-meteo.com/v1/forecast",
       kind: "external",
       target: "Open-Meteo",
+      classification: "reference",
     },
     {
       id: "source-05",
@@ -372,6 +385,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://air-quality-api.open-meteo.com/v1/air-quality",
       kind: "external",
       target: "Open-Meteo",
+      classification: "reference",
     },
     {
       id: "source-06",
@@ -379,6 +393,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/",
       kind: "external",
       target: "NASA GIBS",
+      classification: "reference",
     },
     {
       id: "source-07",
@@ -386,6 +401,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://disaster.gistda.or.th/services/open-api",
       kind: "external",
       target: "GISTDA",
+      classification: "reference",
     },
     {
       id: "source-08",
@@ -393,6 +409,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://data.tmd.go.th/api/WeatherWarningNews/v1/?uid=api&ukey=api12345",
       kind: "external",
       target: "TMD / NDWC",
+      classification: "reference",
     },
     {
       id: "source-09",
@@ -400,6 +417,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://www.aishub.net/api",
       kind: "external",
       target: "MarineTraffic / AISHub",
+      classification: "reference",
     },
     {
       id: "source-10",
@@ -407,6 +425,7 @@ export const fallbackSources: ApiSourceResponse = {
       url: "https://tatdataapi.io",
       kind: "external",
       target: "Tourism Authority of Thailand",
+      classification: "reference",
     },
   ],
 };

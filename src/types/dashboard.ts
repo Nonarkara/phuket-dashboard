@@ -9,6 +9,36 @@ import type {
 
 export type Coordinates = [number, number];
 
+export type FallbackTier =
+  | "live"
+  | "database"
+  | "cache"
+  | "scenario"
+  | "reference"
+  | "unavailable";
+
+export interface DataFreshness {
+  observedAt: string | null;
+  checkedAt: string;
+  ageMinutes: number | null;
+  maxAgeMinutes: number;
+  isFresh: boolean;
+  fallbackTier: FallbackTier;
+  sourceIds?: string[];
+}
+
+export interface MetricEvidence {
+  id: string;
+  label: string;
+  value: number | string | null;
+  displayValue: string;
+  source: string;
+  unit?: string | null;
+  observedAt?: string | null;
+  formula?: string;
+  freshness: DataFreshness;
+}
+
 export interface ProvinceSelection {
   name: string;
   type?: string;
@@ -175,6 +205,13 @@ export interface PublicCamera {
   accessUrl?: string | null;
   corridorIds?: string[];
   lastValidatedAt?: string;
+  lastCheckedAt?: string;
+  lastFrameAt?: string | null;
+  lastHttpStatus?: number | null;
+  validationMethod?: string;
+  operationalState?: "live" | "reachable" | "offline" | "candidate";
+  contentType?: string | null;
+  freshness?: DataFreshness;
   candidateSourceNote?: string;
 }
 
@@ -187,6 +224,12 @@ export interface PublicCameraResponse {
   source: string[];
   cameras: PublicCamera[];
   scoutTargets: CameraScoutItem[];
+  freshness: DataFreshness;
+  lastSweepAt: string;
+  expectedVerifiedFeeds: number;
+  verifiedLiveCount: number;
+  reachableCount: number;
+  scoutCount: number;
 }
 
 export interface RegionBorderProperties {
@@ -384,11 +427,14 @@ export interface ApiSourceEntry {
   target: string;
   health?: PackageStatus;
   checkedAt?: string;
+  classification?: "operational" | "reference";
+  freshness?: DataFreshness;
 }
 
 export interface ApiSourceResponse {
   generatedAt: string;
   sources: ApiSourceEntry[];
+  freshness: DataFreshness;
 }
 
 export interface CopernicusPreviewLayer {
@@ -569,6 +615,7 @@ export interface GovernorPosture {
   label: string;
   summary: string;
   updatedAt: string;
+  freshness?: DataFreshness;
 }
 
 export interface GovernorConcern {
@@ -581,6 +628,8 @@ export interface GovernorConcern {
   metricValue: string;
   action: string;
   sources: string[];
+  freshness?: DataFreshness;
+  evidence?: MetricEvidence[];
 }
 
 export interface GovernorCorridorPriority {
@@ -592,6 +641,8 @@ export interface GovernorCorridorPriority {
   action: string;
   reasonTags: string[];
   focusAreas: string[];
+  freshness?: DataFreshness;
+  evidence?: MetricEvidence[];
 }
 
 export interface GovernorBrief {
@@ -602,6 +653,7 @@ export interface GovernorBrief {
   corridorPriorities: GovernorCorridorPriority[];
   nextActions: string[];
   sources: string[];
+  freshness: DataFreshness;
 }
 
 export interface MarineCorridorStatus {
@@ -622,6 +674,9 @@ export interface MarineCorridorStatus {
   recommendedAction: string;
   sources: string[];
   updatedAt: string;
+  formula?: string;
+  evidence?: MetricEvidence[];
+  freshness?: DataFreshness;
 }
 
 export interface MarineStatusResponse {
@@ -630,6 +685,7 @@ export interface MarineStatusResponse {
   corridors: MarineCorridorStatus[];
   sources: string[];
   upgrades: string[];
+  freshness: DataFreshness;
 }
 
 export interface CityVibeCard {
@@ -638,14 +694,18 @@ export interface CityVibeCard {
   status: ExecutiveStatus;
   summary: string;
   whyNow: string;
-  score: number;
-  cameraFreshness: string;
-  trendTraffic: string;
-  tvCoverage: string;
-  mobilityPressure: string;
+  pulseIndex?: number | null;
+  pulseFormula?: string | null;
+  cameraCoveragePct: number | null;
+  narrativeSignals24h: number;
+  mobilityLoad: string;
+  weatherExposure: string;
+  incidentCount24h: number;
   recommendedAction: string;
   sources: string[];
   updatedAt: string;
+  components: MetricEvidence[];
+  freshness: DataFreshness;
 }
 
 export interface CityVibesResponse {
@@ -653,6 +713,7 @@ export interface CityVibesResponse {
   scenario: GovernorScenarioId;
   zones: CityVibeCard[];
   sources: string[];
+  freshness: DataFreshness;
 }
 
 export interface NarrativeSignal {
@@ -666,6 +727,7 @@ export interface NarrativeSignal {
   source: string;
   observedAt: string;
   url?: string;
+  freshness?: DataFreshness;
 }
 
 export interface MediaWatchResponse {
@@ -676,6 +738,12 @@ export interface MediaWatchResponse {
   peopleShare: NarrativeSignal[];
   broadcastWatch: NarrativeSignal[];
   sources: string[];
+  providerHealth?: {
+    googleTrends: DataFreshness;
+    gdelt: DataFreshness;
+    tvWall: DataFreshness;
+  };
+  freshness: DataFreshness;
 }
 
 export interface PhuketVisitorOrigin {
@@ -686,12 +754,37 @@ export interface PhuketVisitorOrigin {
   gdpPerCapitaUsd: number | null;
   year: number | null;
   source: string;
+  freshness?: DataFreshness;
 }
 
 export interface PhuketVisitorOriginsResponse {
   generatedAt: string;
   origins: PhuketVisitorOrigin[];
   sources: string[];
+  freshness: DataFreshness;
+}
+
+export interface GovernorNarrativeArticle {
+  title: string;
+  url: string;
+  source: string;
+  tone: "positive" | "neutral" | "negative";
+  date: string;
+}
+
+export interface GovernorNarrativeResponse {
+  generatedAt: string;
+  mentionCount: number;
+  avgTone: number | null;
+  positivePct: number | null;
+  neutralPct: number | null;
+  negativePct: number | null;
+  trendDelta30d: number | null;
+  trend: "rising" | "stable" | "declining";
+  period: string;
+  articles: GovernorNarrativeArticle[];
+  sources: string[];
+  freshness: DataFreshness;
 }
 
 export interface DisasterAlert {
@@ -705,6 +798,7 @@ export interface DisasterAlert {
   issuedAt: string;
   source: string;
   url?: string;
+  freshness?: DataFreshness;
 }
 
 export interface DisasterLayerDescriptor {
@@ -722,13 +816,14 @@ export interface DisasterFeedResponse {
   summary: string;
   alerts: DisasterAlert[];
   layers: DisasterLayerDescriptor[];
-  rainfallNodes: number;
+  rainfallNodes: number | null;
   sources: string[];
   providerHealth?: {
     gistda: PackageStatus;
     nsdc: PackageStatus;
     tmd: PackageStatus;
   };
+  freshness: DataFreshness;
 }
 
 export interface MaritimeVessel {
@@ -745,6 +840,7 @@ export interface MaritimeVessel {
   status: ExecutiveStatus;
   source: string;
   strategicNote: string;
+  freshness?: DataFreshness;
 }
 
 export interface MaritimeSecurityResponse {
@@ -756,6 +852,7 @@ export interface MaritimeSecurityResponse {
   chokepoints: string[];
   sources: string[];
   providerHealth?: PackageStatus;
+  freshness: DataFreshness;
 }
 
 export interface TourismHotspot {
@@ -770,6 +867,8 @@ export interface TourismHotspot {
   source: string;
   url?: string;
   strategicNote: string;
+  coordinateAccuracy?: "verified" | "estimated";
+  freshness?: DataFreshness;
 }
 
 export interface TourismHotspotsResponse {
@@ -779,4 +878,5 @@ export interface TourismHotspotsResponse {
   hotspots: TourismHotspot[];
   sources: string[];
   providerHealth?: PackageStatus;
+  freshness: DataFreshness;
 }

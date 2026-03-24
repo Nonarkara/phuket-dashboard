@@ -10,15 +10,17 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
   if (!province) return null;
 
   const signalCount = province.fatalities ?? 0;
-  const readinessIndex = Math.max(5.2, Number((8.9 - signalCount * 0.4).toFixed(1)));
-  const weatherPressure = Math.min(92, 26 + signalCount * 12);
-  const tourismPulse = province.iso ? 70 : Math.max(40, 82 - signalCount * 6);
-  const tourismTone =
-    tourismPulse >= 70 ? "Strong" : tourismPulse >= 50 ? "Mixed" : "Soft";
   const summaryLine =
     province.notes ?? `${province.name} selected from the Phuket regional monitoring surface.`;
   const attentionLevel =
     signalCount >= 2 ? "Immediate review" : signalCount >= 1 ? "Elevated attention" : "Routine monitoring";
+  const timingLabel = province.eventDate ? province.eventDate : "No fresh event timestamp";
+  const sourceLabel =
+    province.source
+      ? `Source ${province.source}`
+      : province.eventDate
+        ? `Event ${province.eventDate}`
+        : `Sector ${province.iso ?? province.name}`;
   const guidance = [
     "Read this place against rainfall, AQI, and transport overlays before escalating.",
     "Use the economy and briefing cards to see whether pressure is localized or regional.",
@@ -51,16 +53,6 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
 
         <div>
           <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-            Readiness
-          </div>
-          <div className="pt-1 font-mono text-[28px] font-semibold tracking-[-0.04em] text-[var(--ink)]">
-            {readinessIndex}
-          </div>
-          <div className="text-[9px] text-[var(--dim)]">out of 10</div>
-        </div>
-
-        <div>
-          <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
             Signals
           </div>
           <div
@@ -76,22 +68,20 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
 
         <div className="space-y-3 lg:border-l lg:border-[var(--line)] lg:pl-4">
           <div>
-            <div className="flex items-center justify-between text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-              <span>Weather pressure</span>
-              <span>{signalCount > 0 ? "Elevated" : "Seasonal"}</span>
+            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+              Latest timestamp
             </div>
-            <div className="mt-1.5 h-[2px] w-full overflow-hidden bg-[var(--line)]">
-              <div className="h-full bg-[#f59e0b]" style={{ width: `${weatherPressure}%` }} />
+            <div className="pt-1 text-[11px] font-mono text-[var(--ink)]">
+              {timingLabel}
             </div>
           </div>
 
           <div>
-            <div className="flex items-center justify-between text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-              <span>Tourism pulse</span>
-              <span className="text-[var(--cool)]">{tourismTone}</span>
+            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+              Source
             </div>
-            <div className="mt-1.5 h-[2px] w-full overflow-hidden bg-[var(--line)]">
-              <div className="h-full bg-[var(--cool)]" style={{ width: `${tourismPulse}%` }} />
+            <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
+              {sourceLabel}
             </div>
           </div>
         </div>
@@ -120,11 +110,7 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
           <div className="flex items-center gap-2">
             <Globe size={12} className="text-[var(--cool)]" />
             <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
-              {province.source
-                ? `Source ${province.source}`
-                : province.eventDate
-                  ? `Event ${province.eventDate}`
-                  : `Sector ${province.iso ?? province.name}`}
+              {sourceLabel}
             </span>
           </div>
           {province.externalUrl ? (

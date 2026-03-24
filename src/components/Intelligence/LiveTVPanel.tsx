@@ -135,16 +135,20 @@ export default function LiveTVPanel({
   selectedCorridorId,
 }: LiveTVPanelProps) {
   const corridor = findCorridorById(selectedCorridorId);
-  const allCameras = cameraPayload?.cameras ?? [];
-  const corridorCameras = allCameras.filter((camera) =>
+  const allVerifiedCameras = cameraPayload?.cameras ?? [];
+  const allScoutTargets = cameraPayload?.scoutTargets ?? [];
+  const corridorVerifiedCameras = allVerifiedCameras.filter((camera) =>
     camera.corridorIds?.includes(selectedCorridorId),
   );
-  const featuredCameras = corridorCameras.length > 0 ? corridorCameras : allCameras;
-  const verifiedCameras = featuredCameras.filter(
-    (camera) => camera.validationState === "verified",
+  const corridorScoutTargets = allScoutTargets.filter((camera) =>
+    camera.corridorIds?.includes(selectedCorridorId),
   );
-  const scoutCameras = featuredCameras.filter(
-    (camera) => camera.validationState === "candidate",
+  const verifiedCameras =
+    corridorVerifiedCameras.length > 0 ? corridorVerifiedCameras : allVerifiedCameras;
+  const scoutCameras =
+    corridorScoutTargets.length > 0 ? corridorScoutTargets : allScoutTargets;
+  const liveVerifiedCameras = verifiedCameras.filter(
+    (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
   );
 
   return (
@@ -157,7 +161,7 @@ export default function LiveTVPanel({
           </div>
         </div>
         <div className="text-right text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-          {verifiedCameras.length} verified / {scoutCameras.length} scout
+          {liveVerifiedCameras.length} live / {scoutCameras.length} scout
         </div>
       </div>
 
@@ -178,12 +182,12 @@ export default function LiveTVPanel({
         <div className="min-h-0 overflow-y-auto border border-[var(--line)] bg-[var(--bg)]">
           <div className="border-b border-[var(--line)] px-3 py-2">
             <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-              Camera stack
+              Verified live feeds
             </div>
           </div>
 
           <div className="divide-y divide-[var(--line)]">
-            {featuredCameras.slice(0, 6).map((camera) => (
+            {liveVerifiedCameras.slice(0, 4).map((camera) => (
               <div key={camera.id} className="px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -197,17 +201,20 @@ export default function LiveTVPanel({
                   </div>
                   <span
                     className={`border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] ${
-                      camera.validationState === "verified"
+                      camera.operationalState === "live" || camera.operationalState === "reachable"
                         ? "border-[var(--cool)] bg-[rgba(15,111,136,0.08)] text-[var(--cool)]"
                         : "border-[var(--line)] bg-[rgba(17,17,17,0.03)] text-[var(--dim)]"
                     }`}
                   >
-                    {camera.validationState}
+                    {camera.operationalState}
                   </span>
                 </div>
                 <p className="pt-1 text-[9px] leading-4 text-[var(--muted)]">
                   {camera.strategicNote}
                 </p>
+                <div className="pt-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                  {camera.freshness?.isFresh ? `checked ${camera.lastCheckedAt?.slice(11, 16) ?? "recently"}` : "data unavailable"}
+                </div>
 
                 {camera.accessUrl ? (
                   <a
@@ -224,6 +231,62 @@ export default function LiveTVPanel({
                     {camera.candidateSourceNote ?? "Candidate source pending validation"}
                   </div>
                 )}
+              </div>
+            ))}
+            {liveVerifiedCameras.length === 0 && (
+              <div className="px-3 py-3 text-[9px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                No validated public feed is fresh right now.
+              </div>
+            )}
+          </div>
+
+          <div className="border-y border-[var(--line)] px-3 py-2">
+            <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Scout targets
+            </div>
+          </div>
+
+          <div className="divide-y divide-[var(--line)]">
+            {scoutCameras.slice(0, 4).map((camera) => (
+              <div key={camera.id} className="px-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold text-[var(--ink)]">
+                      {camera.label}
+                    </div>
+                    <div className="pt-0.5 flex items-center gap-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                      <MapPin size={8} />
+                      {camera.locationLabel}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="border border-[var(--line)] bg-[rgba(17,17,17,0.03)] px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                      scout
+                    </span>
+                    <span className="border border-[var(--line)] px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                      {camera.operationalState ?? "candidate"}
+                    </span>
+                  </div>
+                </div>
+                <p className="pt-1 text-[9px] leading-4 text-[var(--muted)]">
+                  {camera.candidateSourceNote ?? camera.strategicNote}
+                </p>
+                <div className="pt-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                  {camera.freshness?.isFresh
+                    ? `checked ${camera.lastCheckedAt?.slice(11, 16) ?? "recently"}`
+                    : "not yet validated"}
+                </div>
+                {camera.accessUrl ? (
+                  <a
+                    href={camera.accessUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 border border-[var(--line)] px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-[var(--ink)]"
+                  >
+                    Open scout source
+                    <ExternalLink size={9} />
+                  </a>
+                ) : null}
               </div>
             ))}
           </div>
