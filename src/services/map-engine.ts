@@ -161,6 +161,7 @@ function createRasterTileLayer({
 export function createRasterOverlayLayer(
   overlay: MapOverlay,
   opacity = overlay.defaultOpacity,
+  onTileError?: () => void,
 ) {
   if (!overlay.tileTemplate || typeof overlay.maxZoom !== "number") {
     return null;
@@ -173,6 +174,7 @@ export function createRasterOverlayLayer(
     opacity,
     onTileError: (error: unknown) => {
       console.warn(`${overlay.label} tile load failed`, error);
+      onTileError?.();
     },
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import dynamic from "next/dynamic";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -310,7 +311,7 @@ function getTooltipText(object: unknown): string | null {
   }
 
   if (isPublicCamera(object)) {
-    return `${object.label} • ${object.validationState} • ${object.provider}`;
+    return `${object.label} • ${object.operationalState ?? object.validationState} • ${object.provider}`;
   }
 
   if (isDisasterAlert(object)) {
@@ -361,12 +362,13 @@ export default function BorderMap({
   cameraFeed?: PublicCameraResponse | null;
   tourismFeed?: TourismHotspotsResponse | null;
 }) {
+  const is4K = useWarRoomScale();
   const [mounted, setMounted] = useState(false);
   const [webglSupported, setWebglSupported] = useState(true);
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
   // ─── Basemap: exactly one active at a time (radio) ───
-  type BasemapId = "esri-aerial" | "osm-streets" | "carto-light" | "mapbox-satellite" | "mapbox-light";
+  type BasemapId = "esri-aerial" | "eox-sentinel2" | "osm-streets" | "carto-light" | "stadia-dark" | "mapbox-satellite" | "mapbox-light";
   const hasMapbox = MAPBOX_TOKEN.length > 0;
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("esri-aerial");
 
@@ -465,7 +467,10 @@ export default function BorderMap({
     baseOverlays[0];
   const disasterAlerts = disasterFeed?.alerts ?? [];
   const maritimeVessels = maritimeSecurityFeed?.vessels ?? [];
-  const publicCameras = cameraFeed?.cameras ?? [];
+  const publicCameras = [
+    ...(cameraFeed?.cameras ?? []),
+    ...(cameraFeed?.scoutTargets ?? []),
+  ];
   const tourismHotspots = tourismFeed?.hotspots ?? [];
   const signalCount = incidents.length;
   const hotspotCount = fires.length;
@@ -475,7 +480,7 @@ export default function BorderMap({
   const disasterAlertCount = disasterAlerts.length;
   const maritimeVesselCount = maritimeVessels.length;
   const verifiedCameraCount = publicCameras.filter(
-    (camera) => camera.validationState === "verified",
+    (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
   ).length;
   const tourismHotspotCount = tourismHotspots.length;
   const hasMapboxBaseMap = hasMapbox && (activeBasemap === "mapbox-satellite" || activeBasemap === "mapbox-light");
@@ -674,10 +679,29 @@ export default function BorderMap({
   // ─── Basemap options (radio — exactly one at a time) ───
   // Fallback chain from DrNon Global Satellite Toolkit:
   // Mapbox → ESRI → OSM → CartoDB → Stadia
+  // Basemap fallback chain: EOX → ESRI → OSM → CartoDB → Stadia → Mapbox
+  const [basemapErrorCount, setBasemapErrorCount] = useState(0);
+  const BASEMAP_FALLBACK_CHAIN: BasemapId[] = [
+    "eox-sentinel2", "esri-aerial", "osm-streets", "carto-light", "stadia-dark",
+    ...(hasMapbox ? ["mapbox-satellite" as BasemapId] : []),
+  ];
+
+  // Auto-fallback: if 3+ tile errors, switch to next basemap
+  useEffect(() => {
+    if (basemapErrorCount >= 3) {
+      const currentIdx = BASEMAP_FALLBACK_CHAIN.indexOf(activeBasemap);
+      const nextIdx = (currentIdx + 1) % BASEMAP_FALLBACK_CHAIN.length;
+      setActiveBasemap(BASEMAP_FALLBACK_CHAIN[nextIdx]);
+      setBasemapErrorCount(0);
+    }
+  }, [basemapErrorCount, activeBasemap]);
+
   const basemapOptions: { id: BasemapId; label: string; icon: typeof Satellite; available: boolean }[] = [
+    { id: "eox-sentinel2", label: "Sentinel-2", icon: Satellite, available: true },
     { id: "esri-aerial", label: "Aerial", icon: Satellite, available: true },
     { id: "osm-streets", label: "Streets", icon: MapPinned, available: true },
-    { id: "carto-light" as BasemapId, label: "Clean", icon: MapIcon, available: true },
+    { id: "carto-light", label: "Clean", icon: MapIcon, available: true },
+    { id: "stadia-dark", label: "Dark", icon: MoonStar, available: true },
     ...(hasMapbox ? [
       { id: "mapbox-satellite" as BasemapId, label: "Mapbox", icon: Globe, available: true },
     ] : []),
@@ -891,69 +915,38 @@ export default function BorderMap({
   };
 
   // ─── Basemap tile layer (exactly one, sits at the bottom) ───
+  const makeBasemapLayer = (id: string, label: string, tileTemplate: string, maxZoom: number) =>
+    createRasterOverlayLayer(
+      {
+        id, label, shortLabel: label, description: label, source: label,
+        family: "imagery", role: "base-option", kind: "raster" as const,
+        defaultOpacity: 1, enabledByDefault: true, maxZoom, tileTemplate,
+        updatedAt: new Date().toISOString(),
+      },
+      1,
+      () => setBasemapErrorCount((c) => c + 1),
+    );
+
   const basemapTileLayer = (() => {
+    if (activeBasemap === "eox-sentinel2") {
+      return makeBasemapLayer("basemap-eox", "EOX Sentinel-2 Cloudless",
+        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg", 15);
+    }
     if (activeBasemap === "esri-aerial") {
-      return createRasterOverlayLayer(
-        {
-          id: "basemap-esri",
-          label: "ESRI Aerial",
-          shortLabel: "ESRI",
-          description: "High-resolution aerial imagery",
-          source: "ESRI",
-          family: "imagery",
-          role: "base-option",
-          kind: "raster" as const,
-          defaultOpacity: 1,
-          enabledByDefault: true,
-          maxZoom: 19,
-          tileTemplate:
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          updatedAt: new Date().toISOString(),
-        },
-        1,
-      );
+      return makeBasemapLayer("basemap-esri", "ESRI Aerial",
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 19);
     }
     if (activeBasemap === "osm-streets") {
-      return createRasterOverlayLayer(
-        {
-          id: "basemap-osm",
-          label: "OpenStreetMap",
-          shortLabel: "OSM",
-          description: "Street-level roads and infrastructure",
-          source: "OpenStreetMap",
-          family: "imagery",
-          role: "base-option",
-          kind: "raster" as const,
-          defaultOpacity: 1,
-          enabledByDefault: true,
-          maxZoom: 19,
-          tileTemplate:
-            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-          updatedAt: new Date().toISOString(),
-        },
-        1,
-      );
+      return makeBasemapLayer("basemap-osm", "OpenStreetMap",
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png", 19);
     }
     if (activeBasemap === "carto-light") {
-      return createRasterOverlayLayer(
-        {
-          id: "basemap-carto",
-          label: "CartoDB Positron",
-          shortLabel: "CLEAN",
-          description: "Clean minimal basemap for data overlay focus",
-          source: "CartoDB",
-          family: "imagery",
-          role: "base-option",
-          kind: "raster" as const,
-          defaultOpacity: 1,
-          enabledByDefault: true,
-          maxZoom: 19,
-          tileTemplate:
-            "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-          updatedAt: new Date().toISOString(),
-        },
-        1,
-      );
+      return makeBasemapLayer("basemap-carto", "CartoDB Positron",
+        "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png", 19);
+    }
+    if (activeBasemap === "stadia-dark") {
+      return makeBasemapLayer("basemap-stadia", "Stadia Dark",
+        "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}@2x.png", 20);
     }
     // mapbox-satellite and mapbox-light are handled by the MapboxMap component
     return null;
@@ -988,30 +981,67 @@ export default function BorderMap({
       />
 
       {webglSupported ? (
-        <DeckGL
-          id="phuket-deck"
-          viewState={viewState}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
-            const next = nextViewState as MapViewState;
-            setViewState(next);
-          }}
-          controller={true}
-          layers={allLayers}
-          onClick={handleMapClick}
-          getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
-        >
-          {hasMapboxBaseMap ? (
-            <MapboxMap
-              mapboxAccessToken={MAPBOX_TOKEN}
-              mapStyle={mapStyle}
-              reuseMaps
-              attributionControl={false}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
+        <div className="absolute inset-0 flex">
+          {/* Primary map (satellite/aerial + all overlays) */}
+          <div className={`relative ${is4K ? "flex-[2]" : "flex-1"}`}>
+            <DeckGL
+              id="phuket-deck"
+              viewState={viewState}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
+                const next = nextViewState as MapViewState;
+                setViewState(next);
+              }}
+              controller={true}
+              layers={allLayers}
+              onClick={handleMapClick}
+              getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
+            >
+              {hasMapboxBaseMap ? (
+                <MapboxMap
+                  mapboxAccessToken={MAPBOX_TOKEN}
+                  mapStyle={mapStyle}
+                  reuseMaps
+                  attributionControl={false}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
+              )}
+            </DeckGL>
+          </div>
+
+          {/* Wireframe street map (4K split-view only) */}
+          {is4K && (
+            <>
+              <div className="w-[2px] bg-[var(--line)] z-50 shrink-0" />
+              <div className="relative flex-1">
+                <DeckGL
+                  id="phuket-deck-wireframe"
+                  viewState={{ ...viewState, pitch: 0, bearing: 0 }}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
+                    const next = nextViewState as MapViewState;
+                    setViewState((prev) => ({ ...prev, longitude: next.longitude, latitude: next.latitude, zoom: next.zoom }));
+                  }}
+                  controller={true}
+                  layers={[
+                    makeBasemapLayer("wireframe-carto", "CartoDB Positron",
+                      "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png", 19),
+                    enabledOverlays.kmGrid ? createKilometerGridLayer(gridScale) : null,
+                    enabledOverlays.trafficEvents ? createTrafficEventLayers(trafficEvents) : null,
+                    enabledOverlays.publicCameras ? createPublicCameraLayer(publicCameras) : null,
+                    enabledOverlays.provinceLabels ? createProvinceLabelsLayer() : null,
+                  ].flat().filter(Boolean)}
+                  getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
+                />
+                {/* Wireframe label */}
+                <div className="absolute top-2 left-2 z-50 bg-[rgba(248,246,240,0.9)] border border-[var(--line)] px-2 py-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--dim)]">Street wireframe</span>
+                </div>
+              </div>
+            </>
           )}
-        </DeckGL>
+        </div>
       ) : (
         <div className="absolute inset-0 px-5 pb-24 pt-24">
           <div className="flex h-full items-center justify-center border border-[var(--line)] bg-[rgba(248,246,240,0.72)] backdrop-blur-sm">

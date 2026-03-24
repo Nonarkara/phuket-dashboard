@@ -25,10 +25,7 @@ import type {
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const response = await fetch(url);
-    if (!response.ok) {
-      return null;
-    }
-
+    if (!response.ok) return null;
     return (await response.json()) as T;
   } catch {
     return null;
@@ -51,40 +48,27 @@ export default function Dashboard() {
     useState<TourismHotspotsResponse | null>(null);
   const [cityVibes, setCityVibes] = useState<CityVibesResponse | null>(null);
   const [mediaWatch, setMediaWatch] = useState<MediaWatchResponse | null>(null);
-  const [cameraPayload, setCameraPayload] = useState<PublicCameraResponse | null>(
-    null,
-  );
+  const [cameraPayload, setCameraPayload] = useState<PublicCameraResponse | null>(null);
   const [visitorOrigins, setVisitorOrigins] =
     useState<PhuketVisitorOriginsResponse | null>(null);
 
+  // ─── Tiered data polling ───────────────────────────────────────
+  // Tier 1: 2-minute (contextual, less volatile)
   useEffect(() => {
     const load = async () => {
       const [
-        nextBrief,
-        nextDisaster,
-        nextMaritimeSecurity,
-        nextMarine,
-        nextTourismHotspots,
-        nextCityVibes,
-        nextMediaWatch,
-        nextCameras,
-        nextVisitorOrigins,
-      ] =
-        await Promise.all([
-          fetchJson<GovernorBrief>("/api/governor/brief"),
-          fetchJson<DisasterFeedResponse>("/api/disaster/brief"),
-          fetchJson<MaritimeSecurityResponse>("/api/maritime/security"),
-          fetchJson<MarineStatusResponse>("/api/marine"),
-          fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots"),
-          fetchJson<CityVibesResponse>("/api/city-vibes"),
-          fetchJson<MediaWatchResponse>("/api/media-watch"),
-          fetchJson<PublicCameraResponse>("/api/public-cameras"),
-          fetchJson<PhuketVisitorOriginsResponse>("/api/visitor-origins"),
-        ]);
-
+        nextBrief, nextMarine, nextTourismHotspots,
+        nextCityVibes, nextMediaWatch, nextCameras, nextVisitorOrigins,
+      ] = await Promise.all([
+        fetchJson<GovernorBrief>("/api/governor/brief"),
+        fetchJson<MarineStatusResponse>("/api/marine"),
+        fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots"),
+        fetchJson<CityVibesResponse>("/api/city-vibes"),
+        fetchJson<MediaWatchResponse>("/api/media-watch"),
+        fetchJson<PublicCameraResponse>("/api/public-cameras"),
+        fetchJson<PhuketVisitorOriginsResponse>("/api/visitor-origins"),
+      ]);
       if (nextBrief) setBrief(nextBrief);
-      if (nextDisaster) setDisaster(nextDisaster);
-      if (nextMaritimeSecurity) setMaritimeSecurity(nextMaritimeSecurity);
       if (nextMarine) setMarine(nextMarine);
       if (nextTourismHotspots) setTourismHotspots(nextTourismHotspots);
       if (nextCityVibes) setCityVibes(nextCityVibes);
@@ -92,12 +76,23 @@ export default function Dashboard() {
       if (nextCameras) setCameraPayload(nextCameras);
       if (nextVisitorOrigins) setVisitorOrigins(nextVisitorOrigins);
     };
-
     void load();
-    const interval = setInterval(() => {
-      void load();
-    }, 2 * 60 * 1000);
+    const interval = setInterval(() => void load(), 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Tier 2: 60-second (important situational)
+  useEffect(() => {
+    const load = async () => {
+      const [nextDisaster, nextMaritimeSecurity] = await Promise.all([
+        fetchJson<DisasterFeedResponse>("/api/disaster/brief"),
+        fetchJson<MaritimeSecurityResponse>("/api/maritime/security"),
+      ]);
+      if (nextDisaster) setDisaster(nextDisaster);
+      if (nextMaritimeSecurity) setMaritimeSecurity(nextMaritimeSecurity);
+    };
+    void load();
+    const interval = setInterval(() => void load(), 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -106,13 +101,11 @@ export default function Dashboard() {
     setIsDataExplorerOpen(false);
     setIsManualOpen(true);
   };
-
   const openArchitecture = () => {
     setIsManualOpen(false);
     setIsDataExplorerOpen(false);
     setIsArchitectureOpen(true);
   };
-
   const openDataExplorer = () => {
     setIsManualOpen(false);
     setIsArchitectureOpen(false);
@@ -132,14 +125,14 @@ export default function Dashboard() {
         onOpenDataExplorer={openDataExplorer}
       />
 
-      {/* ─── Map-dominant center with optional left news sidebar ─── */}
+      {/* ─── 3-column center: News | Map | Intelligence Panel ─── */}
       <section className="relative min-h-0 flex-1 overflow-hidden border-t border-[var(--line)] flex">
-        {/* Left sidebar — news signals (visible on xl screens) */}
-        <div className="hidden xl:block w-[260px] shrink-0">
+        {/* Left — news column (wider at 4K for dual-language view) */}
+        <div className="hidden xl:block w-[260px] min-[3000px]:w-[520px] shrink-0">
           <NewsSidebar />
         </div>
 
-        {/* Map takes remaining space */}
+        {/* Center — map takes remaining space */}
         <div className="relative min-w-0 flex-1">
           <BorderMap
             onProvinceSelect={setSelectedProvince}
@@ -151,37 +144,57 @@ export default function Dashboard() {
             tourismFeed={tourismHotspots}
           />
         </div>
+
+        {/* Right — intelligence panel (4K only, vertical BottomRail) */}
+        <div className="hidden min-[3000px]:flex w-[480px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto">
+          <BottomRail
+            brief={brief}
+            disaster={disaster}
+            maritimeSecurity={maritimeSecurity}
+            marine={marine}
+            tourismHotspots={tourismHotspots}
+            cityVibes={cityVibes}
+            mediaWatch={mediaWatch}
+            cameraPayload={cameraPayload}
+            selectedCorridorId={selectedCorridorId}
+            onSelectCorridor={setSelectedCorridorId}
+            verticalMode
+          />
+        </div>
       </section>
 
-      {/* ─── Thin ticker strip ─── */}
+      {/* ─── Signal ticker ─── */}
       <div className="shrink-0 border-t border-[var(--line)]">
         <SignalTicker
           brief={brief}
           marine={marine}
           cityVibes={cityVibes}
           mediaWatch={mediaWatch}
+          disaster={disaster}
+          cameraCount={cameraPayload?.cameras?.length ?? 0}
         />
       </div>
 
-      {/* ─── Ultra-compact bottom rail (expand on demand) ─── */}
-      <BottomRail
-        brief={brief}
-        disaster={disaster}
-        maritimeSecurity={maritimeSecurity}
-        marine={marine}
-        tourismHotspots={tourismHotspots}
-        cityVibes={cityVibes}
-        mediaWatch={mediaWatch}
-        cameraPayload={cameraPayload}
-        selectedCorridorId={selectedCorridorId}
-        onSelectCorridor={setSelectedCorridorId}
-      />
+      {/* ─── Bottom rail (desktop only, hidden at 4K where it's a right panel) ─── */}
+      <div className="min-[3000px]:hidden">
+        <BottomRail
+          brief={brief}
+          disaster={disaster}
+          maritimeSecurity={maritimeSecurity}
+          marine={marine}
+          tourismHotspots={tourismHotspots}
+          cityVibes={cityVibes}
+          mediaWatch={mediaWatch}
+          cameraPayload={cameraPayload}
+          selectedCorridorId={selectedCorridorId}
+          onSelectCorridor={setSelectedCorridorId}
+        />
+      </div>
 
       <ProvinceDashboard
         province={selectedProvince}
         onClose={() => setSelectedProvince(null)}
       />
-
       <DashboardManualModal
         isOpen={isManualOpen}
         onClose={() => setIsManualOpen(false)}

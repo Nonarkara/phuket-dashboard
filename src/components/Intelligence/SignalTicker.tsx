@@ -1,8 +1,10 @@
 "use client";
 
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
+import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import type {
   CityVibesResponse,
+  DisasterFeedResponse,
   ExecutiveStatus,
   GovernorBrief,
   MarineStatusResponse,
@@ -14,6 +16,8 @@ interface SignalTickerProps {
   marine: MarineStatusResponse | null;
   cityVibes: CityVibesResponse | null;
   mediaWatch: MediaWatchResponse | null;
+  disaster?: DisasterFeedResponse | null;
+  cameraCount?: number;
 }
 
 function toneFromStatus(status: ExecutiveStatus) {
@@ -27,7 +31,10 @@ export default function SignalTicker({
   marine,
   cityVibes,
   mediaWatch,
+  disaster,
+  cameraCount,
 }: SignalTickerProps) {
+  const is4K = useWarRoomScale();
   const topMarine = marine?.corridors[0];
   const topVibe = cityVibes?.zones[0];
   const topMood = mediaWatch
@@ -37,7 +44,7 @@ export default function SignalTicker({
       })[0]
     : null;
 
-  const items = [
+  const coreItems = [
     {
       id: "posture",
       label: "Posture",
@@ -50,7 +57,7 @@ export default function SignalTicker({
       label: "Marine lead",
       value: topMarine?.label ?? "Patong coast",
       delta:
-        topMarine?.waveHeightMeters !== null && topMarine?.waveHeightMeters !== undefined
+        topMarine?.waveHeightMeters != null
           ? `${topMarine.waveHeightMeters.toFixed(1)}m`
           : "monitor",
       tone: toneFromStatus(topMarine?.status ?? "watch"),
@@ -59,7 +66,10 @@ export default function SignalTicker({
       id: "city-vibe",
       label: "City vibe",
       value: topVibe?.label ?? "Patong",
-      delta: topVibe ? `${topVibe.score}` : "pending",
+      delta:
+        topVibe?.pulseIndex != null
+          ? `${topVibe.pulseIndex}`
+          : "n/a",
       tone: toneFromStatus(topVibe?.status ?? "watch"),
     },
     {
@@ -71,8 +81,50 @@ export default function SignalTicker({
     },
   ];
 
+  // Extra metrics for 4K war room display
+  const extraItems = [
+    {
+      id: "alerts",
+      label: "Alerts",
+      value: disaster?.alerts?.length
+        ? `${disaster.alerts.length} active`
+        : "None",
+      delta: disaster?.alerts?.some((a) => a.severity === "intervene") ? "warning" : "clear",
+      tone: disaster?.alerts?.length ? "up" as const : "down" as const,
+    },
+    {
+      id: "cameras",
+      label: "CCTV",
+      value: cameraCount ? `${cameraCount} feeds` : "0",
+      delta: cameraCount && cameraCount > 0 ? "online" : "offline",
+      tone: cameraCount && cameraCount > 0 ? "down" as const : "neutral" as const,
+    },
+    {
+      id: "corridors",
+      label: "Marine zones",
+      value: marine?.corridors?.length
+        ? `${marine.corridors.length} zones`
+        : "N/A",
+      delta: marine?.corridors?.some((c) => c.status === "intervene") ? "alert" : "normal",
+      tone: marine?.corridors?.some((c) => c.status === "intervene") ? "up" as const : "down" as const,
+    },
+    {
+      id: "vibes",
+      label: "Tourism pulse",
+      value: cityVibes?.zones?.length
+        ? `${cityVibes.zones.length} zones`
+        : "N/A",
+      delta: topVibe?.pulseIndex != null
+        ? topVibe.pulseIndex > 70 ? "busy" : "moderate"
+        : "n/a",
+      tone: topVibe?.pulseIndex != null && topVibe.pulseIndex > 70 ? "up" as const : "down" as const,
+    },
+  ];
+
+  const items = is4K ? [...coreItems, ...extraItems] : coreItems;
+
   return (
-    <section className="grid h-[28px] grid-cols-2 bg-[var(--bg-surface)] lg:grid-cols-4">
+    <section className={`grid bg-[var(--bg-surface)] h-[28px] min-[3000px]:h-[48px] grid-cols-2 lg:grid-cols-4 min-[3000px]:grid-cols-8`}>
       {items.map((item) => {
         const toneClass =
           item.tone === "up"
@@ -93,17 +145,17 @@ export default function SignalTicker({
             className="flex min-w-0 items-center justify-between gap-3 border-r border-[var(--line)] px-4 last:border-r-0"
           >
             <div className="min-w-0 flex items-center gap-3">
-              <span className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+              <span className="text-[8px] min-[3000px]:text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
                 {item.label}
               </span>
-              <span className="truncate text-[12px] font-bold font-mono tabular-nums text-[var(--ink)]">
+              <span className="truncate text-[12px] min-[3000px]:text-[16px] font-bold font-mono tabular-nums text-[var(--ink)]">
                 {item.value}
               </span>
             </div>
             <div
-              className={`flex items-center gap-1 text-[9px] font-mono tabular-nums ${toneClass}`}
+              className={`flex items-center gap-1 text-[9px] min-[3000px]:text-[12px] font-mono tabular-nums ${toneClass}`}
             >
-              <Icon size={10} />
+              <Icon size={is4K ? 14 : 10} />
               <span className="truncate">{item.delta}</span>
             </div>
           </div>

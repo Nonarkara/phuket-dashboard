@@ -6,18 +6,9 @@ import { BookOpen, Database, Network, TrendingUp, TrendingDown, Minus } from "lu
 import type {
   ExecutiveStatus,
   GovernorBrief,
+  GovernorNarrativeResponse,
   PhuketVisitorOriginsResponse,
 } from "../../types/dashboard";
-
-interface PopularityData {
-  score: number;
-  trend: "rising" | "stable" | "declining";
-  sentiment: { positive: number; neutral: number; negative: number };
-  mentionCount: number;
-  articles: Array<{ title: string; url: string; source: string; tone: string; date: string }>;
-  isFallback?: boolean;
-  sources?: string[];
-}
 
 interface TopBarProps {
   brief: GovernorBrief | null;
@@ -57,8 +48,8 @@ export default function TopBar({
   onOpenDataExplorer,
 }: TopBarProps) {
   const [time, setTime] = useState("");
-  const [popularity, setPopularity] = useState<PopularityData | null>(null);
-  const [showPopDetail, setShowPopDetail] = useState(false);
+  const [narrative, setNarrative] = useState<GovernorNarrativeResponse | null>(null);
+  const [showNarrativeDetail, setShowNarrativeDetail] = useState(false);
 
   useEffect(() => {
     const tick = () => {
@@ -74,19 +65,21 @@ export default function TopBar({
   }, []);
 
   useEffect(() => {
-    const loadPopularity = async () => {
+    const loadNarrative = async () => {
       try {
         const res = await fetch("/api/governor/popularity");
         if (res.ok) {
-          const data = await res.json();
-          if (data && typeof data.score === "number") {
-            setPopularity(data);
+          const data = (await res.json()) as GovernorNarrativeResponse;
+          if (data && typeof data.mentionCount === "number") {
+            setNarrative(data);
           }
         }
       } catch { /* silent */ }
     };
-    loadPopularity();
-    const interval = setInterval(loadPopularity, 5 * 60 * 1000);
+    void loadNarrative();
+    const interval = setInterval(() => {
+      void loadNarrative();
+    }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -96,7 +89,7 @@ export default function TopBar({
     visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1 backdrop-blur-xl sm:px-5">
+    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1 min-[3000px]:py-2 backdrop-blur-xl sm:px-5">
       <div className="flex items-center justify-between gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 items-center gap-3">
@@ -107,27 +100,27 @@ export default function TopBar({
               alt="SLIC"
               width={50}
               height={24}
-              className="h-6 w-auto rounded-sm"
+              className="h-6 min-[3000px]:h-10 w-auto rounded-sm"
             />
             <Image
               src="/logos/depa.jpg"
               alt="depa"
               width={50}
               height={24}
-              className="h-6 w-auto rounded-sm"
+              className="h-6 min-[3000px]:h-10 w-auto rounded-sm"
             />
             <Image
               src="/logos/smart-city-thailand.jpg"
               alt="Smart City Thailand"
               width={70}
               height={24}
-              className="h-6 w-auto rounded-sm"
+              className="h-6 min-[3000px]:h-10 w-auto rounded-sm"
             />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
           <div className="min-w-0 shrink-0">
-            <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v6.0</div>
-            <div className="text-[13px] font-bold tracking-tight text-[var(--ink)] whitespace-nowrap">
+            <div className="text-[8px] min-[3000px]:text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v7.0</div>
+            <div className="text-[13px] min-[3000px]:text-[22px] font-bold tracking-tight text-[var(--ink)] whitespace-nowrap">
               Governor War Room
             </div>
           </div>
@@ -142,76 +135,68 @@ export default function TopBar({
               {brief?.posture.label ?? "Loading"}
             </span>
           </div>
-          {/* Governor Popularity Bar */}
-          {popularity && (
+          {/* Governor narrative bar */}
+          {narrative && (
             <div className="relative hidden sm:block">
               <button
                 type="button"
-                onClick={() => setShowPopDetail(!showPopDetail)}
+                onClick={() => setShowNarrativeDetail(!showNarrativeDetail)}
                 className={`flex items-center gap-2 border px-2.5 py-1 transition-colors ${
-                  popularity.isFallback
-                    ? "border-[#f59e0b] bg-[rgba(245,158,11,0.06)]"
-                    : "border-[var(--line)] hover:border-[var(--line-bright)]"
+                  narrative.freshness.isFresh
+                    ? "border-[var(--line)] hover:border-[var(--line-bright)]"
+                    : "border-[#f59e0b] bg-[rgba(245,158,11,0.06)]"
                 }`}
-                title="Governor public sentiment (social listening)"
+                title="Governor narrative signal"
               >
-                <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Approval</span>
+                <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Narrative</span>
                 <div className="flex items-center gap-1.5">
-                  <div className="relative h-2 w-16 overflow-hidden rounded-full bg-[var(--line)]">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full transition-all"
-                      style={{
-                        width: `${popularity.score}%`,
-                        backgroundColor:
-                          popularity.score >= 60 ? "#22c55e" : popularity.score >= 40 ? "#f59e0b" : "#ef4444",
-                      }}
-                    />
-                  </div>
                   <span className="text-[11px] font-mono font-bold text-[var(--ink)]">
-                    {popularity.score}%
+                    {narrative.freshness.isFresh ? `${narrative.mentionCount}` : "n/a"}
                   </span>
-                  {popularity.trend === "rising" ? (
+                  {narrative.trend === "rising" ? (
                     <TrendingUp size={10} className="text-[#22c55e]" />
-                  ) : popularity.trend === "declining" ? (
+                  ) : narrative.trend === "declining" ? (
                     <TrendingDown size={10} className="text-[#ef4444]" />
                   ) : (
                     <Minus size={10} className="text-[var(--dim)]" />
                   )}
-                  {popularity.isFallback && (
+                  {!narrative.freshness.isFresh && (
                     <span className="border border-[#f59e0b] px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] text-[#f59e0b]">
-                      fallback
+                      unavailable
                     </span>
                   )}
                 </div>
               </button>
 
               {/* Dropdown detail */}
-              {showPopDetail && (
+              {showNarrativeDetail && (
                 <div className="absolute left-0 top-full z-50 mt-1 w-72 border border-[var(--line)] bg-[var(--bg-raised)] shadow-lg">
                   <div className="px-3 py-2 border-b border-[var(--line)]">
                     <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-                      Governor Social Listening
+                      Governor narrative signal
                     </div>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="text-[20px] font-mono font-bold text-[var(--ink)]">{popularity.score}%</span>
+                      <span className="text-[20px] font-mono font-bold text-[var(--ink)]">
+                        {narrative.freshness.isFresh ? narrative.mentionCount.toLocaleString("en-US") : "--"}
+                      </span>
                       <span className="text-[9px] text-[var(--dim)]">
-                        {popularity.isFallback
-                          ? "fallback reading"
-                          : "approval (30-day GDELT analysis)"}
+                        {narrative.freshness.isFresh
+                          ? "mentions (30-day GDELT analysis)"
+                          : "fresh narrative data unavailable"}
                       </span>
                     </div>
                     <div className="mt-2 flex gap-2 text-[8px] font-bold uppercase tracking-wider">
-                      <span className="text-[#22c55e]">{popularity.sentiment.positive}% pos</span>
-                      <span className="text-[var(--dim)]">{popularity.sentiment.neutral}% neutral</span>
-                      <span className="text-[#ef4444]">{popularity.sentiment.negative}% neg</span>
+                      <span className="text-[#22c55e]">{narrative.positivePct ?? "--"}% pos</span>
+                      <span className="text-[var(--dim)]">{narrative.neutralPct ?? "--"}% neutral</span>
+                      <span className="text-[#ef4444]">{narrative.negativePct ?? "--"}% neg</span>
                     </div>
                     <div className="mt-1 text-[8px] text-[var(--dim)]">
-                      {popularity.mentionCount} mentions in media
+                      Avg tone {narrative.avgTone ?? "--"} / 30d delta {narrative.trendDelta30d ?? "--"}
                     </div>
                   </div>
-                  {popularity.articles.length > 0 && (
+                  {narrative.articles.length > 0 && (
                     <div className="max-h-48 overflow-y-auto px-3 py-2 space-y-1.5">
-                      {popularity.articles.slice(0, 5).map((art, idx) => (
+                      {narrative.articles.slice(0, 5).map((art, idx) => (
                         <a
                           key={idx}
                           href={art.url}
@@ -256,10 +241,10 @@ export default function TopBar({
         {/* Right: Clock + utils */}
         <div className="flex items-center gap-3">
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[18px] font-bold tracking-tighter text-[var(--ink)]">
+            <span className="font-mono text-[18px] min-[3000px]:text-[36px] font-bold tracking-tighter text-[var(--ink)]">
               {time || "--:--:--"}
             </span>
-            <span className="text-[8px] font-mono text-[var(--dim)] uppercase tracking-wider">
+            <span className="text-[8px] min-[3000px]:text-[12px] font-mono text-[var(--dim)] uppercase tracking-wider">
               HKT
             </span>
           </div>
