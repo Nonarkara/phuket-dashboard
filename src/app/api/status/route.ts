@@ -1,4 +1,5 @@
 import { hasUsableMapboxToken } from "../../../lib/mapbox";
+import { isSupabaseConfigured } from "../../../lib/supabase";
 
 export async function GET() {
   const hasMapboxToken = hasUsableMapboxToken(
@@ -8,12 +9,13 @@ export async function GET() {
 
   return Response.json({
     status: "operational",
-    version: "6.0.0",
+    version: "7.0.0",
     name: "Phuket Dashboard",
     standalone: true,
     signal_strength: 0.98,
     services: {
       database: process.env.DATABASE_URL ? "configured" : "fallback",
+      supabase: isSupabaseConfigured() ? "active" : "not configured (trend data uses mock)",
       basemap: hasMapboxToken ? "configured" : "missing",
       intelligence_cache: process.env.DATABASE_URL ? "hybrid" : "memory",
       global_feeds: "active",
