@@ -47,10 +47,11 @@ export default function SituationPanel({
   useEffect(() => {
     const load = async () => {
       try {
-        const [weatherRes, trafficRes, flightRes] = await Promise.all([
+        const [weatherRes, trafficRes, flightRes, arrivalsRes] = await Promise.all([
           fetch("/api/weather/tmd").then((r) => r.ok ? r.json() : null).catch(() => null),
           fetch("/api/traffic").then((r) => r.ok ? r.json() : null).catch(() => null),
           fetch("/api/flights").then((r) => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/flights/arrivals").then((r) => r.ok ? r.json() : null).catch(() => null),
         ]);
 
         // Extract from governor brief
@@ -89,13 +90,21 @@ export default function SituationPanel({
           temp: 32, humidity: 78, condition: "Tropical", windKph: 14, seaState: String(seaState),
         };
 
-        // Airport
-        const flightCount = Number(flightRes?.totalFlights ?? flightRes?.count ?? airportConcern?.metricValue ?? 0);
+        // Airport — prefer arrivals API data for accurate numbers
+        const arrData = arrivalsRes as { totalFlights?: number; arrivals?: Array<{ status: string; paxEstimate?: number }> } | null;
+        const arrFlights = arrData?.arrivals ?? [];
+        const totalArrivals = arrData?.totalFlights ?? 0;
+        const enRouteCount = arrFlights.filter((f) => f.status === "en-route").length;
+        const delayedCount = arrFlights.filter((f) => f.status === "delayed").length;
+        const landedCount = arrFlights.filter((f) => f.status === "landed").length;
+        const estPax = arrFlights.reduce((sum, f) => sum + (f.paxEstimate ?? 200), 0);
+
+        const flightCount = totalArrivals || Number(flightRes?.totalFlights ?? flightRes?.count ?? airportConcern?.metricValue ?? 0);
         const airportData = {
-          arrivals: Math.round(flightCount * 0.52),
-          departures: Math.round(flightCount * 0.48),
-          delays: Number(airportConcern?.metricValue ?? 0) > 15 ? 3 : 0,
-          status: String(airportConcern?.status ?? "normal"),
+          arrivals: totalArrivals || Math.round(flightCount * 0.52),
+          departures: Math.round(totalArrivals * 0.85) || Math.round(flightCount * 0.48),
+          delays: delayedCount || (Number(airportConcern?.metricValue ?? 0) > 15 ? 3 : 0),
+          status: delayedCount > 2 ? "delays" : enRouteCount > 0 ? `${enRouteCount} inbound` : String(airportConcern?.status ?? "normal"),
         };
 
         // Traffic
@@ -109,7 +118,7 @@ export default function SituationPanel({
         const th = tourismHotspots as Record<string, unknown> | null;
         const hotspots = (th?.hotspots as Array<Record<string, unknown>>) ?? [];
         const tourismData = {
-          todayArrivals: Number(tourismConcern?.metricValue ?? (hotspots.length > 0 ? hotspots.length * 1200 : 8500)),
+          todayArrivals: estPax || Number(tourismConcern?.metricValue ?? (hotspots.length > 0 ? hotspots.length * 1200 : 8500)),
           occupancy: 72,
           topNationality: "Russia",
         };

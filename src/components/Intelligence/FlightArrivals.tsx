@@ -137,7 +137,7 @@ export default function FlightArrivals() {
       </div>
 
       {/* Mini world map with flight routes */}
-      <div className="border-b border-[var(--line)] bg-[#1a1f2e] relative overflow-hidden" style={{ height: 140 }}>
+      <div className="border-b border-[var(--line)] bg-[var(--bg-surface)] relative overflow-hidden" style={{ height: 140 }}>
         <MiniWorldMap
           arrivals={data.arrivals.filter((f) => f.originLat !== 0)}
           selected={selectedFlight}
@@ -311,9 +311,9 @@ function MiniWorldMap({
     <svg width="100%" height="100%" viewBox={`120 10 200 140`} className="opacity-90">
       {/* Dark background is set by parent div */}
 
-      {/* Simplified continent outlines */}
+      {/* Simplified continent outlines — light theme */}
       {continentPaths.map((d, i) => (
-        <path key={i} d={d} fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" strokeWidth={0.3} />
+        <path key={i} d={d} fill="rgba(0,0,0,0.04)" stroke="rgba(0,0,0,0.15)" strokeWidth={0.4} />
       ))}
 
       {/* Flight route lines */}
@@ -321,25 +321,26 @@ function MiniWorldMap({
         const [ox, oy] = project(flight.originLat, flight.originLon, W, H);
         const isSelected = selected === flight.flightNumber;
         const isActive = flight.status === "en-route" || flight.status === "on-time";
+        const isDelayed = flight.status === "delayed";
         return (
           <g key={flight.flightNumber}>
-            {/* Route line - curved */}
+            {/* Route line */}
             <line
               x1={ox} y1={oy} x2={hktX} y2={hktY}
-              stroke={isSelected ? "#22c55e" : isActive ? "rgba(15,111,136,0.5)" : "rgba(255,255,255,0.08)"}
-              strokeWidth={isSelected ? 1.2 : 0.4}
-              strokeDasharray={isActive ? "none" : "2,2"}
+              stroke={isSelected ? "#0f6f88" : isActive ? "rgba(15,111,136,0.4)" : isDelayed ? "rgba(245,158,11,0.3)" : "rgba(0,0,0,0.06)"}
+              strokeWidth={isSelected ? 1.5 : isActive ? 0.8 : 0.3}
+              strokeDasharray={isActive || isSelected ? "none" : "2,2"}
             />
             {/* Origin dot */}
             <circle
-              cx={ox} cy={oy} r={isSelected ? 2.5 : 1.2}
-              fill={isSelected ? "#22c55e" : isActive ? "var(--cool)" : "rgba(255,255,255,0.2)"}
+              cx={ox} cy={oy} r={isSelected ? 3 : isActive ? 2 : 1.2}
+              fill={isSelected ? "#0f6f88" : isActive ? "#0f6f88" : isDelayed ? "#f59e0b" : "rgba(0,0,0,0.15)"}
               className="cursor-pointer"
               onClick={() => onSelect(isSelected ? null : flight.flightNumber)}
             />
-            {/* Label for selected */}
-            {isSelected && (
-              <text x={ox + 3} y={oy - 3} fontSize={5} fill="#22c55e" fontWeight="bold">
+            {/* Label for active or selected */}
+            {(isSelected || isActive) && (
+              <text x={ox + 4} y={oy - 3} fontSize={5} fill="#0f6f88" fontWeight="bold">
                 {flight.originCode}
               </text>
             )}
@@ -348,12 +349,12 @@ function MiniWorldMap({
       })}
 
       {/* HKT destination marker */}
-      <circle cx={hktX} cy={hktY} r={3} fill="#22c55e" opacity={0.8} />
-      <circle cx={hktX} cy={hktY} r={5} fill="none" stroke="#22c55e" strokeWidth={0.5} opacity={0.5}>
-        <animate attributeName="r" from="3" to="8" dur="2s" repeatCount="indefinite" />
+      <circle cx={hktX} cy={hktY} r={3.5} fill="#ef4444" opacity={0.9} />
+      <circle cx={hktX} cy={hktY} r={5} fill="none" stroke="#ef4444" strokeWidth={0.6} opacity={0.5}>
+        <animate attributeName="r" from="3.5" to="9" dur="2s" repeatCount="indefinite" />
         <animate attributeName="opacity" from="0.5" to="0" dur="2s" repeatCount="indefinite" />
       </circle>
-      <text x={hktX + 5} y={hktY + 2} fontSize={5} fill="#22c55e" fontWeight="bold">HKT</text>
+      <text x={hktX + 6} y={hktY + 2} fontSize={6} fill="#ef4444" fontWeight="bold">HKT</text>
     </svg>
   );
 }

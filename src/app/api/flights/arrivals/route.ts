@@ -83,47 +83,50 @@ const HKT_ROUTES: Omit<FlightArrival, "scheduledTime" | "estimatedTime" | "statu
 ];
 
 function generateDailySchedule(): FlightArrival[] {
+  // Use Bangkok timezone (UTC+7) for HKT
   const now = new Date();
-  const hourNow = now.getHours();
-  const minNow = now.getMinutes();
+  const bkkOffset = 7 * 60; // UTC+7 in minutes
+  const localOffset = now.getTimezoneOffset(); // local offset in minutes (negative for east)
+  const bkkTime = new Date(now.getTime() + (bkkOffset + localOffset) * 60000);
+  const hourNow = bkkTime.getHours();
+  const minNow = bkkTime.getMinutes();
   const currentMinutes = hourNow * 60 + minNow;
 
-  // Distribute flights across the day (HKT operates roughly 06:00–01:00)
-  const timeSlots = [
-    6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5,
-    11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5,
-    16, 17, 18, 19, 20, 21, 22, 23, 0.5,
-  ];
-
-  // Use day-of-year as seed for deterministic but daily-changing schedule
-  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+  // HKT operates ~06:00–01:00 next day. Spread 24 flights across the full day.
+  // Each route gets a fixed daily slot based on its index
+  const dayOfYear = Math.floor((bkkTime.getTime() - new Date(bkkTime.getFullYear(), 0, 0).getTime()) / 86400000);
   const seed = dayOfYear;
 
   const arrivals: FlightArrival[] = [];
   const gates = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3", "D1", "D2"];
 
-  for (let i = 0; i < HKT_ROUTES.length && i < timeSlots.length; i++) {
-    const route = HKT_ROUTES[(i + seed) % HKT_ROUTES.length];
-    const slotHour = timeSlots[i];
-    const hour = Math.floor(slotHour);
-    const minute = Math.round((slotHour % 1) * 60);
-    const scheduledMin = hour * 60 + minute;
+  for (let i = 0; i < HKT_ROUTES.length; i++) {
+    const route = HKT_ROUTES[i];
 
-    // Randomish delay (seeded)
+    // Spread flights: 06:00 to 00:30 (18.5 hours of operation)
+    const opStartMin = 6 * 60; // 06:00
+    const opEndMin = 24 * 60 + 30; // 00:30 next day
+    const opRange = opEndMin - opStartMin;
+    const slotMin = opStartMin + Math.round((i / HKT_ROUTES.length) * opRange);
+    // Add small seeded jitter (±15 min) so schedule changes daily
+    const jitter = ((seed * 7 + i * 13) % 31) - 15;
+    const scheduledMin = Math.max(opStartMin, Math.min(opEndMin, slotMin + jitter));
+
+    // Randomish delay
     const delayMin = ((seed * 7 + i * 13) % 20) < 14 ? 0 : ((seed * 3 + i * 7) % 15) + 5;
     const estMin = scheduledMin + delayMin;
 
     let status: FlightArrival["status"];
-    if (scheduledMin + 60 < currentMinutes) {
+    if (scheduledMin + 30 < currentMinutes) {
       status = "landed";
-    } else if (scheduledMin <= currentMinutes + 30) {
+    } else if (Math.abs(scheduledMin - currentMinutes) <= 30) {
       status = "en-route";
-    } else if (delayMin > 0) {
-      status = "delayed";
-    } else if (scheduledMin <= currentMinutes + 120) {
-      status = "on-time";
-    } else {
+    } else if (scheduledMin <= currentMinutes + 90 && scheduledMin > currentMinutes) {
+      status = delayMin > 0 ? "delayed" : "on-time";
+    } else if (scheduledMin > currentMinutes) {
       status = "scheduled";
+    } else {
+      status = "landed";
     }
 
     const formatTime = (mins: number) => {
@@ -138,13 +141,17 @@ function generateDailySchedule(): FlightArrival[] {
       estimatedTime: formatTime(estMin),
       status,
       gate: gates[(i + seed) % gates.length],
-      terminal: "International",
+      terminal: i < 4 ? "Domestic" : "International",
     });
   }
 
+  // Sort: en-route first, then upcoming by time, then landed last
   return arrivals.sort((a, b) => {
     const statusOrder = { "en-route": 0, "on-time": 1, delayed: 2, scheduled: 3, landed: 4 };
-    return (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5);
+    const sa = statusOrder[a.status] ?? 5;
+    const sb = statusOrder[b.status] ?? 5;
+    if (sa !== sb) return sa - sb;
+    return a.scheduledTime.localeCompare(b.scheduledTime);
   });
 }
 

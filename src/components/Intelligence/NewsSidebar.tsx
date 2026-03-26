@@ -68,6 +68,23 @@ function categorize(title: string): { label: string; color: string } {
   return { label: "NEWS", color: "var(--dim)" };
 }
 
+function formatNewsTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  } catch { return ""; }
+}
+
 function NewsItemCard({ item, is4K }: { item: NewsItem; is4K: boolean }) {
   const cat = categorize(item.title);
   return (
@@ -112,8 +129,11 @@ function NewsItemCard({ item, is4K }: { item: NewsItem; is4K: boolean }) {
           <p className={`mt-0.5 ${is4K ? "text-[12px] leading-4" : "text-[9px] leading-[14px]"} text-[var(--muted)]`}>
             {item.summary}
           </p>
-          <div className={`mt-1 ${is4K ? "text-[10px]" : "text-[7px]"} uppercase tracking-[0.16em] text-[var(--dim)]`}>
-            {item.source}
+          <div className={`mt-1 flex items-center gap-2 ${is4K ? "text-[10px]" : "text-[7px]"} uppercase tracking-[0.16em] text-[var(--dim)]`}>
+            <span>{item.source}</span>
+            {item.publishedAt && (
+              <span className="font-mono">{formatNewsTime(item.publishedAt)}</span>
+            )}
           </div>
         </div>
         {item.url && (
@@ -139,7 +159,7 @@ export default function NewsSidebar() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("/api/news/multilingual");
+        const res = await fetch(`/api/news/multilingual?t=${Date.now()}`);
         if (res.ok) {
           setData(await res.json());
         }
