@@ -60,6 +60,34 @@ export default function TopBar({
     source: string;
   } | null>(null);
 
+  const [newsHeadlines, setNewsHeadlines] = useState<{ title: string; url: string; source: string; severity: string }[]>([]);
+
+  // Fetch news headlines for ticker
+  useEffect(() => {
+    const loadNews = async () => {
+      try {
+        const res = await fetch(`/api/news/multilingual?t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const all = [...(data.en ?? []), ...(data.th ?? [])];
+          setNewsHeadlines(
+            all.sort((a: { publishedAt: string }, b: { publishedAt: string }) =>
+              new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+            ).slice(0, 10).map((item: { title: string; url?: string; source: string; severity: string }) => ({
+              title: item.title?.substring(0, 80) ?? "",
+              url: item.url ?? "#",
+              source: item.source ?? "",
+              severity: item.severity ?? "stable",
+            }))
+          );
+        }
+      } catch { /* silent */ }
+    };
+    void loadNews();
+    const interval = setInterval(() => void loadNews(), 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const loadTrend = async (range: string) => {
     try {
       const res = await fetch(`/api/governor/trend?range=${range}`);
@@ -343,40 +371,58 @@ export default function TopBar({
         </div>
       </div>
 
+      {/* Feeder markets + scrolling news ticker */}
       <div className="mt-1 hidden min-w-0 items-center gap-2 overflow-x-auto border-t border-[var(--line)] pt-1 lg:flex">
         <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
           Feeder markets
         </span>
-        <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar">
           {feederOrigins.length > 0 ? (
             feederOrigins.map((origin) => (
               <div
                 key={origin.countryCode}
-                className="flex shrink-0 items-center gap-2 border border-[var(--line)] px-2 py-1"
+                className="flex shrink-0 items-center gap-1.5 border border-[var(--line)] px-1.5 py-0.5"
               >
                 <Image
                   src={origin.logo}
                   alt={origin.country}
-                  width={14}
-                  height={14}
-                  className="h-3.5 w-3.5"
+                  width={12}
+                  height={12}
+                  className="h-3 w-3"
                 />
                 <div className="leading-tight">
-                  <div className="text-[9px] font-semibold text-[var(--ink)]">
+                  <div className="text-[8px] font-semibold text-[var(--ink)]">
                     {origin.rank}. {origin.country}
                   </div>
-                  <div className="text-[8px] font-mono text-[var(--dim)]">
-                    GDP/cap ${origin.gdpPerCapitaUsd ? Math.round(origin.gdpPerCapitaUsd).toLocaleString("en-US") : "--"}
+                  <div className="text-[7px] font-mono text-[var(--dim)]">
+                    ${origin.gdpPerCapitaUsd ? Math.round(origin.gdpPerCapitaUsd / 1000) + "k" : "--"}
                     {origin.year ? ` • ${origin.year}` : ""}
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="border border-[var(--line)] px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-              Loading visitor origins
+            <div className="border border-[var(--line)] px-2 py-0.5 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
+              Loading
             </div>
           )}
+        </div>
+        <div className="h-3 w-[1px] bg-[var(--line)] shrink-0" />
+
+        {/* Scrolling news headline ticker */}
+        <div className="min-w-0 flex-1 overflow-hidden relative">
+          <div className="animate-marquee whitespace-nowrap flex items-center gap-6">
+            {newsHeadlines.map((h, i) => (
+              <a key={i} href={h.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[8px] hover:text-[var(--cool)] transition-colors shrink-0">
+                <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                  h.severity === "alert" ? "bg-[#ef4444]" : h.severity === "watch" ? "bg-[#f59e0b]" : "bg-[var(--cool)]"
+                }`} />
+                <span className="font-semibold text-[var(--ink)]">{h.title}</span>
+                <span className="text-[var(--dim)]">({h.source})</span>
+              </a>
+            ))}
+          </div>
         </div>
         <span className="shrink-0 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
           {visitorOriginSourceLabel}

@@ -137,7 +137,7 @@ export default function FlightArrivals() {
       </div>
 
       {/* Mini world map with flight routes */}
-      <div className="border-b border-[var(--line)] bg-[var(--bg-surface)] relative overflow-hidden" style={{ height: 140 }}>
+      <div className="border-b border-[var(--line)] bg-[var(--bg-surface)] relative overflow-hidden" style={{ height: 180 }}>
         <MiniWorldMap
           arrivals={data.arrivals.filter((f) => f.originLat !== 0)}
           selected={selectedFlight}
@@ -289,26 +289,38 @@ function MiniWorldMap({
   selected: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const W = 400;
-  const H = 200;
+  const W = 600;
+  const H = 300;
   const [hktX, hktY] = project(HKT.lat, HKT.lon, W, H);
 
-  // Simple world outline (very simplified continents)
+  // Simplified world landmasses (Mercator, 600x300 canvas)
   const continentPaths = [
-    // Europe + Africa
-    "M195,40 L210,38 L220,42 L225,55 L220,65 L215,80 L210,95 L205,110 L200,120 L195,130 L190,115 L192,100 L190,85 L188,70 L190,55 Z",
-    // Asia
-    "M225,30 L260,25 L290,35 L300,45 L295,55 L285,60 L275,65 L265,70 L255,65 L245,55 L235,48 L230,42 Z",
-    // SE Asia / Indonesia
-    "M275,70 L285,72 L295,75 L300,80 L295,85 L285,82 L275,78 Z",
-    // Australia
-    "M300,110 L320,108 L330,112 L328,120 L318,125 L305,122 L300,115 Z",
+    // Europe
+    "M290,55 L295,50 L305,48 L315,50 L325,52 L330,58 L325,62 L315,60 L305,58 L295,56 Z",
+    // Africa
+    "M295,80 L310,78 L318,85 L320,100 L315,115 L308,125 L300,130 L292,120 L288,105 L290,90 Z",
+    // Middle East
+    "M330,65 L340,62 L350,68 L345,75 L335,72 Z",
     // India
-    "M245,55 L255,50 L260,60 L255,75 L248,68 L245,60 Z",
+    "M365,65 L380,60 L385,70 L378,85 L370,80 L365,72 Z",
+    // China / East Asia
+    "M385,45 L405,40 L425,42 L440,48 L445,55 L440,62 L425,65 L410,62 L395,58 L388,52 Z",
+    // Southeast Asia
+    "M400,70 L420,68 L430,72 L425,80 L415,82 L405,78 Z",
+    // Indonesia / Malaysia
+    "M390,90 L405,88 L420,90 L435,92 L440,95 L430,98 L415,96 L400,94 Z",
+    // Japan / Korea
+    "M445,45 L450,42 L455,48 L452,52 L448,50 Z",
+    // Australia
+    "M430,125 L455,120 L470,125 L468,140 L455,148 L440,145 L432,135 Z",
+    // Russia / Siberia
+    "M310,30 L340,25 L380,22 L420,25 L450,30 L460,38 L440,40 L400,35 L360,32 L320,35 Z",
+    // UK
+    "M282,42 L286,40 L288,45 L285,48 Z",
   ];
 
   return (
-    <svg width="100%" height="100%" viewBox={`120 10 200 140`} className="opacity-90">
+    <svg width="100%" height="100%" viewBox={`220 15 380 160`} className="opacity-90">
       {/* Dark background is set by parent div */}
 
       {/* Simplified continent outlines — light theme */}

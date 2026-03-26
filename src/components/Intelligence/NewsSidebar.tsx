@@ -85,11 +85,21 @@ function formatNewsTime(iso: string): string {
   } catch { return ""; }
 }
 
-function NewsItemCard({ item, is4K }: { item: NewsItem; is4K: boolean }) {
+function NewsItemCard({ item, is4K, rank }: { item: NewsItem; is4K: boolean; rank?: number }) {
   const cat = categorize(item.title);
+  // Recency gradient: newer articles (rank 0-2) get a warm tint, fading to neutral
+  const recencyBg = (() => {
+    if (item.severity === "alert") return "rgba(239,68,68,0.06)";
+    if (rank === undefined || rank > 8) return "transparent";
+    if (rank <= 1) return "rgba(15,111,136,0.06)"; // freshest: cool tint
+    if (rank <= 3) return "rgba(15,111,136,0.03)";
+    if (rank <= 5) return "rgba(15,111,136,0.015)";
+    return "transparent";
+  })();
   return (
     <article
-      className={`border-l-2 ${severityBorder(item.severity)} px-3 py-2 transition-colors hover:bg-[rgba(15,111,136,0.03)]`}
+      className={`border-l-2 ${severityBorder(item.severity)} px-3 py-2 transition-colors hover:bg-[rgba(15,111,136,0.05)]`}
+      style={{ background: recencyBg }}
     >
       <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
@@ -176,12 +186,13 @@ export default function NewsSidebar() {
   const alertCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "alert").length : 0;
   const watchCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "watch").length : 0;
 
-  // Sort items by severity then recency
+  // Sort by recency first (newest on top), alerts bumped to very top
   const sortItems = (items: NewsItem[]) =>
     [...items].sort((a, b) => {
-      const order = { alert: 0, watch: 1, stable: 2 };
-      const sevDiff = order[a.severity] - order[b.severity];
-      if (sevDiff !== 0) return sevDiff;
+      // Alerts always float to top
+      if (a.severity === "alert" && b.severity !== "alert") return -1;
+      if (b.severity === "alert" && a.severity !== "alert") return 1;
+      // Then by publication date (newest first)
       return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
     });
 
@@ -234,7 +245,7 @@ export default function NewsSidebar() {
             </div>
             <div className="divide-y divide-[var(--line)]">
               {thItems.map((item, idx) => (
-                <NewsItemCard key={`th-${item.id}-${idx}`} item={item} is4K={true} />
+                <NewsItemCard key={`th-${item.id}-${idx}`} item={item} is4K={true} rank={idx} />
               ))}
             </div>
           </div>
@@ -245,7 +256,7 @@ export default function NewsSidebar() {
             </div>
             <div className="divide-y divide-[var(--line)]">
               {intlItems.map((item, idx) => (
-                <NewsItemCard key={`intl-${item.id}-${idx}`} item={item} is4K={true} />
+                <NewsItemCard key={`intl-${item.id}-${idx}`} item={item} is4K={true} rank={idx} />
               ))}
             </div>
           </div>
@@ -346,7 +357,7 @@ export default function NewsSidebar() {
 
         <div className="divide-y divide-[var(--line)]">
           {sorted.map((item, idx) => (
-            <NewsItemCard key={`${item.id}-${idx}`} item={item} is4K={false} />
+            <NewsItemCard key={`${item.id}-${idx}`} item={item} is4K={false} rank={idx} />
           ))}
         </div>
       </div>
