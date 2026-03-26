@@ -10,18 +10,23 @@ import { NextResponse } from "next/server";
  * Every item has a clickable URL to the original source article.
  */
 
-// ─── Real Phuket news RSS feeds ─────────────────────────────────
+// ─── Real Phuket news RSS feeds (diversified) ───────────────────
 const PHUKET_RSS_FEEDS = [
-  { id: "phuket-express", url: "https://www.thephuketnews.com/rss/news.xml", source: "The Phuket Express", trust: 14 },
+  { id: "phuket-news", url: "https://www.thephuketnews.com/rss/news.xml", source: "The Phuket News", trust: 14 },
   { id: "thaiger-phuket", url: "https://thethaiger.com/news/phuket/feed", source: "The Thaiger (Phuket)", trust: 13 },
+  { id: "thaiger-south", url: "https://thethaiger.com/news/southern-thailand/feed", source: "The Thaiger (South)", trust: 12 },
   { id: "bangkok-post", url: "https://www.bangkokpost.com/rss/data/news.xml", source: "Bangkok Post", trust: 13 },
-  { id: "phuket-news", url: "https://www.thephuketnews.com/rss/news.xml", source: "The Phuket News", trust: 12 },
+  { id: "nation-thai", url: "https://www.nationthailand.com/feeds/news.xml", source: "Nation Thailand", trust: 12 },
+  { id: "thaipbs", url: "https://www.thaipbsworld.com/feed/", source: "Thai PBS World", trust: 13 },
+  { id: "pattaya-mail", url: "https://www.pattayamail.com/feed", source: "Pattaya Mail", trust: 11 },
 ];
 
-// Google News search for Phuket-specific topics (backup)
+// Google News search for Phuket-specific topics (multiple queries for diversity)
 const GOOGLE_NEWS_PHUKET = [
-  "https://news.google.com/rss/search?q=Phuket+governor+OR+accident+OR+tourism+OR+airport+OR+safety&hl=en&gl=TH&ceid=TH:en",
+  "https://news.google.com/rss/search?q=Phuket+accident+OR+tourism+OR+airport+OR+crime+OR+weather&hl=en&gl=TH&ceid=TH:en",
+  "https://news.google.com/rss/search?q=Phuket+governor+OR+infrastructure+OR+economy+OR+property&hl=en&gl=TH&ceid=TH:en",
   "https://news.google.com/rss/search?q=%E0%B8%A0%E0%B8%B9%E0%B9%80%E0%B8%81%E0%B9%87%E0%B8%95+%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B8%A7%E0%B9%88%E0%B8%B2+OR+%E0%B8%AD%E0%B8%B8%E0%B8%9A%E0%B8%B1%E0%B8%95%E0%B8%B4%E0%B9%80%E0%B8%AB%E0%B8%95%E0%B8%B8+OR+%E0%B8%97%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%A2%E0%B8%A7&hl=th&gl=TH&ceid=TH:th",
+  "https://news.google.com/rss/search?q=%E0%B8%A0%E0%B8%B9%E0%B9%80%E0%B8%81%E0%B9%87%E0%B8%95+%E0%B8%88%E0%B8%A3%E0%B8%B2%E0%B8%88%E0%B8%A3+OR+%E0%B8%AA%E0%B8%99%E0%B8%B2%E0%B8%A1%E0%B8%9A%E0%B8%B4%E0%B8%99+OR+%E0%B8%99%E0%B9%89%E0%B8%B3%E0%B8%97%E0%B9%88%E0%B8%A7%E0%B8%A1+OR+%E0%B8%95%E0%B8%B3%E0%B8%A3%E0%B8%A7%E0%B8%88&hl=th&gl=TH&ceid=TH:th",
 ];
 
 const GDELT_QUERY =
@@ -171,28 +176,32 @@ async function fetchRealPhuketNews(): Promise<{ th: MultilingualNewsItem[]; en: 
   const enItems: MultilingualNewsItem[] = [];
   const thItems: MultilingualNewsItem[] = [];
 
-  // Parse RSS feeds (English Phuket news outlets)
+  // Parse RSS feeds — filter general feeds for Phuket relevance
+  const generalFeeds = new Set(["bangkok-post", "nation-thai", "thaipbs", "pattaya-mail"]);
   feedResults.forEach((xml, idx) => {
     if (!xml) return;
     const feed = PHUKET_RSS_FEEDS[idx];
     const parsed = parseRssItems(xml, feed.source, "en", feed.id);
-    // Only keep Phuket-relevant items from general feeds
-    const relevant = feed.id === "bangkok-post"
+    const relevant = generalFeeds.has(feed.id)
       ? parsed.filter((item) => isPhuketRelevant(item.title + " " + item.summary))
       : parsed;
     enItems.push(...relevant);
   });
 
-  // Parse Google News Phuket search (Thai)
-  if (googleResults[1]) {
-    const parsed = parseRssItems(googleResults[1], "Google News ภูเก็ต", "th", "gn-th");
-    thItems.push(...parsed);
+  // Parse Google News Phuket search (Thai — indices 2, 3)
+  for (let i = 2; i < googleResults.length; i++) {
+    if (googleResults[i]) {
+      const parsed = parseRssItems(googleResults[i]!, `Google News ภูเก็ต`, "th", `gn-th-${i}`);
+      thItems.push(...parsed);
+    }
   }
 
-  // Parse Google News Phuket search (English)
-  if (googleResults[0]) {
-    const parsed = parseRssItems(googleResults[0], "Google News Phuket", "en", "gn-en");
-    enItems.push(...parsed.filter((item) => isPhuketRelevant(item.title + " " + item.summary)));
+  // Parse Google News Phuket search (English — indices 0, 1)
+  for (let i = 0; i < 2; i++) {
+    if (googleResults[i]) {
+      const parsed = parseRssItems(googleResults[i]!, "Google News Phuket", "en", `gn-en-${i}`);
+      enItems.push(...parsed.filter((item) => isPhuketRelevant(item.title + " " + item.summary)));
+    }
   }
 
   // GDELT articles
@@ -237,8 +246,8 @@ async function fetchRealPhuketNews(): Promise<{ th: MultilingualNewsItem[]; en: 
     });
 
   return {
-    en: sortItems(dedup(enItems)).slice(0, 10),
-    th: sortItems(thItems).slice(0, 10),
+    en: sortItems(dedup(enItems)).slice(0, 15),
+    th: sortItems(dedup(thItems)).slice(0, 15),
   };
 }
 
@@ -336,18 +345,15 @@ export async function GET() {
   const { th, en } = await fetchRealPhuketNews();
   const zh = buildChineseSignals(en);
 
+  // Collect unique sources that actually returned data
+  const activeSources = [...new Set([...en, ...th].map((item) => item.source))];
+
   const response: MultilingualNewsResponse = {
     generatedAt: new Date().toISOString(),
     th,
     en,
     zh,
-    sources: [
-      "The Phuket Express",
-      "The Thaiger (Phuket)",
-      "Bangkok Post",
-      "Google News Phuket",
-      "GDELT",
-    ],
+    sources: activeSources,
   };
 
   return NextResponse.json(response);
