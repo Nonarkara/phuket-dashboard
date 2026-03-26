@@ -11,6 +11,7 @@ import BottomRail from "../components/Intelligence/BottomRail";
 import NewsSidebar from "../components/Intelligence/NewsSidebar";
 import ModuleRail from "../components/Modules/ModuleRail";
 import ModuleSelector from "../components/Modules/ModuleSelector";
+import SituationPanel from "../components/Intelligence/SituationPanel";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -149,20 +150,13 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Right — intelligence panel (4K only, vertical BottomRail) */}
-        <div className="hidden min-[3000px]:flex w-[480px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto">
-          <BottomRail
+        {/* Right — Situation panel (xl+ screens / 74-inch LED) */}
+        <div className="hidden xl:flex w-[240px] min-[3000px]:w-[400px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto">
+          <SituationPanel
             brief={brief}
             disaster={disaster}
-            maritimeSecurity={maritimeSecurity}
             marine={marine}
             tourismHotspots={tourismHotspots}
-            cityVibes={cityVibes}
-            mediaWatch={mediaWatch}
-            cameraPayload={cameraPayload}
-            selectedCorridorId={selectedCorridorId}
-            onSelectCorridor={setSelectedCorridorId}
-            verticalMode
           />
         </div>
       </section>

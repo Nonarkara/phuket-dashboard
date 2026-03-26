@@ -45,7 +45,31 @@ function severityBorder(sev: "alert" | "watch" | "stable") {
   return "border-l-[var(--line)]";
 }
 
+function categorize(title: string): { label: string; color: string } {
+  const t = title.toLowerCase();
+  if (/accident|crash|kill|dead|death|injur|อุบัติเหตุ|เสียชีวิต/.test(t))
+    return { label: "ACCIDENT", color: "#ef4444" };
+  if (/arrest|drug|crime|police|bust|raid|fraud|scam|จับกุม|ตำรวจ|ยาเสพติด/.test(t))
+    return { label: "CRIME", color: "#f97316" };
+  if (/storm|flood|earthquake|tsunami|warning|fire|เตือน|พายุ|น้ำท่วม|ไฟไหม้/.test(t))
+    return { label: "DISASTER", color: "#ef4444" };
+  if (/airport|flight|airline|สนามบิน|เที่ยวบิน/.test(t))
+    return { label: "AIRPORT", color: "#6366f1" };
+  if (/tourism|tourist|visitor|hotel|resort|ท่องเที่ยว|โรงแรม/.test(t))
+    return { label: "TOURISM", color: "#0ea5e9" };
+  if (/governor|government|admin|budget|ผู้ว่า|รัฐบาล|งบประมาณ/.test(t))
+    return { label: "GOV", color: "#22c55e" };
+  if (/traffic|road|transport|tuk.?tuk|จราจร|คมนาคม/.test(t))
+    return { label: "TRAFFIC", color: "#f59e0b" };
+  if (/weather|rain|monsoon|อากาศ|ฝน/.test(t))
+    return { label: "WEATHER", color: "#6366f1" };
+  if (/property|real.?estate|อสังหา/.test(t))
+    return { label: "PROPERTY", color: "#8b5cf6" };
+  return { label: "NEWS", color: "var(--dim)" };
+}
+
 function NewsItemCard({ item, is4K }: { item: NewsItem; is4K: boolean }) {
+  const cat = categorize(item.title);
   return (
     <article
       className={`border-l-2 ${severityBorder(item.severity)} px-3 py-2 transition-colors hover:bg-[rgba(15,111,136,0.03)]`}
@@ -57,6 +81,12 @@ function NewsItemCard({ item, is4K }: { item: NewsItem; is4K: boolean }) {
               {LANG_FLAGS[item.lang]?.flag}
             </span>
             <span className={`shrink-0 rounded-full ${severityDot(item.severity)} ${is4K ? "h-2.5 w-2.5" : "h-1.5 w-1.5"}`} />
+            <span
+              className={`${is4K ? "text-[9px] px-1.5 py-0.5" : "text-[7px] px-1 py-px"} font-bold uppercase tracking-[0.1em] border`}
+              style={{ color: cat.color, borderColor: cat.color, opacity: 0.85 }}
+            >
+              {cat.label}
+            </span>
             <span className={`${is4K ? "text-[11px]" : "text-[8px]"} font-bold uppercase tracking-[0.14em] text-[var(--dim)]`}>
               {item.zone}
             </span>
