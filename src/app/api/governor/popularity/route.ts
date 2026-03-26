@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildFreshness } from "../../../../lib/freshness";
 import { getSupabase } from "../../../../lib/supabase";
+import { getCache, setCache } from "../../../../lib/cache";
 import type { GovernorNarrativeResponse } from "../../../../types/dashboard";
 
 const TIMEOUT_MS = 12_000;
@@ -48,6 +49,10 @@ function classifyTone(tone: number): "positive" | "neutral" | "negative" {
 }
 
 export async function GET() {
+  // Return cached if available (5 min TTL)
+  const hit = getCache<GovernorNarrativeResponse>("governor-popularity");
+  if (hit) return NextResponse.json(hit);
+
   const checkedAt = new Date().toISOString();
   const [tonePayload, artPayload] = await Promise.all([
     fetchJson<{ timeline?: Array<{ data: ToneEntry[] }> }>(GDELT_TONE_URL),
@@ -121,6 +126,9 @@ export async function GET() {
       sourceIds: ["GDELT DOC 2.0"],
     }),
   };
+
+  // Cache for 5 minutes
+  setCache("governor-popularity", response, 300);
 
   // ─── Persist snapshot to Supabase (fire-and-forget) ───
   if (response.positivePct !== null) {

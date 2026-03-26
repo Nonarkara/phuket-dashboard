@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cached } from "../../../../lib/cache";
 
 /**
  * Multilingual News Feed for Governor War Room
@@ -342,19 +343,18 @@ function buildChineseSignals(enItems: MultilingualNewsItem[]): MultilingualNewsI
 // ─── Main handler ───────────────────────────────────────────────
 
 export async function GET() {
-  const { th, en } = await fetchRealPhuketNews();
-  const zh = buildChineseSignals(en);
-
-  // Collect unique sources that actually returned data
-  const activeSources = [...new Set([...en, ...th].map((item) => item.source))];
-
-  const response: MultilingualNewsResponse = {
-    generatedAt: new Date().toISOString(),
-    th,
-    en,
-    zh,
-    sources: activeSources,
-  };
+  const response = await cached<MultilingualNewsResponse>("news-multilingual", 120, async () => {
+    const { th, en } = await fetchRealPhuketNews();
+    const zh = buildChineseSignals(en);
+    const activeSources = [...new Set([...en, ...th].map((item) => item.source))];
+    return {
+      generatedAt: new Date().toISOString(),
+      th,
+      en,
+      zh,
+      sources: activeSources,
+    };
+  });
 
   return NextResponse.json(response);
 }
