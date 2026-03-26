@@ -12,6 +12,7 @@ import NewsSidebar from "../components/Intelligence/NewsSidebar";
 import ModuleRail from "../components/Modules/ModuleRail";
 import ModuleSelector from "../components/Modules/ModuleSelector";
 import SituationPanel from "../components/Intelligence/SituationPanel";
+import FlightArrivals from "../components/Intelligence/FlightArrivals";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -150,14 +151,19 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Right — Situation panel (xl+ screens / 74-inch LED) */}
-        <div className="hidden xl:flex w-[240px] min-[3000px]:w-[400px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto">
-          <SituationPanel
-            brief={brief}
-            disaster={disaster}
-            marine={marine}
-            tourismHotspots={tourismHotspots}
-          />
+        {/* Right — Flight Arrivals + Situation panel (xl+ screens / 74-inch LED) */}
+        <div className="hidden xl:flex w-[300px] min-[3000px]:w-[440px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)]">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <FlightArrivals />
+          </div>
+          <div className="shrink-0 border-t border-[var(--line)] max-h-[40%] overflow-y-auto">
+            <SituationPanel
+              brief={brief}
+              disaster={disaster}
+              marine={marine}
+              tourismHotspots={tourismHotspots}
+            />
+          </div>
         </div>
       </section>
 
