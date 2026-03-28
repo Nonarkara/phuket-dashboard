@@ -1842,6 +1842,13 @@ export async function buildEnhancedSourceCatalog(): Promise<ApiSourceResponse> {
       vessels: [],
       chokepoints: [],
       sources: ["AIS fallback"],
+      mode: "degraded" as const,
+      sourceSummary: {
+        label: "AIS fallback",
+        mode: "degraded" as const,
+        sources: ["AIS fallback"],
+        note: "Maritime posture fell back to an empty placeholder during intelligence package assembly.",
+      },
       freshness: buildFreshness({
         checkedAt: new Date().toISOString(),
         observedAt: null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const WAR_ROOM_BREAKPOINT = 3000;
 
@@ -12,11 +12,16 @@ const WAR_ROOM_BREAKPOINT = 3000;
  * - Conditional layout changes (dual-column news, split-view map)
  */
 export function useWarRoomScale(): boolean {
-  const [is4K, setIs4K] = useState(false);
+  const [is4K, setIs4K] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.matchMedia(`(min-width: ${WAR_ROOM_BREAKPOINT}px)`).matches;
+  });
 
   useEffect(() => {
     const mql = window.matchMedia(`(min-width: ${WAR_ROOM_BREAKPOINT}px)`);
-    setIs4K(mql.matches);
     const handler = (e: MediaQueryListEvent) => setIs4K(e.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);

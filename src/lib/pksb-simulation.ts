@@ -133,7 +133,7 @@ const ROUTE_CONFIGS: Array<{
 }> = [
   {
     key: "dragon_line",
-    id: "dragon",
+    id: "dragon-line",
     label: "Dragon Line",
     color: "#db0000",
     plates: ["10-1201", "10-1202"],
@@ -149,7 +149,7 @@ const ROUTE_CONFIGS: Array<{
   },
   {
     key: "patong_line",
-    id: "patong-terminal",
+    id: "patong-old-bus-station",
     label: "Patong-Terminal",
     color: "#ffa500",
     plates: ["10-1206", "10-1207", "10-1208"],

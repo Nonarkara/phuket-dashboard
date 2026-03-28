@@ -5,6 +5,12 @@ import {
   textMatchesAliases,
 } from "./governor-config";
 import { buildFreshness, summarizeFreshness } from "./freshness";
+import {
+  currentBangkokMinuteOfDay,
+  interpolateCoordinates,
+  nextScheduledDepartureMinute,
+  TOUCHPOINT_CONFIGS,
+} from "./operations-model";
 import type {
   ApiSourceEntry,
   Coordinates,
@@ -12,11 +18,13 @@ import type {
   DisasterFeedResponse,
   DisasterLayerDescriptor,
   ExecutiveStatus,
+  FeedMode,
   GovernorScenarioId,
   MaritimeSecurityResponse,
   MaritimeVessel,
   MediaWatchResponse,
   PackageStatus,
+  SourceSummary,
   TourismHotspot,
   TourismHotspotsResponse,
 } from "../types/dashboard";
@@ -870,7 +878,123 @@ function buildScenarioMaritimeSecurity(
       "Khao Lak coastal approaches",
     ],
     sources: [provider],
+    mode: "modeled",
+    sourceSummary: {
+      label: provider,
+      mode: "modeled",
+      sources: [provider],
+      note: "Scenario maritime posture is forcing a deterministic ferry and patrol picture.",
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: [provider],
+      }),
+    },
     providerHealth: "live",
+    freshness: buildFreshness({
+      checkedAt: generatedAt,
+      observedAt: generatedAt,
+      fallbackTier: "scenario",
+      sourceIds: [provider],
+    }),
+  };
+}
+
+function bearingFromCoordinates(
+  start: Coordinates,
+  end: Coordinates,
+) {
+  const dLng = end[0] - start[0];
+  const dLat = end[1] - start[1];
+  const angle = Math.atan2(dLng, dLat) * (180 / Math.PI);
+  return (angle + 360) % 360;
+}
+
+function buildModeledMaritimeSourceSummary(
+  label: string,
+  generatedAt: string,
+  note: string,
+): SourceSummary {
+  const freshness = buildFreshness({
+    checkedAt: generatedAt,
+    observedAt: generatedAt,
+    fallbackTier: "scenario",
+    sourceIds: [label],
+  });
+
+  return {
+    label,
+    mode: "modeled",
+    sources: [label, "Pier timetable model"],
+    note,
+    freshness,
+  };
+}
+
+function buildModeledMaritimeVessels(
+  generatedAt: string,
+  note: string,
+) {
+  const minuteOfDay = currentBangkokMinuteOfDay();
+  const provider = "Modeled ferry operations";
+  const vessels: MaritimeVessel[] = TOUCHPOINT_CONFIGS.map((config, index) => {
+    const nextDepartureMinute = nextScheduledDepartureMinute(config, minuteOfDay);
+    const serviceCycle =
+      config.departureIntervalMinutes + config.travelMinutes * 2;
+    const elapsedSinceStart = Math.max(0, minuteOfDay - config.departureStartMinute);
+    const progress = serviceCycle > 0
+      ? (elapsedSinceStart % serviceCycle) / serviceCycle
+      : 0;
+    const outbound = progress <= 0.5;
+    const segmentProgress = outbound ? progress / 0.5 : (progress - 0.5) / 0.5;
+    const [lng, lat] = outbound
+      ? interpolateCoordinates(config.center, config.laneEnd, segmentProgress)
+      : interpolateCoordinates(config.laneEnd, config.center, segmentProgress);
+    const heading = outbound
+      ? bearingFromCoordinates(config.center, config.laneEnd)
+      : bearingFromCoordinates(config.laneEnd, config.center);
+    const minutesUntilDeparture =
+      nextDepartureMinute === null ? null : nextDepartureMinute - minuteOfDay;
+    const status =
+      minutesUntilDeparture !== null && minutesUntilDeparture <= 12
+        ? ("watch" as const)
+        : index === 0
+          ? ("watch" as const)
+          : ("stable" as const);
+
+    return {
+      id: `modeled-${config.id}`,
+      name: `${config.label} Shuttle`,
+      type: "ferry",
+      lat,
+      lng,
+      speedKnots: outbound ? 13 : 10,
+      heading,
+      lastSeen: generatedAt,
+      flag: "TH",
+      destination: outbound ? config.destinationLabel : config.label,
+      status,
+      source: provider,
+      strategicNote:
+        minutesUntilDeparture !== null && minutesUntilDeparture <= 12
+          ? "Departure window is close enough that pier loading and bus handoff need to stay synchronized."
+          : "Modeled ferry motion is keeping the pier picture visible while AIS is unavailable.",
+      freshness: buildFreshness({
+        checkedAt: generatedAt,
+        observedAt: generatedAt,
+        fallbackTier: "scenario",
+        sourceIds: [provider],
+      }),
+    };
+  });
+
+  return {
+    provider,
+    vessels,
+    providerHealth: "stale" as PackageStatus,
+    mode: "modeled" as FeedMode,
+    sourceSummary: buildModeledMaritimeSourceSummary(provider, generatedAt, note),
     freshness: buildFreshness({
       checkedAt: generatedAt,
       observedAt: generatedAt,
@@ -895,17 +1019,10 @@ async function fetchMaritimeVessels() {
   const apiKey = marineTrafficKey || aishubKey;
 
   if (!url) {
-    return {
-      provider,
-      vessels: [] as MaritimeVessel[],
-      providerHealth: "offline" as PackageStatus,
-      freshness: buildFreshness({
-        checkedAt,
-        observedAt: null,
-        fallbackTier: "unavailable",
-        sourceIds: [provider],
-      }),
-    };
+    return buildModeledMaritimeVessels(
+      checkedAt,
+      "AIS providers are unavailable, so ferry motion is running on the pier timetable model.",
+    );
   }
 
   const payload = await fetchJsonWithTimeout<unknown>(
@@ -1021,11 +1138,37 @@ async function fetchMaritimeVessels() {
   return {
     provider,
     vessels,
+    mode: vessels.length > 0 ? ("live" as FeedMode) : ("modeled" as FeedMode),
+    sourceSummary:
+      vessels.length > 0
+        ? {
+            label: provider,
+            mode: "live" as FeedMode,
+            sources: [provider],
+            note: "Live AIS contacts are active in the Phuket-Andaman watchline.",
+            freshness: summarizeFreshness(
+              vessels.map((vessel) => vessel.freshness),
+              generatedAt,
+            ),
+          }
+        : buildModeledMaritimeSourceSummary(
+            "Modeled ferry operations",
+            generatedAt,
+            `${provider} returned no usable vessels, so ferry motion is running on the pier timetable model.`,
+          ),
     providerHealth: vessels.length > 0 ? ("live" as PackageStatus) : ("stale" as PackageStatus),
-    freshness: summarizeFreshness(
-      vessels.map((vessel) => vessel.freshness),
-      generatedAt,
-    ),
+    freshness:
+      vessels.length > 0
+        ? summarizeFreshness(
+            vessels.map((vessel) => vessel.freshness),
+            generatedAt,
+          )
+        : buildFreshness({
+            checkedAt: generatedAt,
+            observedAt: generatedAt,
+            fallbackTier: "scenario",
+            sourceIds: ["Modeled ferry operations"],
+          }),
   };
 }
 
@@ -1038,7 +1181,22 @@ export async function loadMaritimeSecurity(
     return buildScenarioMaritimeSecurity(scenario);
   }
 
-  const { provider, vessels, providerHealth, freshness } = await fetchMaritimeVessels();
+  const maritime = await fetchMaritimeVessels();
+  const resolvedMaritime =
+    maritime.vessels.length > 0
+      ? maritime
+      : buildModeledMaritimeVessels(
+          new Date().toISOString(),
+          "No usable live AIS contacts were returned, so ferry motion is running on the pier timetable model.",
+        );
+  const {
+    provider,
+    vessels,
+    providerHealth,
+    freshness,
+    mode,
+    sourceSummary,
+  } = resolvedMaritime;
   const posture = topStatus(vessels.map((vessel) => vessel.status));
 
   return {
@@ -1051,7 +1209,9 @@ export async function loadMaritimeSecurity(
         ? "AIS posture shows at least one vessel pattern or pier cluster that merits a governor-level cross-check today."
         : posture === "watch"
           ? "AIS posture is elevated around Phuket-linked ferry lanes, anchorages, or slower contacts."
-          : "Tracked maritime movement looks routine across the governor's core Andaman watchline.",
+          : mode === "modeled"
+            ? "Modeled ferry motion is standing in for AIS so pier timing and bus handoff stay visible."
+            : "Tracked maritime movement looks routine across the governor's core Andaman watchline.",
     provider,
     vessels,
     chokepoints: [
@@ -1062,6 +1222,8 @@ export async function loadMaritimeSecurity(
       "Khao Lak coastal approaches",
     ],
     sources: [provider],
+    mode,
+    sourceSummary,
     providerHealth,
     freshness,
   };

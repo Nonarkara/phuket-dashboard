@@ -27,6 +27,16 @@ export interface DataFreshness {
   sourceIds?: string[];
 }
 
+export type FeedMode = "live" | "hybrid" | "modeled" | "degraded";
+
+export interface SourceSummary {
+  label: string;
+  mode: FeedMode;
+  sources: string[];
+  note?: string;
+  freshness?: DataFreshness;
+}
+
 export interface MetricEvidence {
   id: string;
   label: string;
@@ -103,6 +113,39 @@ export interface FlightData {
   heading: number;
   origin_country: string;
   on_ground: boolean;
+}
+
+export interface FlightArrival {
+  flightNumber: string;
+  airline: string;
+  airlineCode: string;
+  origin: string;
+  originCode: string;
+  originLat: number;
+  originLon: number;
+  scheduledTime: string;
+  estimatedTime: string;
+  status: "landed" | "on-time" | "delayed" | "en-route" | "scheduled";
+  gate?: string;
+  terminal?: string;
+  aircraft?: string;
+  paxEstimate: number;
+  country: string;
+  countryCode: string;
+  distance: number;
+}
+
+export interface FlightArrivalsResponse {
+  airport: string;
+  iata: string;
+  timezone: string;
+  generatedAt: string;
+  totalFlights: number;
+  arrivals: FlightArrival[];
+  byCountry: Record<string, number>;
+  mode: FeedMode;
+  source: "live" | "simulation";
+  sourceSummary: SourceSummary;
 }
 
 export interface RefugeeMovement {
@@ -187,6 +230,99 @@ export interface PksbBusPosition {
 export interface PksbBusPositionResponse {
   generatedAt: string;
   buses: PksbBusPosition[];
+  mode: FeedMode;
+  sourceSummary: SourceSummary;
+  freshness: DataFreshness;
+}
+
+export interface OperationsMetric {
+  label: string;
+  value: string;
+}
+
+export interface DemandSupplySnapshot {
+  id: string;
+  label: string;
+  status: ExecutiveStatus;
+  summary: string;
+  demandRate: number;
+  supplyRate: number;
+  gapRate: number;
+  unit: string;
+  windowLabel: string;
+  sourceSummary: SourceSummary;
+  updatedAt: string;
+  evidence?: MetricEvidence[];
+}
+
+export interface OperationsConstraint {
+  id: string;
+  label: string;
+  status: ExecutiveStatus;
+  summary: string;
+  metrics: OperationsMetric[];
+  sourceSummary: SourceSummary;
+  updatedAt: string;
+  evidence?: MetricEvidence[];
+}
+
+export interface InterchangeVehicle {
+  id: string;
+  label: string;
+  kind: "bus" | "ferry";
+  status: "approaching" | "holding" | "boarding" | "departing" | "docked";
+  etaMinutes: number | null;
+  scheduledAt: string | null;
+  routeLabel?: string;
+  lat: number;
+  lng: number;
+  updatedAt: string;
+}
+
+export interface InterchangeTouchpoint {
+  id: string;
+  label: string;
+  area: string;
+  status: ExecutiveStatus;
+  summary: string;
+  nextDepartureAt: string | null;
+  transferSlackMinutes: number | null;
+  demandRate: number;
+  supplyRate: number;
+  unit: string;
+  vehicles: InterchangeVehicle[];
+  sourceSummary: SourceSummary;
+  updatedAt: string;
+}
+
+export interface OperationalWeatherResponse {
+  generatedAt: string;
+  mode: FeedMode;
+  status: ExecutiveStatus;
+  condition: string;
+  summary: string;
+  temperatureC: number | null;
+  humidityPct: number | null;
+  rainfallMm: number | null;
+  windKph: number | null;
+  seaState: string;
+  sourceSummary: SourceSummary;
+  freshness: DataFreshness;
+  evidence?: MetricEvidence[];
+}
+
+export interface OperationsDashboardResponse {
+  generatedAt: string;
+  mode: FeedMode;
+  airportDemand: DemandSupplySnapshot;
+  cityTransferSupply: DemandSupplySnapshot;
+  trafficFriction: OperationsConstraint;
+  weatherConstraint: OperationalWeatherResponse;
+  marineConstraint: OperationsConstraint;
+  touchpoints: InterchangeTouchpoint[];
+  actions: string[];
+  sources: string[];
+  freshness: DataFreshness;
 }
 
 export interface PublicCamera {
@@ -851,6 +987,8 @@ export interface MaritimeSecurityResponse {
   vessels: MaritimeVessel[];
   chokepoints: string[];
   sources: string[];
+  mode: FeedMode;
+  sourceSummary: SourceSummary;
   providerHealth?: PackageStatus;
   freshness: DataFreshness;
 }

@@ -1,65 +1,34 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import dynamic from "next/dynamic";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DeckGL = dynamic(() => (import("@deck.gl/react") as any).then((m: any) => m.default || m.DeckGL), { ssr: false }) as any;
 import {
-  BusFront,
-  Camera,
-  CloudRain,
-  Droplets,
-  Flame,
-  Globe,
-  Grid3x3,
-  Layers,
-  Map as MapIcon,
-  MapPinned,
-  MoonStar,
-  Plane,
-  Satellite,
-  Snowflake,
-  Tag,
-  Thermometer,
-  Users,
-  Waves,
-  Wind,
-  Car,
-} from "lucide-react";
-import {
   createAirQualityHeatmapLayers,
-  createConflictZonesLayer,
   createDisasterAlertLayer,
   createFireLayer,
   createFlightPathsLayer,
   createHeatmapLayer,
   createIncidentLayer,
-  createKilometerGridLayer,
   createMaritimeTrafficLayers,
   createPksbBusLayers,
   createPksbRouteLayers,
   createPublicCameraLayer,
-  createTrafficEventLayers,
-  createProvinceLabelsLayer,
-  createRainfallLayer,
   createRasterOverlayLayer,
+  createRainfallLayer,
   createRefugeeLayer,
-  createRegionalBorderLayer,
+  createTrafficEventLayers,
   createTourismHotspotLayer,
-  GRID_SCALES,
-  type GridScale,
 } from "../../services/map-engine";
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
 import { GOVERNOR_CORRIDORS, findCorridorById } from "../../lib/governor-config";
 import { getUsableMapboxToken } from "../../lib/mapbox";
-import { buildMapOverlayCatalog } from "../../lib/map-overlays";
 import type {
   AirQualityPoint,
-  ConflictZoneCollection,
-  ConflictZoneFeature,
   DisasterAlert,
   DisasterFeedResponse,
   FireEvent,
@@ -70,8 +39,6 @@ import type {
   FlightData,
   RainfallPoint,
   RefugeeMovement,
-  RegionBorderCollection,
-  RegionBorderFeature,
   PksbRouteFeature,
   PksbStopFeature,
   PksbBusPosition,
@@ -103,25 +70,194 @@ const INITIAL_VIEW_STATE: MapViewState = {
   maxZoom: 18,
 };
 
-const EMPTY_BORDERS: RegionBorderCollection = {
-  type: "FeatureCollection",
-  features: [],
-};
-
-const EMPTY_CONFLICT_ZONES: ConflictZoneCollection = {
-  type: "FeatureCollection",
-  features: [],
-};
-
 const EMPTY_PKSB_ROUTES = {
   type: "FeatureCollection",
   features: [],
 } as const satisfies PksbTransitResponse["routes"];
 
+type BasemapId =
+  | "esri-aerial"
+  | "eox-sentinel2"
+  | "osm-streets"
+  | "carto-light"
+  | "stadia-dark"
+  | "mapbox-satellite"
+  | "mapbox-light";
+
+const BASEMAP_FALLBACK_CHAIN: BasemapId[] = [
+  "eox-sentinel2",
+  "esri-aerial",
+  "osm-streets",
+  "carto-light",
+  "stadia-dark",
+];
+
+const BASEMAP_FALLBACK_CHAIN_WITH_MAPBOX: BasemapId[] = [
+  "mapbox-light",
+  "mapbox-satellite",
+  ...BASEMAP_FALLBACK_CHAIN,
+];
+
 const EMPTY_PKSB_STOPS = {
   type: "FeatureCollection",
   features: [],
 } as const satisfies PksbTransitResponse["stops"];
+
+function subscribeToClientState() {
+  return () => {};
+}
+
+function detectWebglSupport() {
+  if (typeof document === "undefined") {
+    return true;
+  }
+
+  const canvas = document.createElement("canvas");
+  return Boolean(canvas.getContext("webgl2")) || Boolean(canvas.getContext("webgl"));
+}
+
+type ViewPreset = "operations" | "safety" | "weather" | "tourism";
+
+type OverlayState = {
+  rainfallAnomalies: boolean;
+  disasterAlerts: boolean;
+  aqiHeatmap: boolean;
+  incidentHeatmap: boolean;
+  incidentPoints: boolean;
+  thermalHotspots: boolean;
+  populationMovement: boolean;
+  pksbRoutes: boolean;
+  pksbLiveBuses: boolean;
+  maritimeTraffic: boolean;
+  publicCameras: boolean;
+  tourismHotspots: boolean;
+  trafficEvents: boolean;
+  flightPaths: boolean;
+};
+
+const PRESET_LAYER_MAP: Record<ViewPreset, OverlayState> = {
+  operations: {
+    rainfallAnomalies: false,
+    disasterAlerts: false,
+    aqiHeatmap: false,
+    incidentHeatmap: false,
+    incidentPoints: false,
+    thermalHotspots: false,
+    populationMovement: true,
+    pksbRoutes: true,
+    pksbLiveBuses: true,
+    maritimeTraffic: true,
+    publicCameras: true,
+    tourismHotspots: false,
+    trafficEvents: true,
+    flightPaths: false,
+  },
+  safety: {
+    rainfallAnomalies: false,
+    disasterAlerts: true,
+    aqiHeatmap: false,
+    incidentHeatmap: false,
+    incidentPoints: true,
+    thermalHotspots: true,
+    populationMovement: false,
+    pksbRoutes: true,
+    pksbLiveBuses: true,
+    maritimeTraffic: false,
+    publicCameras: true,
+    tourismHotspots: false,
+    trafficEvents: true,
+    flightPaths: false,
+  },
+  weather: {
+    rainfallAnomalies: true,
+    disasterAlerts: true,
+    aqiHeatmap: true,
+    incidentHeatmap: false,
+    incidentPoints: false,
+    thermalHotspots: false,
+    populationMovement: false,
+    pksbRoutes: false,
+    pksbLiveBuses: false,
+    maritimeTraffic: true,
+    publicCameras: false,
+    tourismHotspots: false,
+    trafficEvents: false,
+    flightPaths: false,
+  },
+  tourism: {
+    rainfallAnomalies: false,
+    disasterAlerts: false,
+    aqiHeatmap: false,
+    incidentHeatmap: false,
+    incidentPoints: false,
+    thermalHotspots: false,
+    populationMovement: true,
+    pksbRoutes: true,
+    pksbLiveBuses: true,
+    maritimeTraffic: false,
+    publicCameras: true,
+    tourismHotspots: true,
+    trafficEvents: true,
+    flightPaths: true,
+  },
+};
+
+const LENS_OPTIONS: Array<{
+  id: ViewPreset;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "operations",
+    label: "Operations",
+    description: "Airport transfers, buses, roads, and pier lift.",
+  },
+  {
+    id: "safety",
+    label: "Safety",
+    description: "Incidents, alerts, cameras, and thermal pressure.",
+  },
+  {
+    id: "weather",
+    label: "Weather",
+    description: "Rain load, air quality, sea state, and warnings.",
+  },
+  {
+    id: "tourism",
+    label: "Tourism",
+    description: "Visitor flow, flights, hotspots, and movement load.",
+  },
+];
+
+function interpolateMotionFrame<
+  T extends { id: string; lat: number; lng: number; heading?: number | null },
+>(
+  previous: T[],
+  current: T[],
+  progress: number,
+) {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const previousById = new Map(previous.map((item) => [item.id, item]));
+
+  return current.map((item) => {
+    const previousItem = previousById.get(item.id);
+    if (!previousItem) {
+      return item;
+    }
+
+    return {
+      ...item,
+      lat: previousItem.lat + (item.lat - previousItem.lat) * clampedProgress,
+      lng: previousItem.lng + (item.lng - previousItem.lng) * clampedProgress,
+      heading:
+        typeof item.heading === "number" && typeof previousItem.heading === "number"
+          ? previousItem.heading +
+            ((((item.heading - previousItem.heading) % 360) + 540) % 360 - 180) *
+              clampedProgress
+          : item.heading,
+    };
+  });
+}
 
 function debugLog(
   hypothesisId: string,
@@ -148,24 +284,6 @@ function isIncidentFeature(value: unknown): value is IncidentFeature {
     isRecord(value) &&
     isRecord(value.properties) &&
     typeof value.properties.notes === "string"
-  );
-}
-
-function isRegionBorderFeature(value: unknown): value is RegionBorderFeature {
-  return (
-    isRecord(value) &&
-    isRecord(value.properties) &&
-    typeof value.properties.NAME_0 === "string"
-  );
-}
-
-function isConflictZoneFeature(value: unknown): value is ConflictZoneFeature {
-  return (
-    isRecord(value) &&
-    isRecord(value.properties) &&
-    typeof value.properties.name === "string" &&
-    typeof value.properties.summary === "string" &&
-    typeof value.properties.priority === "number"
   );
 }
 
@@ -281,17 +399,15 @@ async function fetchJson<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
+function appendScenario(path: string, scenarioId?: string | null) {
+  return scenarioId
+    ? `${path}${path.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(scenarioId)}`
+    : path;
+}
+
 function getTooltipText(object: unknown): string | null {
   if (isIncidentFeature(object)) {
     return object.properties.notes || object.properties.title;
-  }
-
-  if (isRegionBorderFeature(object)) {
-    return object.properties.NAME_0 ?? null;
-  }
-
-  if (isConflictZoneFeature(object)) {
-    return `${object.properties.name}: ${object.properties.summary}`;
   }
 
   if (isAirQualityPoint(object)) {
@@ -341,10 +457,6 @@ function getTooltipText(object: unknown): string | null {
   return null;
 }
 
-function formatCompactCount(value: number) {
-  return new Intl.NumberFormat("en-US", { notation: "compact" }).format(value);
-}
-
 export default function BorderMap({
   onProvinceSelect,
   selectedCorridorId,
@@ -353,6 +465,7 @@ export default function BorderMap({
   maritimeSecurityFeed,
   cameraFeed,
   tourismFeed,
+  scenarioId,
 }: {
   onProvinceSelect?: (province: ProvinceSelection) => void;
   selectedCorridorId?: string;
@@ -361,68 +474,32 @@ export default function BorderMap({
   maritimeSecurityFeed?: MaritimeSecurityResponse | null;
   cameraFeed?: PublicCameraResponse | null;
   tourismFeed?: TourismHotspotsResponse | null;
+  scenarioId?: string | null;
 }) {
   const is4K = useWarRoomScale();
-  const [mounted, setMounted] = useState(false);
-  const [webglSupported, setWebglSupported] = useState(true);
+  const mounted = useSyncExternalStore(
+    subscribeToClientState,
+    () => true,
+    () => false,
+  );
+  const webglSupported = useMemo(
+    () => (mounted ? detectWebglSupport() : true),
+    [mounted],
+  );
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
   // ─── Basemap: exactly one active at a time (radio) ───
-  type BasemapId = "esri-aerial" | "eox-sentinel2" | "osm-streets" | "carto-light" | "stadia-dark" | "mapbox-satellite" | "mapbox-light";
   const hasMapbox = MAPBOX_TOKEN.length > 0;
-  const [activeBasemap, setActiveBasemap] = useState<BasemapId>("esri-aerial");
+  const [activeBasemap, setActiveBasemap] = useState<BasemapId>(
+    hasMapbox ? "mapbox-light" : "osm-streets",
+  );
 
-  // ─── NASA GIBS imagery overlay (on top of basemap, pick one or none) ───
-  const [satelliteOpacity, setSatelliteOpacity] = useState(45);
-  const [showAdvancedLayers, setShowAdvancedLayers] = useState(false);
-
-  // Governor-level view presets (groups of layers)
-  type ViewPreset = "overview" | "safety" | "weather" | "tourism";
-  const [activePreset, setActivePreset] = useState<ViewPreset>("overview");
+  const [activePreset, setActivePreset] = useState<ViewPreset>("operations");
 
   const applyPreset = (preset: ViewPreset) => {
     setActivePreset(preset);
-    const presetLayers: Record<ViewPreset, Record<string, boolean>> = {
-      overview: {
-        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
-        trafficEvents: true, disasterAlerts: false, maritimeTraffic: false,
-        flightPaths: false, borderContext: false, kmGrid: false,
-        thermalHotspots: false, aqiHeatmap: false, pm25Heatmap: false,
-        rainfallAnomalies: false, provinceLabels: false, incidentPoints: false,
-        incidentHeatmap: false, conflictZones: false, populationMovement: false,
-        tourismHotspots: false,
-      },
-      safety: {
-        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
-        trafficEvents: true, disasterAlerts: true, incidentPoints: true,
-        thermalHotspots: true, maritimeTraffic: false, flightPaths: false,
-        borderContext: false, kmGrid: false, aqiHeatmap: false,
-        pm25Heatmap: false, rainfallAnomalies: false, provinceLabels: false,
-        incidentHeatmap: false, conflictZones: false, populationMovement: false,
-        tourismHotspots: false,
-      },
-      weather: {
-        pksbRoutes: false, pksbLiveBuses: false, publicCameras: false,
-        trafficEvents: false, disasterAlerts: true, rainfallAnomalies: true,
-        aqiHeatmap: true, maritimeTraffic: true, thermalHotspots: false,
-        flightPaths: false, borderContext: false, kmGrid: false,
-        pm25Heatmap: false, provinceLabels: false, incidentPoints: false,
-        incidentHeatmap: false, conflictZones: false, populationMovement: false,
-        tourismHotspots: false,
-      },
-      tourism: {
-        pksbRoutes: true, pksbLiveBuses: true, publicCameras: true,
-        trafficEvents: true, tourismHotspots: true, flightPaths: true,
-        populationMovement: true, disasterAlerts: false, maritimeTraffic: false,
-        borderContext: false, kmGrid: false, thermalHotspots: false,
-        aqiHeatmap: false, pm25Heatmap: false, rainfallAnomalies: false,
-        provinceLabels: false, incidentPoints: false, incidentHeatmap: false,
-        conflictZones: false,
-      },
-    };
-    setEnabledOverlays((current) => ({ ...current, ...presetLayers[preset] }));
+    setEnabledOverlays({ ...PRESET_LAYER_MAP[preset] });
   };
-  const [gridScale, setGridScale] = useState<GridScale>(1);
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
   const [fires, setFires] = useState<FireEvent[]>([]);
@@ -430,120 +507,87 @@ export default function BorderMap({
   const [rainfall, setRainfall] = useState<RainfallPoint[]>([]);
   const [airQuality, setAirQuality] = useState<AirQualityPoint[]>([]);
   const [flights, setFlights] = useState<FlightData[]>([]);
-  const [borders, setBorders] = useState<RegionBorderCollection | null>(null);
-  const [conflictZones, setConflictZones] =
-    useState<ConflictZoneCollection>(EMPTY_CONFLICT_ZONES);
   const [pksbRoutes, setPksbRoutes] =
     useState<PksbTransitResponse["routes"]>(EMPTY_PKSB_ROUTES);
   const [pksbStops, setPksbStops] =
     useState<PksbTransitResponse["stops"]>(EMPTY_PKSB_STOPS);
   const [pksbBuses, setPksbBuses] = useState<PksbBusPosition[]>([]);
+  const [previousPksbBuses, setPreviousPksbBuses] = useState<PksbBusPosition[]>([]);
+  const [busFrameStartedAt, setBusFrameStartedAt] = useState(() => Date.now());
+  const pksbBusesRef = useRef<PksbBusPosition[]>([]);
   const [trafficEvents, setTrafficEvents] = useState<TrafficEvent[]>([]);
-
-  const getSafeDate = () => {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
-  };
-
-  const safeDate = getSafeDate();
-  const overlayCatalog = buildMapOverlayCatalog(safeDate);
-  const baseOverlays = overlayCatalog.overlays.filter(
-    (overlay) => overlay.role === "base-option",
+  const [maritimeVessels, setMaritimeVessels] = useState<MaritimeVessel[]>(
+    maritimeSecurityFeed?.vessels ?? [],
   );
-  const additionalOverlays = overlayCatalog.overlays.filter(
-    (overlay) => overlay.role !== "base-option",
+  const [previousMaritimeVessels, setPreviousMaritimeVessels] = useState<MaritimeVessel[]>(
+    maritimeSecurityFeed?.vessels ?? [],
   );
-  const [satelliteOverlay, setSatelliteOverlay] = useState<string>("none");
-  const [enabledOverlays, setEnabledOverlays] = useState<Record<string, boolean>>(
-    () =>
-      overlayCatalog.overlays.reduce<Record<string, boolean>>((memo, overlay) => {
-        memo[overlay.id] = overlay.enabledByDefault;
-        return memo;
-      }, {}),
-  );
-  const activeSatelliteOverlay =
-    baseOverlays.find((overlay) => overlay.id === satelliteOverlay) ??
-    baseOverlays[0];
+  const [maritimeFrameStartedAt, setMaritimeFrameStartedAt] = useState(() => Date.now());
+  const maritimeVesselsRef = useRef<MaritimeVessel[]>(maritimeSecurityFeed?.vessels ?? []);
+  const [animationNow, setAnimationNow] = useState(() => Date.now());
+  const [enabledOverlays, setEnabledOverlays] = useState<OverlayState>(() => ({
+    ...PRESET_LAYER_MAP.operations,
+  }));
   const disasterAlerts = disasterFeed?.alerts ?? [];
-  const maritimeVessels = maritimeSecurityFeed?.vessels ?? [];
   const publicCameras = [
     ...(cameraFeed?.cameras ?? []),
     ...(cameraFeed?.scoutTargets ?? []),
   ];
   const tourismHotspots = tourismFeed?.hotspots ?? [];
-  const signalCount = incidents.length;
-  const hotspotCount = fires.length;
-  const rainCount = rainfall.length;
-  const busStopCount = pksbStops.features.length;
-  const cameraCount = publicCameras.length;
+  const animatedPksbBuses = interpolateMotionFrame(
+    previousPksbBuses,
+    pksbBuses,
+    (animationNow - busFrameStartedAt) / 15000,
+  );
+  const animatedMaritimeVessels = interpolateMotionFrame(
+    previousMaritimeVessels,
+    maritimeVessels,
+    (animationNow - maritimeFrameStartedAt) / 30000,
+  );
+  const movingBusCount = pksbBuses.filter(
+    (bus) => bus.status === "moving" || bus.status === "dwelling",
+  ).length;
   const disasterAlertCount = disasterAlerts.length;
-  const maritimeVesselCount = maritimeVessels.length;
+  const maritimeVesselCount = animatedMaritimeVessels.length;
   const verifiedCameraCount = publicCameras.filter(
     (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
   ).length;
-  const tourismHotspotCount = tourismHotspots.length;
   const hasMapboxBaseMap = hasMapbox && (activeBasemap === "mapbox-satellite" || activeBasemap === "mapbox-light");
-  const showSatelliteOverlay = satelliteOverlay !== "none";
-  const totalActiveLayers = Object.entries(enabledOverlays).filter(
-    ([, active]) => active,
-  ).length;
   const activeCorridor = selectedCorridorId
     ? findCorridorById(selectedCorridorId)
     : GOVERNOR_CORRIDORS[0];
   const mapStyle = activeBasemap === "mapbox-light"
     ? "mapbox://styles/mapbox/light-v11"
     : "mapbox://styles/mapbox/satellite-streets-v12";
-  const fallbackBackgroundClass = "bg-[#1a1a2e]";
-
-  const provinceLabelsLayer = enabledOverlays.provinceLabels
-    ? createProvinceLabelsLayer()
-    : null;
-
-  const satelliteLayer =
-    satelliteOverlay !== "none" && activeSatelliteOverlay
-      ? createRasterOverlayLayer(activeSatelliteOverlay, satelliteOpacity / 100)
-      : null;
-
-  const selectedAdditionalOverlays = additionalOverlays.filter(
-    (overlay) => enabledOverlays[overlay.id],
-  );
-  const rasterAnalyticLayers = selectedAdditionalOverlays
-    .filter((overlay) => overlay.kind === "raster")
-    .map((overlay) => createRasterOverlayLayer(overlay, overlay.defaultOpacity))
-    .filter(Boolean);
+  const fallbackBackgroundClass =
+    "bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.08),_rgba(8,20,34,0.95)_62%)]";
+  const activeLens = LENS_OPTIONS.find((option) => option.id === activePreset);
 
   useEffect(() => {
-    const canvas = document.createElement("canvas");
-    const hasWebgl =
-      Boolean(canvas.getContext("webgl2")) || Boolean(canvas.getContext("webgl"));
-
-    setWebglSupported(hasWebgl);
-    setMounted(true);
     debugLog("H1", "BorderMap.tsx:useEffect", "mounted effect ran", {
-      safeDate,
       hasMapboxToken: MAPBOX_TOKEN.length > 0,
-      baseOverlayCount: baseOverlays.length,
-      hasWebgl,
+      hasWebgl: webglSupported,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webglSupported]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setAnimationNow(Date.now());
+    }, 150);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (!selectedCorridorId) {
+    if (!maritimeSecurityFeed?.vessels) {
       return;
     }
 
-    const corridor = findCorridorById(selectedCorridorId);
-    if (!corridor) {
-      return;
-    }
-
-    setViewState((current) => ({
-      ...current,
-      ...corridor.view,
-    }));
-  }, [selectedCorridorId]);
+    setPreviousMaritimeVessels(maritimeVesselsRef.current);
+    maritimeVesselsRef.current = maritimeSecurityFeed.vessels;
+    setMaritimeVessels(maritimeSecurityFeed.vessels);
+    setMaritimeFrameStartedAt(Date.now());
+  }, [maritimeSecurityFeed]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -553,8 +597,6 @@ export default function BorderMap({
         refugeeData,
         rainfallData,
         airQualityData,
-        borderData,
-        conflictZoneData,
         flightData,
         pksbTransitData,
         trafficData,
@@ -564,16 +606,14 @@ export default function BorderMap({
         fetchJson<RefugeeMovement[]>("/api/movements", []),
         fetchJson<RainfallPoint[]>("/api/rainfall", []),
         fetchJson<AirQualityPoint[]>("/api/air-quality", []),
-        fetchJson<RegionBorderCollection>("/data/region_borders.geojson", EMPTY_BORDERS),
-        fetchJson<ConflictZoneCollection>("/data/conflict_zones.geojson", EMPTY_CONFLICT_ZONES),
-        fetchJson<FlightData[]>("/api/flights", []),
-        fetchJson<PksbTransitResponse>("/api/transit/pksb", {
+        fetchJson<FlightData[]>(appendScenario("/api/flights", scenarioId), []),
+        fetchJson<PksbTransitResponse>(appendScenario("/api/transit/pksb", scenarioId), {
           generatedAt: new Date(0).toISOString(),
           source: [],
           routes: EMPTY_PKSB_ROUTES,
           stops: EMPTY_PKSB_STOPS,
         }),
-        fetchJson<TrafficResponse>("/api/traffic", {
+        fetchJson<TrafficResponse>(appendScenario("/api/traffic", scenarioId), {
           generatedAt: new Date(0).toISOString(),
           provider: "Longdo/ITIC",
           status: "fallback",
@@ -587,8 +627,6 @@ export default function BorderMap({
       setRainfall(Array.isArray(rainfallData) ? rainfallData : []);
       setAirQuality(Array.isArray(airQualityData) ? airQualityData : []);
       setFlights(Array.isArray(flightData) ? flightData : []);
-      setBorders(borderData);
-      setConflictZones(conflictZoneData);
       setPksbRoutes(pksbTransitData.routes);
       setPksbStops(pksbTransitData.stops);
       setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
@@ -601,42 +639,94 @@ export default function BorderMap({
 
     // Refresh flight data every 30 seconds
     const flightInterval = setInterval(async () => {
-      const flightData = await fetchJson<FlightData[]>("/api/flights", []);
+      const flightData = await fetchJson<FlightData[]>(
+        appendScenario("/api/flights", scenarioId),
+        [],
+      );
       setFlights(Array.isArray(flightData) ? flightData : []);
     }, 30000);
 
     // Refresh PKSB bus positions every 15 seconds
     const fetchBuses = async () => {
       const busData = await fetchJson<PksbBusPositionResponse>(
-        "/api/transit/pksb/buses",
-        { generatedAt: new Date(0).toISOString(), buses: [] },
+        appendScenario("/api/transit/pksb/buses", scenarioId),
+        {
+          generatedAt: new Date(0).toISOString(),
+          buses: [],
+          mode: "modeled",
+          sourceSummary: { label: "PKSB fallback", mode: "modeled", sources: ["PKSB fallback"] },
+          freshness: {
+            observedAt: null,
+            checkedAt: new Date(0).toISOString(),
+            ageMinutes: null,
+            maxAgeMinutes: 15,
+            isFresh: false,
+            fallbackTier: "scenario",
+            sourceIds: ["PKSB fallback"],
+          },
+        },
       );
-      setPksbBuses(Array.isArray(busData.buses) ? busData.buses : []);
+      const nextBuses = Array.isArray(busData.buses) ? busData.buses : [];
+      setPreviousPksbBuses(pksbBusesRef.current);
+      pksbBusesRef.current = nextBuses;
+      setPksbBuses(nextBuses);
+      setBusFrameStartedAt(Date.now());
     };
     void fetchBuses();
     const busInterval = setInterval(fetchBuses, 15000);
+
+    const fetchMaritime = async () => {
+      const maritimeData = await fetchJson<MaritimeSecurityResponse>(
+        appendScenario("/api/maritime/security", scenarioId),
+        {
+          generatedAt: new Date(0).toISOString(),
+          posture: "stable",
+          summary: "",
+          provider: "Modeled ferry operations",
+          vessels: [],
+          chokepoints: [],
+          sources: ["Modeled ferry operations"],
+          mode: "modeled",
+          sourceSummary: {
+            label: "Modeled ferry operations",
+            mode: "modeled",
+            sources: ["Modeled ferry operations"],
+          },
+          freshness: {
+            observedAt: null,
+            checkedAt: new Date(0).toISOString(),
+            ageMinutes: null,
+            maxAgeMinutes: 60,
+            isFresh: false,
+            fallbackTier: "scenario",
+            sourceIds: ["Modeled ferry operations"],
+          },
+        },
+      );
+      const nextVessels = Array.isArray(maritimeData.vessels) ? maritimeData.vessels : [];
+      setPreviousMaritimeVessels(maritimeVesselsRef.current);
+      maritimeVesselsRef.current = nextVessels;
+      setMaritimeVessels(nextVessels);
+      setMaritimeFrameStartedAt(Date.now());
+    };
+    void fetchMaritime();
+    const maritimeInterval = setInterval(fetchMaritime, 30000);
 
     return () => {
       clearInterval(mapDataInterval);
       clearInterval(flightInterval);
       clearInterval(busInterval);
+      clearInterval(maritimeInterval);
     };
-  }, []);
+  }, [scenarioId]);
 
   const layers = [
-    satelliteLayer,
-    ...rasterAnalyticLayers,
-    enabledOverlays.borderContext && borders && createRegionalBorderLayer(borders),
-    enabledOverlays.conflictZones && createConflictZonesLayer(conflictZones),
     enabledOverlays.rainfallAnomalies && createRainfallLayer(rainfall),
     ...(enabledOverlays.disasterAlerts
       ? createDisasterAlertLayer(disasterAlerts)
       : []),
     ...(enabledOverlays.aqiHeatmap
       ? createAirQualityHeatmapLayers(airQuality, "aqi")
-      : []),
-    ...(enabledOverlays.pm25Heatmap
-      ? createAirQualityHeatmapLayers(airQuality, "pm25")
       : []),
     enabledOverlays.incidentHeatmap
       ? createHeatmapLayer(incidents)
@@ -649,10 +739,10 @@ export default function BorderMap({
       ? createPksbRouteLayers(pksbRoutes, pksbStops)
       : []),
     ...(enabledOverlays.pksbLiveBuses
-      ? createPksbBusLayers(pksbBuses)
+      ? createPksbBusLayers(animatedPksbBuses)
       : []),
     ...(enabledOverlays.maritimeTraffic
-      ? createMaritimeTrafficLayers(maritimeVessels)
+      ? createMaritimeTrafficLayers(animatedMaritimeVessels)
       : []),
     enabledOverlays.publicCameras
       ? createPublicCameraLayer(publicCameras)
@@ -664,151 +754,21 @@ export default function BorderMap({
       ? createTrafficEventLayers(trafficEvents)
       : []),
     ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
-    ...(enabledOverlays.kmGrid ? createKilometerGridLayer(gridScale) : []),
-    provinceLabelsLayer,
   ].filter(Boolean);
 
-  const analyticControls = additionalOverlays.filter(
-    (overlay) => overlay.role === "analytic",
-  );
-  const operationalControls = additionalOverlays.filter(
-    (overlay) => overlay.role === "operational",
-  );
   const focusPresets = GOVERNOR_CORRIDORS;
 
-  // ─── Basemap options (radio — exactly one at a time) ───
-  // Fallback chain from DrNon Global Satellite Toolkit:
-  // Mapbox → ESRI → OSM → CartoDB → Stadia
-  // Basemap fallback chain: EOX → ESRI → OSM → CartoDB → Stadia → Mapbox
-  const [basemapErrorCount, setBasemapErrorCount] = useState(0);
-  const BASEMAP_FALLBACK_CHAIN: BasemapId[] = [
-    "eox-sentinel2", "esri-aerial", "osm-streets", "carto-light", "stadia-dark",
-    ...(hasMapbox ? ["mapbox-satellite" as BasemapId] : []),
-  ];
+  const [, setBasemapErrorCount] = useState(0);
+  const basemapFallbackChain = hasMapbox
+    ? BASEMAP_FALLBACK_CHAIN_WITH_MAPBOX
+    : BASEMAP_FALLBACK_CHAIN;
 
-  // Auto-fallback: if 3+ tile errors, switch to next basemap
-  useEffect(() => {
-    if (basemapErrorCount >= 3) {
-      const currentIdx = BASEMAP_FALLBACK_CHAIN.indexOf(activeBasemap);
-      const nextIdx = (currentIdx + 1) % BASEMAP_FALLBACK_CHAIN.length;
-      setActiveBasemap(BASEMAP_FALLBACK_CHAIN[nextIdx]);
-      setBasemapErrorCount(0);
-    }
-  }, [basemapErrorCount, activeBasemap]);
-
-  const basemapOptions: { id: BasemapId; label: string; icon: typeof Satellite; available: boolean }[] = [
-    { id: "eox-sentinel2", label: "Sentinel-2", icon: Satellite, available: true },
-    { id: "esri-aerial", label: "Aerial", icon: Satellite, available: true },
-    { id: "osm-streets", label: "Streets", icon: MapPinned, available: true },
-    { id: "carto-light", label: "Clean", icon: MapIcon, available: true },
-    { id: "stadia-dark", label: "Dark", icon: MoonStar, available: true },
-    ...(hasMapbox ? [
-      { id: "mapbox-satellite" as BasemapId, label: "Mapbox", icon: Globe, available: true },
-    ] : []),
-  ];
-
-  // ─── NASA GIBS imagery options (radio — pick one or "OFF") ───
-  const imageryOptions = [
-    { id: "none", label: "OFF" },
-    ...baseOverlays.map((o) => ({ id: o.id, label: o.shortLabel })),
-  ];
-  const layerControls = [
-    ...analyticControls.map((overlay) => ({
-      id: overlay.id,
-      active: enabledOverlays[overlay.id],
-      label: overlay.label,
-      detail:
-        overlay.id === "thermalHotspots"
-          ? `${formatCompactCount(hotspotCount)} hotspots`
-          : overlay.id === "aqiHeatmap" || overlay.id === "pm25Heatmap"
-            ? `${formatCompactCount(airQuality.length)} stations`
-            : overlay.id === "rainfallAnomalies"
-              ? `${formatCompactCount(rainCount)} rain nodes`
-              : overlay.shortLabel,
-      icon:
-        overlay.family === "weather"
-          ? CloudRain
-          : overlay.family === "air"
-            ? Wind
-            : overlay.family === "thermal"
-              ? Flame
-              : overlay.family === "lights"
-                ? MoonStar
-                : Layers,
-      onClick: () => toggleOverlay(overlay.id),
-    })),
-    ...operationalControls.map((overlay) => ({
-      id: overlay.id,
-      active: enabledOverlays[overlay.id],
-      label: overlay.label,
-      detail:
-        overlay.id === "conflictZones"
-          ? `${formatCompactCount(conflictZones.features.length)} zones`
-          : overlay.id === "disasterAlerts"
-            ? `${formatCompactCount(disasterAlertCount)} alerts`
-            : overlay.id === "maritimeTraffic"
-              ? `${formatCompactCount(maritimeVesselCount)} vessels`
-              : overlay.id === "trafficEvents"
-                ? `${formatCompactCount(trafficEvents.length)} events`
-              : overlay.id === "tourismHotspots"
-                ? `${formatCompactCount(tourismHotspotCount)} hotspots`
-          : overlay.id === "populationMovement"
-            ? `${formatCompactCount(refugees.length)} flows`
-            : overlay.id === "pksbRoutes"
-              ? `${formatCompactCount(busStopCount)} stops`
-              : overlay.id === "publicCameras"
-                ? `${formatCompactCount(cameraCount)} cams`
-            : overlay.id === "incidentHeatmap" || overlay.id === "incidentPoints"
-              ? `${formatCompactCount(signalCount)} signals`
-              : overlay.id === "provinceLabels"
-                ? "Province index"
-                : overlay.id === "flightPaths"
-                  ? `${formatCompactCount(flights.length)} aircraft`
-                  : overlay.shortLabel,
-      icon:
-        overlay.id === "disasterAlerts"
-          ? CloudRain
-          : overlay.id === "maritimeTraffic"
-            ? Waves
-            : overlay.id === "trafficEvents"
-              ? Car
-            : overlay.id === "tourismHotspots"
-              ? MapPinned
-        : overlay.id === "populationMovement"
-          ? Users
-          : overlay.id === "pksbRoutes"
-            ? BusFront
-            : overlay.id === "publicCameras"
-              ? Camera
-          : overlay.id === "conflictZones"
-            ? MapPinned
-            : overlay.id === "rainfallAnomalies"
-              ? CloudRain
-              : overlay.id === "provinceLabels"
-                ? Tag
-                : overlay.id === "flightPaths"
-                  ? Plane
-                  : overlay.id === "kmGrid"
-                    ? Grid3x3
-                    : overlay.id === "seaSurfaceTemp"
-                      ? Waves
-                      : overlay.id === "soilMoisture"
-                        ? Droplets
-                        : overlay.id === "cloudTop"
-                          ? Snowflake
-                          : overlay.id === "bhuvanLandUse"
-                            ? Thermometer
-                            : Layers,
-      onClick: () => toggleOverlay(overlay.id),
-    })),
-  ];
-
-  const toggleOverlay = (overlayId: string) => {
-    setEnabledOverlays((current) => ({
-      ...current,
-      [overlayId]: !current[overlayId],
-    }));
-  };
+  const basemapChoice =
+    activeBasemap === "esri-aerial" ||
+    activeBasemap === "eox-sentinel2" ||
+    activeBasemap === "mapbox-satellite"
+      ? "aerial"
+      : "map";
 
   const handleMapClick = ({ object }: PickingInfo<unknown>) => {
     if (isIncidentFeature(object)) {
@@ -819,23 +779,6 @@ export default function BorderMap({
         notes: object.properties.notes,
         fatalities: object.properties.fatalities,
         eventDate: object.properties.eventDate,
-      });
-      return;
-    }
-
-    if (isRegionBorderFeature(object)) {
-      onProvinceSelect?.({
-        name: object.properties.NAME_0 ?? "Regional Sector",
-        iso: object.properties.ISO_A3 || object.properties.ADM0_A3,
-      });
-      return;
-    }
-
-    if (isConflictZoneFeature(object)) {
-      onProvinceSelect?.({
-        name: object.properties.name,
-        type: "Focus zone",
-        notes: object.properties.summary,
       });
       return;
     }
@@ -915,6 +858,20 @@ export default function BorderMap({
   };
 
   // ─── Basemap tile layer (exactly one, sits at the bottom) ───
+  const handleBasemapTileError = () => {
+    setBasemapErrorCount((count) => {
+      const nextCount = count + 1;
+      if (nextCount < 3) {
+        return nextCount;
+      }
+
+      const currentIdx = basemapFallbackChain.indexOf(activeBasemap);
+      const nextIdx = (currentIdx + 1) % basemapFallbackChain.length;
+      setActiveBasemap(basemapFallbackChain[nextIdx]);
+      return 0;
+    });
+  };
+
   const makeBasemapLayer = (id: string, label: string, tileTemplate: string, maxZoom: number) =>
     createRasterOverlayLayer(
       {
@@ -924,7 +881,7 @@ export default function BorderMap({
         updatedAt: new Date().toISOString(),
       },
       1,
-      () => setBasemapErrorCount((c) => c + 1),
+      handleBasemapTileError,
     );
 
   const basemapTileLayer = (() => {
@@ -952,7 +909,7 @@ export default function BorderMap({
     return null;
   })();
 
-  // Basemap tile goes first, then NASA GIBS imagery, then analytic/operational layers
+  // Basemap tile goes first, then the operator overlays
   const allLayers = [basemapTileLayer, ...layers].filter(Boolean);
 
   if (!mounted) {
@@ -966,8 +923,8 @@ export default function BorderMap({
 
   debugLog("H3", "BorderMap.tsx:render", "rendered mounted map UI", {
     mounted,
-    showSatelliteOverlay,
-    satelliteOverlay,
+    activeBasemap,
+    activePreset,
     hasMapboxToken: MAPBOX_TOKEN.length > 0,
     webglSupported,
   });
@@ -976,13 +933,13 @@ export default function BorderMap({
     <div className="relative flex h-full w-full flex-col overflow-hidden">
       {/* Dark background visible when no basemap tiles loaded yet */}
       <div
-        className={`absolute inset-0 ${fallbackBackgroundClass}`}
+        className={`pointer-events-none absolute inset-0 ${fallbackBackgroundClass}`}
         aria-hidden="true"
       />
 
       {webglSupported ? (
         <div className="absolute inset-0 flex">
-          {/* Primary map (satellite/aerial + all overlays) */}
+          {/* Primary map */}
           <div className={`relative ${is4K ? "flex-[2]" : "flex-1"}`}>
             <DeckGL
               id="phuket-deck"
@@ -1027,23 +984,29 @@ export default function BorderMap({
                   layers={[
                     makeBasemapLayer("wireframe-carto", "CartoDB Positron",
                       "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png", 19),
-                    enabledOverlays.kmGrid ? createKilometerGridLayer(gridScale) : null,
+                    ...(enabledOverlays.pksbLiveBuses
+                      ? createPksbBusLayers(animatedPksbBuses)
+                      : []),
                     enabledOverlays.trafficEvents ? createTrafficEventLayers(trafficEvents) : null,
                     enabledOverlays.publicCameras ? createPublicCameraLayer(publicCameras) : null,
-                    enabledOverlays.provinceLabels ? createProvinceLabelsLayer() : null,
+                    ...(enabledOverlays.maritimeTraffic
+                      ? createMaritimeTrafficLayers(animatedMaritimeVessels)
+                      : []),
                   ].flat().filter(Boolean)}
                   getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
                 />
                 {/* Wireframe label */}
-                <div className="absolute top-2 left-2 z-50 bg-[rgba(248,246,240,0.9)] border border-[var(--line)] px-2 py-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--dim)]">Street wireframe</span>
+                <div className="absolute left-3 top-3 z-50 border border-[var(--line)] bg-[rgba(248,246,240,0.9)] px-2 py-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--dim)]">
+                    Street watch
+                  </span>
                 </div>
               </div>
             </>
           )}
         </div>
       ) : (
-        <div className="absolute inset-0 px-5 pb-24 pt-24">
+        <div className="pointer-events-none absolute inset-0 px-5 pb-24 pt-24">
           <div className="flex h-full items-center justify-center border border-[var(--line)] bg-[rgba(248,246,240,0.72)] backdrop-blur-sm">
             <div className="w-[min(680px,100%)] border border-[var(--line)] bg-[var(--bg)] p-5">
               <div className="eyebrow">Operational map fallback</div>
@@ -1052,16 +1015,16 @@ export default function BorderMap({
               </h3>
               <p className="pt-2 text-[12px] leading-5 text-[var(--muted)]">
                 This client does not expose WebGL, so the deck.gl map cannot render here.
-                The governor workflow stays live on internal APIs, corridor selection, cameras,
-                flights, overlays, and satellite configuration.
+                The operator workflow is still live through corridor focus, bus and ferry counts,
+                road friction, and the airport-to-pier handoff story.
               </p>
 
               <div className="mt-4 grid gap-2 md:grid-cols-4">
                 {[
-                  { label: "Signals", value: signalCount },
-                  { label: "Alerts", value: disasterAlertCount },
-                  { label: "Verified cams", value: verifiedCameraCount },
-                  { label: "AIS", value: maritimeVesselCount },
+                  { label: "Road events", value: trafficEvents.length },
+                  { label: "Weather alerts", value: disasterAlertCount },
+                  { label: "Live cameras", value: verifiedCameraCount },
+                  { label: "Boat contacts", value: maritimeVesselCount },
                 ].map((item) => (
                   <div key={item.label} className="border border-[var(--line)] px-3 py-2">
                     <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
@@ -1090,14 +1053,13 @@ export default function BorderMap({
                 </div>
                 <div className="border border-[var(--line)] px-3 py-3">
                   <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
-                    Overlay posture
+                    Operator focus
                   </div>
                   <div className="pt-1 text-[12px] font-semibold text-[var(--ink)]">
-                    {totalActiveLayers} layers configured
+                    {activeLens?.label ?? "Operations"} lens active
                   </div>
                   <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
-                    Satellite, disaster alerts, AIS, tourism hotspots, flights, rainfall,
-                    and camera overlays stay operational when WebGL is available on the client.
+                    The main controls stay limited to corridor focus, lens selection, and basemap choice.
                   </div>
                 </div>
               </div>
@@ -1106,213 +1068,148 @@ export default function BorderMap({
         </div>
       )}
 
-      {enabledOverlays.kmGrid && (
-        <div className="pointer-events-auto absolute bottom-14 right-3 z-30 border border-[rgba(15,111,136,0.25)] bg-[rgba(248,246,240,0.88)] px-2.5 py-1.5 backdrop-blur-sm xl:right-4 xl:bottom-16">
-          <div className="text-[8px] font-mono font-bold uppercase tracking-[0.24em] text-[var(--cool)]">
-            Distance Grid
-          </div>
-          <div className="mt-1 flex gap-1">
-            {GRID_SCALES.map((scale) => (
-              <button
-                key={scale.value}
-                type="button"
-                onClick={() => setGridScale(scale.value)}
-                className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                  gridScale === scale.value
-                    ? "border-[var(--cool)] bg-[rgba(15,111,136,0.1)] text-[var(--cool)]"
-                    : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
-                }`}
-              >
-                {scale.label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-1 text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--dim)]">
-            Major every {gridScale < 1 ? `${gridScale * 1000 * 5}m` : `${gridScale * 5}km`}
-          </div>
-        </div>
-      )}
-
-      <div className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-[var(--line)] bg-[rgba(248,246,240,0.88)] backdrop-blur-md">
-        {/* Row 1: Stats + Basemap radio + Imagery radio */}
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 xl:px-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <div className="text-[13px] font-bold tracking-tight text-[var(--ink)] uppercase">Phuket</div>
-              <div className="h-3 w-[1px] bg-[var(--line)]" />
-              <div className="flex gap-2.5 text-[9px] font-mono font-bold text-[var(--dim)] uppercase tracking-tight">
-                <span>SIG {signalCount}</span>
-                <span>ALR {disasterAlertCount}</span>
-                <span>AIS {maritimeVesselCount}</span>
-                <span>CAM {verifiedCameraCount}</span>
-                <span>FLT {flights.length}</span>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 p-3 xl:p-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <section className="pointer-events-auto w-full max-w-[620px] border border-[rgba(255,255,255,0.2)] bg-[linear-gradient(135deg,rgba(248,246,240,0.94),rgba(233,244,240,0.84))] px-4 py-3 backdrop-blur-md">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+                  Phuket operator map
+                </div>
+                <div className="border border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.08)] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
+                  {activeLens?.label ?? "Operations"} lens
+                </div>
               </div>
-            </div>
-          </div>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <h3 className="text-[18px] font-bold tracking-[-0.04em] text-[var(--ink)]">
+                  {activeCorridor?.label ?? "Airport to pier corridor"}
+                </h3>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--dim)]">
+                  {activeCorridor?.focusAreas.join(" / ") ?? "Phuket transfer watch"}
+                </div>
+              </div>
+              <p className="mt-2 max-w-[560px] text-[11px] leading-5 text-[var(--muted)]">
+                Airport arrivals, road friction, bus lift, and ferry handoff stay on one wall so the operator can see where timing breaks first.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { label: "Flights inbound", value: flights.length },
+                  { label: "Buses moving", value: movingBusCount },
+                  { label: "Road events", value: trafficEvents.length },
+                  { label: "Boat contacts", value: maritimeVesselCount },
+                ].map((item) => (
+                  <div key={item.label} className="border border-[rgba(15,111,136,0.18)] bg-[rgba(255,255,255,0.58)] px-3 py-2">
+                    <div className="text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                      {item.label}
+                    </div>
+                    <div className="mt-1 text-[18px] font-mono font-bold text-[var(--ink)]">
+                      {item.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
 
-          <div className="flex items-center gap-1">
-            {/* Basemap selector (radio — exactly one) */}
-            <span className="text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] mr-0.5">BASE</span>
-            {basemapOptions.map((opt) => {
-              const Icon = opt.icon;
-              return (
+            <section className="pointer-events-auto border border-[rgba(255,255,255,0.2)] bg-[rgba(248,246,240,0.9)] px-3 py-3 backdrop-blur-md">
+              <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                Basemap
+              </div>
+              <div className="mt-2 flex gap-1.5">
                 <button
-                  key={opt.id}
                   type="button"
-                  aria-pressed={activeBasemap === opt.id}
-                  onClick={() => setActiveBasemap(opt.id)}
-                  className={`inline-flex h-6 items-center gap-1 border px-1.5 text-[8px] font-bold uppercase tracking-wider transition-colors ${
-                    activeBasemap === opt.id
-                      ? "border-[var(--cool)] bg-[rgba(15,111,136,0.1)] text-[var(--cool)]"
-                      : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+                  aria-pressed={basemapChoice === "map"}
+                  data-control-classification="changes view"
+                  onClick={() => setActiveBasemap(hasMapbox ? "mapbox-light" : "osm-streets")}
+                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
+                    basemapChoice === "map"
+                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
                   }`}
                 >
-                  <Icon size={10} />
-                  {opt.label}
+                  Map
                 </button>
-              );
-            })}
-
-            <div className="h-4 w-[1px] bg-[var(--line)] mx-1" />
-
-            {/* NASA GIBS imagery selector (radio — pick one or OFF) */}
-            <span className="live-badge text-[7px] px-0.5" title="NASA GIBS imagery">LIVE</span>
-            {imageryOptions.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                aria-pressed={satelliteOverlay === opt.id}
-                onClick={() => setSatelliteOverlay(opt.id)}
-                className={`px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider transition-colors ${
-                  satelliteOverlay === opt.id
-                    ? "text-[var(--ink)] underline underline-offset-4 decoration-[var(--cool)]"
-                    : "text-[var(--dim)] hover:text-[var(--ink)]"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-
-            {/* Opacity slider for GIBS imagery */}
-            {showSatelliteOverlay && (
-              <div className="flex items-center gap-1.5 ml-1 min-w-[100px]">
-                <span className="text-[8px] font-mono text-[var(--dim)] shrink-0">{satelliteOpacity}%</span>
-                <input
-                  type="range"
-                  min="20"
-                  max="100"
-                  step="5"
-                  value={satelliteOpacity}
-                  onChange={(event) => setSatelliteOpacity(Number(event.target.value))}
-                  className="w-full h-1 bg-[var(--line)] rounded-full appearance-none accent-[var(--cool)] cursor-pointer"
-                />
+                <button
+                  type="button"
+                  aria-pressed={basemapChoice === "aerial"}
+                  data-control-classification="changes view"
+                  onClick={() =>
+                    setActiveBasemap(hasMapbox ? "mapbox-satellite" : "esri-aerial")
+                  }
+                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
+                    basemapChoice === "aerial"
+                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                  }`}
+                >
+                  Aerial
+                </button>
               </div>
-            )}
+            </section>
           </div>
-        </div>
 
-        {/* Row 2: Corridor focus presets */}
-        <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-1 xl:px-4">
-          <div className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
-            {focusPresets.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  onCorridorSelect?.(preset.id);
-                  setViewState((current) => ({
-                    ...current,
-                    ...preset.view,
-                  }));
-                }}
-                className={`whitespace-nowrap rounded border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                  selectedCorridorId === preset.id
-                    ? "border-[var(--ink)] bg-[rgba(17,17,17,0.05)] text-[var(--ink)]"
-                    : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+          <section className="pointer-events-none border border-[rgba(255,255,255,0.16)] bg-[rgba(248,246,240,0.86)] px-3 py-2 backdrop-blur-md">
+            <div className="pointer-events-none flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="pointer-events-none shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                Corridor
+              </div>
+              <div className="pointer-events-auto no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto xl:justify-end">
+                {focusPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={activeCorridor?.id === preset.id}
+                    data-control-classification="selects corridor"
+                    onClick={() => {
+                      onCorridorSelect?.(preset.id);
+                      setViewState((current) => ({
+                        ...current,
+                        ...preset.view,
+                      }));
+                    }}
+                    className={`whitespace-nowrap border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                      selectedCorridorId === preset.id
+                        ? "border-[var(--ink)] bg-[rgba(17,17,17,0.08)] text-[var(--ink)]"
+                        : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
+                    } relative z-10`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
-      <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[rgba(248,246,240,0.92)] backdrop-blur-md">
-        {/* Governor-level view presets */}
-        <div className="flex items-center gap-2 px-3 py-1.5 xl:px-4">
-          <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] shrink-0">View</span>
-          {([
-            { id: "overview" as ViewPreset, label: "Overview", desc: "Bus routes, cameras, traffic" },
-            { id: "safety" as ViewPreset, label: "Safety", desc: "Accidents, alerts, hotspots" },
-            { id: "weather" as ViewPreset, label: "Weather", desc: "Rain, AQI, marine, alerts" },
-            { id: "tourism" as ViewPreset, label: "Tourism", desc: "Visitors, flights, hotels" },
-          ]).map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => applyPreset(preset.id)}
-              title={preset.desc}
-              className={`border whitespace-nowrap px-3 py-1 transition-colors ${
-                activePreset === preset.id
-                  ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                  : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-              }`}
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider">{preset.label}</span>
-            </button>
-          ))}
-
-          <div className="h-4 w-[1px] bg-[var(--line)] mx-1" />
-
-          <button
-            type="button"
-            onClick={() => setShowAdvancedLayers(!showAdvancedLayers)}
-            className={`border whitespace-nowrap px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-              showAdvancedLayers
-                ? "border-[var(--cool)] text-[var(--cool)]"
-                : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
-            }`}
-          >
-            {showAdvancedLayers ? "Hide layers" : "More layers"}
-          </button>
-
-          <div className="flex-1" />
-          <span className="text-[8px] font-mono text-[var(--dim)] shrink-0">
-            {totalActiveLayers} active
-          </span>
-        </div>
-
-        {/* Advanced layer toggles (hidden by default) */}
-        {showAdvancedLayers && (
-          <div className="border-t border-[var(--line)] px-3 py-1.5 xl:px-4">
-            <div className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
-              {layerControls.map((control) => {
-                const Icon = control.icon;
-                return (
-                  <button
-                    key={control.id}
-                    type="button"
-                    aria-pressed={control.active}
-                    onClick={control.onClick}
-                    className={`border whitespace-nowrap px-2 py-1 transition-colors ${
-                      control.active
-                        ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                        : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Icon size={10} className="shrink-0" />
-                      <span className="text-[9px] font-bold uppercase tracking-wider">
-                        {control.label.split(" ")[0]}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 p-3 xl:p-4">
+        <section className="pointer-events-none border border-[rgba(255,255,255,0.16)] bg-[rgba(248,246,240,0.9)] px-3 py-3 backdrop-blur-md">
+          <div className="pointer-events-none flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="pointer-events-auto flex flex-wrap items-center gap-2">
+              <div className="pointer-events-none text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                Lens
+              </div>
+              {LENS_OPTIONS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  aria-pressed={activePreset === preset.id}
+                  data-control-classification="changes view"
+                  onClick={() => applyPreset(preset.id)}
+                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
+                    activePreset === preset.id
+                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                  } relative z-10`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <div className="max-w-[420px] text-[10px] leading-4 text-[var(--muted)] xl:text-right">
+              {activeLens?.description ?? "Operator lens active."}
             </div>
           </div>
-        )}
+        </section>
       </div>
     </div>
   );

@@ -96,7 +96,6 @@ export default function SituationPanel({
         const totalArrivals = arrData?.totalFlights ?? 0;
         const enRouteCount = arrFlights.filter((f) => f.status === "en-route").length;
         const delayedCount = arrFlights.filter((f) => f.status === "delayed").length;
-        const landedCount = arrFlights.filter((f) => f.status === "landed").length;
         const estPax = arrFlights.reduce((sum, f) => sum + (f.paxEstimate ?? 200), 0);
 
         const flightCount = totalArrivals || Number(flightRes?.totalFlights ?? flightRes?.count ?? airportConcern?.metricValue ?? 0);

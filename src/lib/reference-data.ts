@@ -32,10 +32,10 @@ interface BinanceTickerResponse {
 }
 
 interface WorldBankMetadata {
-  page: number;
-  pages: number;
-  per_page: string;
-  total: number;
+  page: number | string;
+  pages: number | string;
+  per_page: number | string;
+  total: number | string;
 }
 
 interface WorldBankIndicatorRow {
@@ -54,6 +54,10 @@ interface WorldBankIndicatorRow {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isNumberLike(value: unknown) {
+  return typeof value === "number" || typeof value === "string";
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -108,10 +112,10 @@ function isWorldBankIndicatorResponse(
     Array.isArray(value) &&
     value.length >= 2 &&
     isRecord(value[0]) &&
-    typeof value[0].page === "number" &&
-    typeof value[0].pages === "number" &&
-    typeof value[0].per_page === "string" &&
-    typeof value[0].total === "number" &&
+    isNumberLike(value[0].page) &&
+    isNumberLike(value[0].pages) &&
+    isNumberLike(value[0].per_page) &&
+    isNumberLike(value[0].total) &&
     Array.isArray(value[1]) &&
     value[1].every(isWorldBankIndicatorRow)
   );

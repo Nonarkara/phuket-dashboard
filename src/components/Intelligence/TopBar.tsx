@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { BookOpen, Database, Layers, Network, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type {
   ExecutiveStatus,
   GovernorBrief,
@@ -52,6 +52,7 @@ export default function TopBar({
   const [time, setTime] = useState("");
   const [narrative, setNarrative] = useState<GovernorNarrativeResponse | null>(null);
   const [showNarrativeDetail, setShowNarrativeDetail] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [trendRange, setTrendRange] = useState<string>("30d");
   const [trendData, setTrendData] = useState<{
     dataPoints: { date: string; positivePct: number }[];
@@ -61,6 +62,7 @@ export default function TopBar({
   } | null>(null);
 
   const [newsHeadlines, setNewsHeadlines] = useState<{ title: string; url: string; source: string; severity: string }[]>([]);
+  const adminMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch news headlines for ticker
   useEffect(() => {
@@ -126,6 +128,21 @@ export default function TopBar({
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        showAdminMenu &&
+        adminMenuRef.current &&
+        !adminMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowAdminMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [showAdminMenu]);
 
   const topConcerns = brief?.topConcerns ?? [];
   const feederOrigins = visitorOrigins?.origins ?? [];
@@ -332,41 +349,74 @@ export default function TopBar({
             </span>
           </div>
           <div className="hidden h-6 w-[1px] bg-[var(--line)] sm:block" />
-          <div className="flex items-center gap-1">
-            {onOpenModuleSelector && (
-              <button
-                type="button"
-                onClick={onOpenModuleSelector}
-                className="p-1 text-[var(--cool)] hover:text-[var(--ink)] transition-colors"
-                title="Global Satellite Toolkit"
+          <div ref={adminMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setShowAdminMenu((current) => !current)}
+              aria-expanded={showAdminMenu}
+              aria-haspopup="menu"
+              data-control-classification="opens panel"
+              className="border border-[var(--line)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)]"
+            >
+              Admin
+            </button>
+            {showAdminMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-50 mt-1 min-w-[180px] border border-[var(--line)] bg-[var(--bg-raised)] p-1.5"
               >
-                <Layers size={14} />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminMenu(false);
+                    onOpenManual();
+                  }}
+                  role="menuitem"
+                  data-control-classification="opens panel"
+                  className="block w-full border border-transparent px-2 py-1.5 text-left text-[10px] font-medium text-[var(--ink)] transition-colors hover:border-[var(--line)] hover:bg-[rgba(17,17,17,0.03)]"
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminMenu(false);
+                    onOpenArchitecture();
+                  }}
+                  role="menuitem"
+                  data-control-classification="opens panel"
+                  className="block w-full border border-transparent px-2 py-1.5 text-left text-[10px] font-medium text-[var(--ink)] transition-colors hover:border-[var(--line)] hover:bg-[rgba(17,17,17,0.03)]"
+                >
+                  Architecture
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminMenu(false);
+                    onOpenDataExplorer();
+                  }}
+                  role="menuitem"
+                  data-control-classification="opens panel"
+                  className="block w-full border border-transparent px-2 py-1.5 text-left text-[10px] font-medium text-[var(--ink)] transition-colors hover:border-[var(--line)] hover:bg-[rgba(17,17,17,0.03)]"
+                >
+                  Data Explorer
+                </button>
+                {onOpenModuleSelector && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAdminMenu(false);
+                      onOpenModuleSelector();
+                    }}
+                    role="menuitem"
+                    data-control-classification="opens panel"
+                    className="block w-full border border-transparent px-2 py-1.5 text-left text-[10px] font-medium text-[var(--ink)] transition-colors hover:border-[var(--line)] hover:bg-[rgba(17,17,17,0.03)]"
+                  >
+                    Toolkit
+                  </button>
+                )}
+              </div>
             )}
-            <button
-              type="button"
-              onClick={onOpenArchitecture}
-              className="p-1 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="APIs / Architecture"
-            >
-              <Network size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onOpenDataExplorer}
-              className="p-1 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="Data / Export"
-            >
-              <Database size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onOpenManual}
-              className="p-1 text-[var(--dim)] hover:text-[var(--ink)] transition-colors"
-              title="Help / Manual"
-            >
-              <BookOpen size={14} />
-            </button>
           </div>
         </div>
       </div>

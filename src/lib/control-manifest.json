@@ -1,0 +1,23 @@
+{
+  "main": [
+    { "label": "Map", "classification": "changes view" },
+    { "label": "Aerial", "classification": "changes view" },
+    { "label": "Airport -> Patong", "classification": "selects corridor" },
+    { "label": "Old Town", "classification": "selects corridor" },
+    { "label": "Chalong / Rassada / Ao Po", "classification": "selects corridor" },
+    { "label": "Patong / Karon / Kata", "classification": "selects corridor" },
+    { "label": "Ao Nang / Krabi", "classification": "selects corridor" },
+    { "label": "Khao Lak / Phang Nga", "classification": "selects corridor" },
+    { "label": "Operations", "classification": "changes view" },
+    { "label": "Safety", "classification": "changes view" },
+    { "label": "Weather", "classification": "changes view" },
+    { "label": "Tourism", "classification": "changes view" },
+    { "label": "Admin", "classification": "opens panel" }
+  ],
+  "admin": [
+    { "label": "Manual", "classification": "opens panel" },
+    { "label": "Architecture", "classification": "opens panel" },
+    { "label": "Data Explorer", "classification": "opens panel" },
+    { "label": "Toolkit", "classification": "opens panel" }
+  ]
+}

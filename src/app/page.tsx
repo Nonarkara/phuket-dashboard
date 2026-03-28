@@ -3,16 +3,13 @@ import { useEffect, useState } from "react";
 import DashboardArchitectureModal from "../components/Intelligence/DashboardArchitectureModal";
 import DatabaseExplorerModal from "../components/Intelligence/DatabaseExplorerModal";
 import DashboardManualModal from "../components/Intelligence/DashboardManualModal";
+import OperationsPanel from "../components/Intelligence/OperationsPanel";
 import SignalTicker from "../components/Intelligence/SignalTicker";
 import TopBar from "../components/Intelligence/TopBar";
 import ProvinceDashboard from "../components/Analytics/ProvinceDashboard";
 import BorderMap from "../components/Map/BorderMap";
-import BottomRail from "../components/Intelligence/BottomRail";
 import NewsSidebar from "../components/Intelligence/NewsSidebar";
-import ModuleRail from "../components/Modules/ModuleRail";
 import ModuleSelector from "../components/Modules/ModuleSelector";
-import SituationPanel from "../components/Intelligence/SituationPanel";
-import FlightArrivals from "../components/Intelligence/FlightArrivals";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -20,6 +17,7 @@ import type {
   MaritimeSecurityResponse,
   MarineStatusResponse,
   MediaWatchResponse,
+  OperationsDashboardResponse,
   PhuketVisitorOriginsResponse,
   ProvinceSelection,
   PublicCameraResponse,
@@ -36,7 +34,18 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
+function appendScenario(path: string, scenarioId?: string | null) {
+  return scenarioId
+    ? `${path}${path.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(scenarioId)}`
+    : path;
+}
+
 export default function Dashboard() {
+  const [scenarioId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("scenario"),
+  );
   const [selectedProvince, setSelectedProvince] =
     useState<ProvinceSelection | null>(null);
   const [selectedCorridorId, setSelectedCorridorId] = useState("airport-patong");
@@ -56,6 +65,8 @@ export default function Dashboard() {
   const [cameraPayload, setCameraPayload] = useState<PublicCameraResponse | null>(null);
   const [visitorOrigins, setVisitorOrigins] =
     useState<PhuketVisitorOriginsResponse | null>(null);
+  const [operations, setOperations] =
+    useState<OperationsDashboardResponse | null>(null);
 
   // ─── Tiered data polling ───────────────────────────────────────
   // Tier 1: 2-minute (contextual, less volatile)
@@ -65,11 +76,11 @@ export default function Dashboard() {
         nextBrief, nextMarine, nextTourismHotspots,
         nextCityVibes, nextMediaWatch, nextCameras, nextVisitorOrigins,
       ] = await Promise.all([
-        fetchJson<GovernorBrief>("/api/governor/brief"),
-        fetchJson<MarineStatusResponse>("/api/marine"),
-        fetchJson<TourismHotspotsResponse>("/api/tourism/hotspots"),
-        fetchJson<CityVibesResponse>("/api/city-vibes"),
-        fetchJson<MediaWatchResponse>("/api/media-watch"),
+        fetchJson<GovernorBrief>(appendScenario("/api/governor/brief", scenarioId)),
+        fetchJson<MarineStatusResponse>(appendScenario("/api/marine", scenarioId)),
+        fetchJson<TourismHotspotsResponse>(appendScenario("/api/tourism/hotspots", scenarioId)),
+        fetchJson<CityVibesResponse>(appendScenario("/api/city-vibes", scenarioId)),
+        fetchJson<MediaWatchResponse>(appendScenario("/api/media-watch", scenarioId)),
         fetchJson<PublicCameraResponse>("/api/public-cameras"),
         fetchJson<PhuketVisitorOriginsResponse>("/api/visitor-origins"),
       ]);
@@ -84,22 +95,24 @@ export default function Dashboard() {
     void load();
     const interval = setInterval(() => void load(), 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [scenarioId]);
 
   // Tier 2: 60-second (important situational)
   useEffect(() => {
     const load = async () => {
-      const [nextDisaster, nextMaritimeSecurity] = await Promise.all([
-        fetchJson<DisasterFeedResponse>("/api/disaster/brief"),
-        fetchJson<MaritimeSecurityResponse>("/api/maritime/security"),
+      const [nextDisaster, nextMaritimeSecurity, nextOperations] = await Promise.all([
+        fetchJson<DisasterFeedResponse>(appendScenario("/api/disaster/brief", scenarioId)),
+        fetchJson<MaritimeSecurityResponse>(appendScenario("/api/maritime/security", scenarioId)),
+        fetchJson<OperationsDashboardResponse>(appendScenario("/api/operations/dashboard", scenarioId)),
       ]);
       if (nextDisaster) setDisaster(nextDisaster);
       if (nextMaritimeSecurity) setMaritimeSecurity(nextMaritimeSecurity);
+      if (nextOperations) setOperations(nextOperations);
     };
     void load();
-    const interval = setInterval(() => void load(), 60 * 1000);
+    const interval = setInterval(() => void load(), 30 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [scenarioId]);
 
   const openManual = () => {
     setIsArchitectureOpen(false);
@@ -148,23 +161,18 @@ export default function Dashboard() {
             maritimeSecurityFeed={maritimeSecurity}
             cameraFeed={cameraPayload}
             tourismFeed={tourismHotspots}
+            scenarioId={scenarioId}
           />
         </div>
 
         {/* Right — Flight Arrivals + Situation panel (xl+ screens / 74-inch LED) */}
-        <div className="hidden xl:flex w-[300px] min-[3000px]:w-[440px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)]">
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <FlightArrivals />
-          </div>
-          <div className="shrink-0 border-t border-[var(--line)] max-h-[40%] overflow-y-auto">
-            <SituationPanel
-              brief={brief}
-              disaster={disaster}
-              marine={marine}
-              tourismHotspots={tourismHotspots}
-            />
-          </div>
+        <div className="hidden xl:block w-[360px] min-[3000px]:w-[520px] shrink-0">
+          <OperationsPanel data={operations} />
         </div>
+      </section>
+
+      <section className="xl:hidden border-t border-[var(--line)] bg-[var(--bg-raised)] max-h-[46dvh] overflow-hidden">
+        <OperationsPanel data={operations} />
       </section>
 
       {/* ─── Signal ticker ─── */}
@@ -178,25 +186,6 @@ export default function Dashboard() {
           cameraCount={cameraPayload?.cameras?.length ?? 0}
         />
       </div>
-
-      {/* ─── Bottom rail (desktop only, hidden at 4K where it's a right panel) ─── */}
-      <div className="min-[3000px]:hidden">
-        <BottomRail
-          brief={brief}
-          disaster={disaster}
-          maritimeSecurity={maritimeSecurity}
-          marine={marine}
-          tourismHotspots={tourismHotspots}
-          cityVibes={cityVibes}
-          mediaWatch={mediaWatch}
-          cameraPayload={cameraPayload}
-          selectedCorridorId={selectedCorridorId}
-          onSelectCorridor={setSelectedCorridorId}
-        />
-      </div>
-
-      {/* ─── Module Rail (Global Satellite Toolkit) ─── */}
-      <ModuleRail />
 
       <ProvinceDashboard
         province={selectedProvince}

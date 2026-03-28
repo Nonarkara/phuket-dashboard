@@ -10,7 +10,8 @@
     "dev:3001": "WATCHPACK_POLLING=true next dev --webpack -H 127.0.0.1 -p 3001",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:ui": "node scripts/test-ui.mjs"
   },
   "dependencies": {
     "@deck.gl/aggregation-layers": "^9.2.11",
