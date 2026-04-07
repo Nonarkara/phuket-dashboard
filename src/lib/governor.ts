@@ -12,6 +12,7 @@ import {
   newestObservedAt,
   summarizeFreshness,
 } from "./freshness";
+import { toIsoOrNull } from "./dates";
 import { loadPublicCameraFeed } from "./public-cameras";
 import { loadThailandIncidents } from "./thailand-monitor";
 import {
@@ -810,15 +811,11 @@ async function fetchGdeltSignals(): Promise<NarrativeFeedResult> {
             ? `Shared via ${article.sourcecountry}`
             : "Shared article",
           source: source.toUpperCase(),
-          observedAt: article.seendate
-            ? new Date(article.seendate).toISOString()
-            : checkedAt,
+          observedAt: toIsoOrNull(article.seendate) ?? checkedAt,
           url: article.url,
           freshness: buildFreshness({
             checkedAt,
-            observedAt: article.seendate
-              ? new Date(article.seendate).toISOString()
-              : checkedAt,
+            observedAt: toIsoOrNull(article.seendate) ?? checkedAt,
             fallbackTier: "live",
             sourceIds: [source.toUpperCase()],
           }),

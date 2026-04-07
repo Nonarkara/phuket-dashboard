@@ -1,3 +1,4 @@
+import { cached } from "./cache";
 import { buildFreshness, summarizeFreshness } from "./freshness";
 import type {
   CameraScoutItem,
@@ -5,7 +6,8 @@ import type {
   PublicCameraResponse,
 } from "../types/dashboard";
 
-const CAMERA_TIMEOUT_MS = 8_000;
+const CAMERA_TIMEOUT_MS = 4_000;
+const PUBLIC_CAMERA_FEED_CACHE_KEY = "public-camera-feed:v1";
 
 export const phuketPublicCameras: PublicCamera[] = [
   {
@@ -341,19 +343,6 @@ async function hydrateScoutTarget(
   camera: CameraScoutItem,
   checkedAt: string,
 ): Promise<CameraScoutItem> {
-  if (camera.accessUrl) {
-    const validated = await validateCamera({
-      ...camera,
-      validationState: "candidate",
-    });
-
-    return {
-      ...validated,
-      validationState: "candidate" as const,
-      candidateSourceNote: camera.candidateSourceNote,
-    };
-  }
-
   return {
     ...camera,
     operationalState: "candidate",
@@ -369,7 +358,7 @@ async function hydrateScoutTarget(
   } satisfies CameraScoutItem;
 }
 
-export async function loadPublicCameraFeed(): Promise<PublicCameraResponse> {
+async function loadPublicCameraFeedUncached(): Promise<PublicCameraResponse> {
   const generatedAt = new Date().toISOString();
   const validatedCameras = await Promise.all(phuketPublicCameras.map(validateCamera));
   const checkedAt = new Date().toISOString();
@@ -401,4 +390,8 @@ export async function loadPublicCameraFeed(): Promise<PublicCameraResponse> {
     ).length,
     scoutCount: hydratedScoutTargets.length,
   };
+}
+
+export async function loadPublicCameraFeed(): Promise<PublicCameraResponse> {
+  return cached(PUBLIC_CAMERA_FEED_CACHE_KEY, 600, loadPublicCameraFeedUncached);
 }

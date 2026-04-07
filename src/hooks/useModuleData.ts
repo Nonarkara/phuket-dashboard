@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchJson, isAbortError } from "../lib/client-requests";
 import type {
   ModuleApiResponse,
   ModuleDataState,
@@ -25,22 +26,27 @@ export function useModuleData<T = unknown>(
   });
   const [meta, setMeta] = useState<ModuleMetadata | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchModule = useCallback(async () => {
-    if (!moduleId) return;
+    if (!moduleId) {
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const res = await fetch(`/api/modules/${moduleId}`);
-      if (!res.ok) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: `HTTP ${res.status}`,
-        }));
+      const json = await fetchJson<ModuleApiResponse<T>>(`/api/modules/${moduleId}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || requestId !== requestIdRef.current) {
         return;
       }
 
-      const json = (await res.json()) as ModuleApiResponse<T>;
       setState({
         data: json.data,
         loading: false,
@@ -50,6 +56,10 @@ export function useModuleData<T = unknown>(
       });
       setMeta(json.module);
     } catch (err: unknown) {
+      if (isAbortError(err) || requestId !== requestIdRef.current) {
+        return;
+      }
+
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -59,6 +69,9 @@ export function useModuleData<T = unknown>(
   }, [moduleId]);
 
   useEffect(() => {
+    abortRef.current?.abort();
+    requestIdRef.current += 1;
+
     if (!moduleId) {
       setState({
         data: null,
@@ -71,10 +84,20 @@ export function useModuleData<T = unknown>(
       return;
     }
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    setMeta(null);
+    setState({
+      data: null,
+      loading: true,
+      error: null,
+      lastFetchedAt: null,
+      tier: null,
+    });
     void fetchModule();
 
     return () => {
+      requestIdRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [moduleId, fetchModule]);

@@ -176,18 +176,18 @@ export async function loadOperationalWeather(options?: {
   marine?: MarineStatusResponse;
   scenario?: GovernorScenarioId | null;
 }): Promise<OperationalWeatherResponse> {
+  const scenario = options?.scenario ?? "live";
+  const scenarioMode = scenario !== "live";
   const [currentWeather, rainfall, marine, warningCount] = await Promise.all([
-    fetchOpenMeteoWeather(),
+    scenarioMode ? Promise.resolve(null) : fetchOpenMeteoWeather(),
     options?.rainfall ? Promise.resolve(options.rainfall) : loadRainfallPoints(),
     options?.marine
       ? Promise.resolve(options.marine)
-      : loadMarineStatus({ scenario: options?.scenario ?? "live" }),
-    fetchTmdWarningCount(),
+      : loadMarineStatus({ scenario }),
+    scenarioMode ? Promise.resolve(0) : fetchTmdWarningCount(),
   ]);
 
   const generatedAt = new Date().toISOString();
-  const scenario = options?.scenario ?? "live";
-  const scenarioMode = scenario !== "live";
   let rainfallMm = currentWeather?.precipitation ?? localRainfallPeak(rainfall);
   let windKph = currentWeather?.wind_speed_10m ?? null;
   let temperatureC = currentWeather?.temperature_2m ?? null;

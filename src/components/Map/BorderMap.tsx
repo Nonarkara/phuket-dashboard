@@ -1,11 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
-import type { MapViewState, PickingInfo } from "@deck.gl/core";
+import type {
+  MapViewState,
+  PickingInfo,
+  ViewStateChangeParameters,
+} from "@deck.gl/core";
+import type { DeckGLProps } from "@deck.gl/react";
 import dynamic from "next/dynamic";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const DeckGL = dynamic(() => (import("@deck.gl/react") as any).then((m: any) => m.default || m.DeckGL), { ssr: false }) as any;
+const DeckGL = dynamic<DeckGLProps>(
+  () => import("@deck.gl/react").then((module) => module.default),
+  { ssr: false },
+);
 import {
   createAirQualityHeatmapLayers,
   createDisasterAlertLayer,
@@ -26,6 +40,11 @@ import {
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
 import { GOVERNOR_CORRIDORS, findCorridorById } from "../../lib/governor-config";
+import {
+  buildScenarioUrl,
+  fetchJsonOrFallback,
+  isAbortError,
+} from "../../lib/client-requests";
 import { getUsableMapboxToken } from "../../lib/mapbox";
 import type {
   AirQualityPoint,
@@ -56,9 +75,29 @@ const MapboxMap = dynamic(() => import("react-map-gl/mapbox"), { ssr: false });
 const MAPBOX_TOKEN = getUsableMapboxToken(
   process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
 );
+const DEBUG_INGEST_ENABLED =
+  process.env.NODE_ENV === "development" &&
+  process.env.NEXT_PUBLIC_ENABLE_DEBUG_INGEST === "true";
 
-// Register WebGL adapter for deck.gl v9
-luma.registerAdapters([webgl2Adapter]);
+const globalLuma = globalThis as typeof globalThis & {
+  __phuketDashboardLumaRegistered?: boolean;
+};
+const lumaReadyListeners = new Set<() => void>();
+
+function subscribeToLumaReady(listener: () => void) {
+  lumaReadyListeners.add(listener);
+  return () => {
+    lumaReadyListeners.delete(listener);
+  };
+}
+
+function getLumaReadySnapshot() {
+  return globalLuma.__phuketDashboardLumaRegistered === true;
+}
+
+function notifyLumaReady() {
+  lumaReadyListeners.forEach((listener) => listener());
+}
 
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 98.334,
@@ -102,6 +141,65 @@ const EMPTY_PKSB_STOPS = {
   type: "FeatureCollection",
   features: [],
 } as const satisfies PksbTransitResponse["stops"];
+
+const EMPTY_PKSB_TRANSIT_RESPONSE: PksbTransitResponse = {
+  generatedAt: new Date(0).toISOString(),
+  source: [],
+  routes: EMPTY_PKSB_ROUTES,
+  stops: EMPTY_PKSB_STOPS,
+};
+
+const EMPTY_TRAFFIC_RESPONSE: TrafficResponse = {
+  generatedAt: new Date(0).toISOString(),
+  provider: "Longdo/ITIC",
+  status: "fallback",
+  events: [],
+};
+
+const EMPTY_PKSB_BUS_RESPONSE: PksbBusPositionResponse = {
+  generatedAt: new Date(0).toISOString(),
+  buses: [],
+  mode: "modeled",
+  sourceSummary: {
+    label: "PKSB fallback",
+    mode: "modeled",
+    sources: ["PKSB fallback"],
+  },
+  freshness: {
+    observedAt: null,
+    checkedAt: new Date(0).toISOString(),
+    ageMinutes: null,
+    maxAgeMinutes: 15,
+    isFresh: false,
+    fallbackTier: "scenario",
+    sourceIds: ["PKSB fallback"],
+  },
+};
+
+const EMPTY_MARITIME_SECURITY_RESPONSE: MaritimeSecurityResponse = {
+  generatedAt: new Date(0).toISOString(),
+  posture: "stable",
+  summary: "",
+  provider: "Modeled ferry operations",
+  vessels: [],
+  chokepoints: [],
+  sources: ["Modeled ferry operations"],
+  mode: "modeled",
+  sourceSummary: {
+    label: "Modeled ferry operations",
+    mode: "modeled",
+    sources: ["Modeled ferry operations"],
+  },
+  freshness: {
+    observedAt: null,
+    checkedAt: new Date(0).toISOString(),
+    ageMinutes: null,
+    maxAgeMinutes: 60,
+    isFresh: false,
+    fallbackTier: "scenario",
+    sourceIds: ["Modeled ferry operations"],
+  },
+};
 
 function subscribeToClientState() {
   return () => {};
@@ -266,6 +364,10 @@ function debugLog(
   data: Record<string, unknown> = {},
   runId: string = "ui",
 ) {
+  if (!DEBUG_INGEST_ENABLED) {
+    return;
+  }
+
   // #region agent log
   fetch("/api/debug/ingest", {
     method: "POST",
@@ -386,25 +488,6 @@ function isTourismHotspot(value: unknown): value is TourismHotspot {
   );
 }
 
-async function fetchJson<T>(url: string, fallback: T): Promise<T> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      return fallback;
-    }
-
-    return (await res.json()) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function appendScenario(path: string, scenarioId?: string | null) {
-  return scenarioId
-    ? `${path}${path.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(scenarioId)}`
-    : path;
-}
-
 function getTooltipText(object: unknown): string | null {
   if (isIncidentFeature(object)) {
     return object.properties.notes || object.properties.title;
@@ -486,6 +569,11 @@ export default function BorderMap({
     () => (mounted ? detectWebglSupport() : true),
     [mounted],
   );
+  const lumaReady = useSyncExternalStore(
+    subscribeToLumaReady,
+    getLumaReadySnapshot,
+    () => false,
+  );
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
   // ─── Basemap: exactly one active at a time (radio) ───
@@ -562,6 +650,176 @@ export default function BorderMap({
   const fallbackBackgroundClass =
     "bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.08),_rgba(8,20,34,0.95)_62%)]";
   const activeLens = LENS_OPTIONS.find((option) => option.id === activePreset);
+  const slowMapControllerRef = useRef<AbortController | null>(null);
+  const slowMapRequestIdRef = useRef(0);
+  const flightControllerRef = useRef<AbortController | null>(null);
+  const flightRequestIdRef = useRef(0);
+  const busControllerRef = useRef<AbortController | null>(null);
+  const busRequestIdRef = useRef(0);
+  const maritimeControllerRef = useRef<AbortController | null>(null);
+  const maritimeRequestIdRef = useRef(0);
+
+  const loadSlowMapData = useEffectEvent(async () => {
+    const requestId = ++slowMapRequestIdRef.current;
+    slowMapControllerRef.current?.abort();
+    const controller = new AbortController();
+    slowMapControllerRef.current = controller;
+
+    try {
+      const [
+        incidentData,
+        fireData,
+        refugeeData,
+        rainfallData,
+        airQualityData,
+        pksbTransitData,
+        trafficData,
+      ] = await Promise.all([
+        fetchJsonOrFallback<IncidentFeature[]>("/api/incidents", [], {
+          signal: controller.signal,
+        }),
+        fetchJsonOrFallback<FireEvent[]>("/api/fires", [], {
+          signal: controller.signal,
+        }),
+        fetchJsonOrFallback<RefugeeMovement[]>("/api/movements", [], {
+          signal: controller.signal,
+        }),
+        fetchJsonOrFallback<RainfallPoint[]>("/api/rainfall", [], {
+          signal: controller.signal,
+        }),
+        fetchJsonOrFallback<AirQualityPoint[]>("/api/air-quality", [], {
+          signal: controller.signal,
+        }),
+        fetchJsonOrFallback<PksbTransitResponse>(
+          buildScenarioUrl("/api/transit/pksb", scenarioId),
+          EMPTY_PKSB_TRANSIT_RESPONSE,
+          { signal: controller.signal },
+        ),
+        fetchJsonOrFallback<TrafficResponse>(
+          buildScenarioUrl("/api/traffic", scenarioId),
+          EMPTY_TRAFFIC_RESPONSE,
+          { signal: controller.signal },
+        ),
+      ]);
+      if (controller.signal.aborted || requestId !== slowMapRequestIdRef.current) {
+        return;
+      }
+
+      setIncidents(Array.isArray(incidentData) ? incidentData : []);
+      setFires(Array.isArray(fireData) ? fireData : []);
+      setRefugees(Array.isArray(refugeeData) ? refugeeData : []);
+      setRainfall(Array.isArray(rainfallData) ? rainfallData : []);
+      setAirQuality(Array.isArray(airQualityData) ? airQualityData : []);
+      setPksbRoutes(pksbTransitData.routes);
+      setPksbStops(pksbTransitData.stops);
+      setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
+    } catch (error) {
+      if (isAbortError(error)) return;
+    }
+  });
+
+  const loadFlights = useEffectEvent(async () => {
+    const requestId = ++flightRequestIdRef.current;
+    flightControllerRef.current?.abort();
+    const controller = new AbortController();
+    flightControllerRef.current = controller;
+
+    try {
+      const flightData = await fetchJsonOrFallback<FlightData[]>(
+        buildScenarioUrl("/api/flights", scenarioId),
+        [],
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== flightRequestIdRef.current) {
+        return;
+      }
+
+      setFlights(Array.isArray(flightData) ? flightData : []);
+    } catch (error) {
+      if (isAbortError(error)) return;
+    }
+  });
+
+  const loadPksbBuses = useEffectEvent(async () => {
+    const requestId = ++busRequestIdRef.current;
+    busControllerRef.current?.abort();
+    const controller = new AbortController();
+    busControllerRef.current = controller;
+
+    try {
+      const busData = await fetchJsonOrFallback<PksbBusPositionResponse>(
+        buildScenarioUrl("/api/transit/pksb/buses", scenarioId),
+        EMPTY_PKSB_BUS_RESPONSE,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== busRequestIdRef.current) {
+        return;
+      }
+
+      const nextBuses = Array.isArray(busData.buses) ? busData.buses : [];
+      setPreviousPksbBuses(pksbBusesRef.current);
+      pksbBusesRef.current = nextBuses;
+      setPksbBuses(nextBuses);
+      setBusFrameStartedAt(Date.now());
+    } catch (error) {
+      if (isAbortError(error)) return;
+    }
+  });
+
+  const loadMaritime = useEffectEvent(async () => {
+    const requestId = ++maritimeRequestIdRef.current;
+    maritimeControllerRef.current?.abort();
+    const controller = new AbortController();
+    maritimeControllerRef.current = controller;
+
+    try {
+      const maritimeData = await fetchJsonOrFallback<MaritimeSecurityResponse>(
+        buildScenarioUrl("/api/maritime/security", scenarioId),
+        EMPTY_MARITIME_SECURITY_RESPONSE,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== maritimeRequestIdRef.current) {
+        return;
+      }
+
+      const nextVessels = Array.isArray(maritimeData.vessels) ? maritimeData.vessels : [];
+      setPreviousMaritimeVessels(maritimeVesselsRef.current);
+      maritimeVesselsRef.current = nextVessels;
+      setMaritimeVessels(nextVessels);
+      setMaritimeFrameStartedAt(Date.now());
+    } catch (error) {
+      if (isAbortError(error)) return;
+    }
+  });
+
+  const handleViewStateChange = ({
+    viewState: nextViewState,
+  }: ViewStateChangeParameters<MapViewState>) => {
+    setViewState(nextViewState);
+  };
+
+  const handleWireframeViewStateChange = ({
+    viewState: nextViewState,
+  }: ViewStateChangeParameters<MapViewState>) => {
+    setViewState((prev) => ({
+      ...prev,
+      longitude: nextViewState.longitude,
+      latitude: nextViewState.latitude,
+      zoom: nextViewState.zoom,
+    }));
+  };
+
+  useEffect(() => {
+    if (!mounted) {
+      return;
+    }
+
+    if (!globalLuma.__phuketDashboardLumaRegistered) {
+      luma.registerAdapters([webgl2Adapter]);
+      globalLuma.__phuketDashboardLumaRegistered = true;
+      notifyLumaReady();
+    }
+  }, [mounted]);
 
   useEffect(() => {
     debugLog("H1", "BorderMap.tsx:useEffect", "mounted effect ran", {
@@ -590,133 +848,50 @@ export default function BorderMap({
   }, [maritimeSecurityFeed]);
 
   useEffect(() => {
-    const loadData = async () => {
-      const [
-        incidentData,
-        fireData,
-        refugeeData,
-        rainfallData,
-        airQualityData,
-        flightData,
-        pksbTransitData,
-        trafficData,
-      ] = await Promise.all([
-        fetchJson<IncidentFeature[]>("/api/incidents", []),
-        fetchJson<FireEvent[]>("/api/fires", []),
-        fetchJson<RefugeeMovement[]>("/api/movements", []),
-        fetchJson<RainfallPoint[]>("/api/rainfall", []),
-        fetchJson<AirQualityPoint[]>("/api/air-quality", []),
-        fetchJson<FlightData[]>(appendScenario("/api/flights", scenarioId), []),
-        fetchJson<PksbTransitResponse>(appendScenario("/api/transit/pksb", scenarioId), {
-          generatedAt: new Date(0).toISOString(),
-          source: [],
-          routes: EMPTY_PKSB_ROUTES,
-          stops: EMPTY_PKSB_STOPS,
-        }),
-        fetchJson<TrafficResponse>(appendScenario("/api/traffic", scenarioId), {
-          generatedAt: new Date(0).toISOString(),
-          provider: "Longdo/ITIC",
-          status: "fallback",
-          events: [],
-        }),
-      ]);
-
-      setIncidents(Array.isArray(incidentData) ? incidentData : []);
-      setFires(Array.isArray(fireData) ? fireData : []);
-      setRefugees(Array.isArray(refugeeData) ? refugeeData : []);
-      setRainfall(Array.isArray(rainfallData) ? rainfallData : []);
-      setAirQuality(Array.isArray(airQualityData) ? airQualityData : []);
-      setFlights(Array.isArray(flightData) ? flightData : []);
-      setPksbRoutes(pksbTransitData.routes);
-      setPksbStops(pksbTransitData.stops);
-      setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
-    };
-
-    loadData();
-
-    // Refresh map data every 2 minutes
-    const mapDataInterval = setInterval(loadData, 2 * 60 * 1000);
-
-    // Refresh flight data every 30 seconds
-    const flightInterval = setInterval(async () => {
-      const flightData = await fetchJson<FlightData[]>(
-        appendScenario("/api/flights", scenarioId),
-        [],
-      );
-      setFlights(Array.isArray(flightData) ? flightData : []);
-    }, 30000);
-
-    // Refresh PKSB bus positions every 15 seconds
-    const fetchBuses = async () => {
-      const busData = await fetchJson<PksbBusPositionResponse>(
-        appendScenario("/api/transit/pksb/buses", scenarioId),
-        {
-          generatedAt: new Date(0).toISOString(),
-          buses: [],
-          mode: "modeled",
-          sourceSummary: { label: "PKSB fallback", mode: "modeled", sources: ["PKSB fallback"] },
-          freshness: {
-            observedAt: null,
-            checkedAt: new Date(0).toISOString(),
-            ageMinutes: null,
-            maxAgeMinutes: 15,
-            isFresh: false,
-            fallbackTier: "scenario",
-            sourceIds: ["PKSB fallback"],
-          },
-        },
-      );
-      const nextBuses = Array.isArray(busData.buses) ? busData.buses : [];
-      setPreviousPksbBuses(pksbBusesRef.current);
-      pksbBusesRef.current = nextBuses;
-      setPksbBuses(nextBuses);
-      setBusFrameStartedAt(Date.now());
-    };
-    void fetchBuses();
-    const busInterval = setInterval(fetchBuses, 15000);
-
-    const fetchMaritime = async () => {
-      const maritimeData = await fetchJson<MaritimeSecurityResponse>(
-        appendScenario("/api/maritime/security", scenarioId),
-        {
-          generatedAt: new Date(0).toISOString(),
-          posture: "stable",
-          summary: "",
-          provider: "Modeled ferry operations",
-          vessels: [],
-          chokepoints: [],
-          sources: ["Modeled ferry operations"],
-          mode: "modeled",
-          sourceSummary: {
-            label: "Modeled ferry operations",
-            mode: "modeled",
-            sources: ["Modeled ferry operations"],
-          },
-          freshness: {
-            observedAt: null,
-            checkedAt: new Date(0).toISOString(),
-            ageMinutes: null,
-            maxAgeMinutes: 60,
-            isFresh: false,
-            fallbackTier: "scenario",
-            sourceIds: ["Modeled ferry operations"],
-          },
-        },
-      );
-      const nextVessels = Array.isArray(maritimeData.vessels) ? maritimeData.vessels : [];
-      setPreviousMaritimeVessels(maritimeVesselsRef.current);
-      maritimeVesselsRef.current = nextVessels;
-      setMaritimeVessels(nextVessels);
-      setMaritimeFrameStartedAt(Date.now());
-    };
-    void fetchMaritime();
-    const maritimeInterval = setInterval(fetchMaritime, 30000);
+    void loadSlowMapData();
+    const interval = window.setInterval(() => void loadSlowMapData(), 2 * 60 * 1000);
 
     return () => {
-      clearInterval(mapDataInterval);
-      clearInterval(flightInterval);
-      clearInterval(busInterval);
-      clearInterval(maritimeInterval);
+      slowMapRequestIdRef.current += 1;
+      slowMapControllerRef.current?.abort();
+      slowMapControllerRef.current = null;
+      window.clearInterval(interval);
+    };
+  }, [scenarioId]);
+
+  useEffect(() => {
+    void loadFlights();
+    const interval = window.setInterval(() => void loadFlights(), 30000);
+
+    return () => {
+      flightRequestIdRef.current += 1;
+      flightControllerRef.current?.abort();
+      flightControllerRef.current = null;
+      window.clearInterval(interval);
+    };
+  }, [scenarioId]);
+
+  useEffect(() => {
+    void loadPksbBuses();
+    const interval = window.setInterval(() => void loadPksbBuses(), 15000);
+
+    return () => {
+      busRequestIdRef.current += 1;
+      busControllerRef.current?.abort();
+      busControllerRef.current = null;
+      window.clearInterval(interval);
+    };
+  }, [scenarioId]);
+
+  useEffect(() => {
+    void loadMaritime();
+    const interval = window.setInterval(() => void loadMaritime(), 30000);
+
+    return () => {
+      maritimeRequestIdRef.current += 1;
+      maritimeControllerRef.current?.abort();
+      maritimeControllerRef.current = null;
+      window.clearInterval(interval);
     };
   }, [scenarioId]);
 
@@ -912,22 +1087,11 @@ export default function BorderMap({
   // Basemap tile goes first, then the operator overlays
   const allLayers = [basemapTileLayer, ...layers].filter(Boolean);
 
-  if (!mounted) {
-    debugLog("H2", "BorderMap.tsx:render", "rendered not-mounted placeholder", {
-      mounted,
-    });
+  if (!mounted || !lumaReady) {
     return (
       <div className="relative flex h-full w-full flex-col overflow-hidden bg-[var(--bg-raised)] animate-pulse" />
     );
   }
-
-  debugLog("H3", "BorderMap.tsx:render", "rendered mounted map UI", {
-    mounted,
-    activeBasemap,
-    activePreset,
-    hasMapboxToken: MAPBOX_TOKEN.length > 0,
-    webglSupported,
-  });
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
@@ -944,11 +1108,7 @@ export default function BorderMap({
             <DeckGL
               id="phuket-deck"
               viewState={viewState}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
-                const next = nextViewState as MapViewState;
-                setViewState(next);
-              }}
+              onViewStateChange={handleViewStateChange}
               controller={true}
               layers={allLayers}
               onClick={handleMapClick}
@@ -975,11 +1135,7 @@ export default function BorderMap({
                 <DeckGL
                   id="phuket-deck-wireframe"
                   viewState={{ ...viewState, pitch: 0, bearing: 0 }}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  onViewStateChange={({ viewState: nextViewState }: { viewState: any }) => {
-                    const next = nextViewState as MapViewState;
-                    setViewState((prev) => ({ ...prev, longitude: next.longitude, latitude: next.latitude, zoom: next.zoom }));
-                  }}
+                  onViewStateChange={handleWireframeViewStateChange}
                   controller={true}
                   layers={[
                     makeBasemapLayer("wireframe-carto", "CartoDB Positron",

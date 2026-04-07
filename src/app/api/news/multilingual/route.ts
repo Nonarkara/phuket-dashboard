@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cached } from "../../../../lib/cache";
+import { toIsoOrNull } from "../../../../lib/dates";
 
 /**
  * Multilingual News Feed for Governor War Room
@@ -219,9 +220,7 @@ async function fetchRealPhuketNews(): Promise<{ th: MultilingualNewsItem[]; en: 
         source: article.domain ?? "GDELT",
         zone: getZone(article.title!),
         severity: severity(article.title!),
-        publishedAt: article.seendate
-          ? new Date(article.seendate.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")).toISOString()
-          : new Date().toISOString(),
+        publishedAt: toIsoOrNull(article.seendate) ?? new Date().toISOString(),
         url: article.url!,
       }));
     enItems.push(...gdeltItems);

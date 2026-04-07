@@ -1018,3 +1018,93 @@ export interface TourismHotspotsResponse {
   providerHealth?: PackageStatus;
   freshness: DataFreshness;
 }
+
+export interface ShowcaseMetric {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+}
+
+export interface ShowcaseLensState {
+  id: "operations" | "safety" | "weather" | "tourism";
+  label: string;
+  summary: string;
+}
+
+export interface ShowcaseMapPosition {
+  x: number;
+  y: number;
+}
+
+export interface ShowcaseCorridorStory {
+  id: string;
+  label: string;
+  focusAreas: string[];
+  lensId: ShowcaseLensState["id"];
+  status: ExecutiveStatus;
+  summary: string;
+  action: string;
+  signalLabel: string;
+  signalValue: string;
+  mapPosition: ShowcaseMapPosition;
+}
+
+export interface ShowcaseScenarioCard {
+  scenario: Exclude<GovernorScenarioId, "live">;
+  label: string;
+  kicker: string;
+  posture: ExecutiveStatus;
+  summary: string;
+  highlights: string[];
+  href: string;
+}
+
+export interface ShowcaseProofPoint {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+}
+
+export interface ShowcaseReliabilityItem {
+  id: string;
+  label: string;
+  mode: FeedMode | "degraded";
+  freshnessLabel: string;
+  detail: string;
+}
+
+export interface ShowcasePayload {
+  generatedAt: string;
+  hero: {
+    eyebrow: string;
+    title: string;
+    summary: string;
+    metrics: ShowcaseMetric[];
+  };
+  signature: {
+    title: string;
+    summary: string;
+    corridors: ShowcaseCorridorStory[];
+    lenses: ShowcaseLensState[];
+  };
+  scenarios: ShowcaseScenarioCard[];
+  proof: {
+    title: string;
+    summary: string;
+    points: ShowcaseProofPoint[];
+  };
+  reliability: {
+    title: string;
+    summary: string;
+    items: ShowcaseReliabilityItem[];
+  };
+  routes: {
+    warRoom: string;
+    scenarioLinks: Array<{
+      scenario: Exclude<GovernorScenarioId, "live">;
+      href: string;
+    }>;
+  };
+}

@@ -6,9 +6,9 @@ set -euo pipefail
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-DB_NAME="${1:-geopolitics_db}"
+DB_NAME="${1:-phuket_dashboard}"
 
-echo -e "${GREEN}Initializing Geopolitics Database...${NC}"
+echo -e "${GREEN}Initializing Phuket Dashboard Database...${NC}"
 
 if ! command -v psql >/dev/null 2>&1 || ! command -v createdb >/dev/null 2>&1; then
     echo "PostgreSQL CLI tools are required to initialize the schema."

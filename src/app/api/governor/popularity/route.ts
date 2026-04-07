@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { buildFreshness } from "../../../../lib/freshness";
 import { getSupabase } from "../../../../lib/supabase";
 import { getCache, setCache } from "../../../../lib/cache";
+import { toIsoOrNull } from "../../../../lib/dates";
 import type { GovernorNarrativeResponse } from "../../../../types/dashboard";
 
 const TIMEOUT_MS = 12_000;
@@ -91,11 +92,7 @@ export async function GET() {
 
   const observedAt =
     articles
-      .map((article) =>
-        article.seendate
-          ? new Date(article.seendate.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")).toISOString()
-          : null,
-      )
+      .map((article) => toIsoOrNull(article.seendate))
       .filter((value): value is string => Boolean(value))
       .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
 
@@ -114,9 +111,7 @@ export async function GET() {
       url: article.url!,
       source: article.domain ?? "GDELT",
       tone: classifyTone(article.tone ?? 0),
-      date: article.seendate
-        ? new Date(article.seendate.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")).toISOString()
-        : checkedAt,
+      date: toIsoOrNull(article.seendate) ?? checkedAt,
     })),
     sources: ["GDELT DOC 2.0"],
     freshness: buildFreshness({

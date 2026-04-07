@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
-const BASE_URL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrlArg = process.argv.find((arg) => arg.startsWith("--base-url="));
+const BASE_URL =
+  baseUrlArg?.slice("--base-url=".length) ??
+  process.env.BASE_URL ??
+  "http://127.0.0.1:3000";
 const manifestUrl = new URL("../src/lib/control-manifest.json", import.meta.url);
 const controlManifest = JSON.parse(await readFile(manifestUrl, "utf8"));
 
@@ -9,19 +13,27 @@ function fail(message) {
   throw new Error(message);
 }
 
+function logStep(message) {
+  console.log(`[ui-smoke] ${message}`);
+}
+
 async function expectVisible(locator, label) {
-  const count = await locator.count();
-  if (count === 0) {
-    fail(`Expected visible control or panel "${label}", but it was not found.`);
-  }
-
-  for (let index = 0; index < count; index += 1) {
-    if (await locator.nth(index).isVisible()) {
-      return;
+  try {
+    await locator.first().waitFor({ state: "visible", timeout: 15000 });
+  } catch {
+    const count = await locator.count();
+    if (count === 0) {
+      fail(`Expected visible control or panel "${label}", but it was not found.`);
     }
-  }
 
-  await locator.first().waitFor({ state: "visible", timeout: 15000 });
+    for (let index = 0; index < count; index += 1) {
+      if (await locator.nth(index).isVisible()) {
+        return;
+      }
+    }
+
+    fail(`Expected visible control or panel "${label}", but it never became visible.`);
+  }
 }
 
 async function expectNotPresent(locator, label) {
@@ -45,9 +57,18 @@ async function closeOverlay(page) {
   await page.waitForTimeout(250);
 }
 
-async function openDashboard(page, query = "") {
-  await page.goto(`${BASE_URL}/${query}`, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+async function openShowcase(page) {
+  logStep("Opening /");
+  await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
+  await expectVisible(
+    page.getByRole("heading", { name: "Policy without product is theater.", exact: true }),
+    "Policy without product is theater.",
+  );
+}
+
+async function openWarRoom(page, query = "") {
+  logStep(`Opening /war-room${query}`);
+  await page.goto(`${BASE_URL}/war-room${query}`, { waitUntil: "domcontentloaded" });
   await expectVisible(page.getByRole("button", { name: "Admin", exact: true }), "Admin");
 }
 
@@ -60,7 +81,23 @@ async function fetchJson(path) {
   return response.json();
 }
 
+async function verifyBaseUrl() {
+  logStep(`Checking base URL ${BASE_URL}`);
+  const health = await fetchJson("/api/status");
+  if (health?.name !== "Phuket Dashboard") {
+    fail(
+      `Expected ${BASE_URL} to serve Phuket Dashboard, received ${JSON.stringify(health)}.`,
+    );
+  }
+
+  const showcase = await fetchJson("/api/showcase");
+  if (!Array.isArray(showcase?.scenarios) || showcase.scenarios.length !== 3) {
+    fail("Expected showcase API to expose exactly three scenario cards.");
+  }
+}
+
 async function verifyApiScenarios() {
+  logStep("Verifying API scenarios");
   const live = await fetchJson("/api/operations/dashboard");
   if (!Array.isArray(live.touchpoints) || live.touchpoints.length !== 3) {
     fail("Expected live operations dashboard to expose exactly three touchpoints.");
@@ -108,6 +145,7 @@ async function verifyApiScenarios() {
 }
 
 async function verifyMainControls(page) {
+  logStep("Verifying main controls");
   for (const control of controlManifest.main) {
     await expectVisible(
       page.getByRole("button", { name: control.label, exact: true }),
@@ -141,6 +179,7 @@ async function verifyMainControls(page) {
 }
 
 async function verifyAdminMenu(page) {
+  logStep("Verifying admin menu");
   const adminButton = page.getByRole("button", { name: "Admin", exact: true });
   await adminButton.click({ force: true });
 
@@ -175,9 +214,10 @@ async function verifyAdminMenu(page) {
 }
 
 async function verifyScenarioPages(browser) {
+  logStep("Verifying scenario pages");
   for (const scenario of ["tourism-surge-weekend", "red-monsoon-day"]) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-    await openDashboard(page, `?scenario=${scenario}`);
+    await openWarRoom(page, `?scenario=${scenario}`);
     await expectVisible(page.getByText("Operations desk", { exact: true }), "Operations desk");
     await expectVisible(page.getByText("Bus to boat touchpoints", { exact: true }), "Bus to boat touchpoints");
     await expectVisible(page.getByText("MODELED", { exact: true }), "MODELED");
@@ -185,26 +225,61 @@ async function verifyScenarioPages(browser) {
   }
 }
 
+async function verifyShowcase(browser) {
+  logStep("Verifying showcase");
+  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  await openShowcase(page);
+  await expectVisible(
+    page.getByRole("link", { name: "See Live War Room", exact: true }),
+    "See Live War Room",
+  );
+  await expectVisible(
+    page.getByText("Deterministic scenario cards", { exact: true }),
+    "Deterministic scenario cards",
+  );
+  await expectVisible(
+    page.getByText("Judges should not need live-data luck to understand the product.", {
+      exact: true,
+    }),
+    "Judges should not need live-data luck to understand the product.",
+  );
+
+  await page.getByRole("link", { name: "See Live War Room", exact: true }).click();
+  await expectVisible(page.getByRole("button", { name: "Admin", exact: true }), "Admin");
+  await page.close();
+}
+
 async function verifyResponsiveLayout(browser) {
+  logStep("Verifying responsive layout");
   const wall = await browser.newPage({ viewport: { width: 3840, height: 2160 } });
-  await openDashboard(wall);
+  await openWarRoom(wall);
   await expectVisible(wall.getByText("Phuket operator map", { exact: true }), "Phuket operator map");
   await expectVisible(wall.getByText("Operations desk", { exact: true }), "Operations desk");
   await wall.close();
 
   const desktop = await browser.newPage({ viewport: { width: 1200, height: 900 } });
-  await openDashboard(desktop);
+  await openWarRoom(desktop);
   await expectVisible(desktop.getByText("Operations desk", { exact: true }), "Operations desk");
   await desktop.close();
+
+  const mobile = await browser.newPage({ viewport: { width: 430, height: 932 } });
+  await openShowcase(mobile);
+  await expectVisible(
+    mobile.getByRole("link", { name: "See Live War Room", exact: true }),
+    "See Live War Room",
+  );
+  await mobile.close();
 }
 
 const browser = await chromium.launch({ headless: true });
 
 try {
+  await verifyBaseUrl();
   await verifyApiScenarios();
+  await verifyShowcase(browser);
 
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-  await openDashboard(page);
+  await openWarRoom(page);
   await verifyMainControls(page);
   await verifyAdminMenu(page);
   await page.close();

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cached } from "../../../lib/cache";
 import type { FlightData } from "../../../types/dashboard";
 
 // Bounding box covering Thailand, Cambodia, Myanmar, and Malaysia
@@ -40,27 +41,27 @@ interface OpenSkyState {
   10: number;    // true_track (heading)
 }
 
-export async function GET() {
+async function loadRegionalFlights(): Promise<FlightData[]> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 3000);
 
     const response = await fetch(OPENSKY_URL, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
+      cache: "no-store",
     });
 
     clearTimeout(timeout);
 
     if (!response.ok) {
-      console.error("OpenSky API error:", response.status);
-      return NextResponse.json(fallbackFlights);
+      return fallbackFlights;
     }
 
     const payload = (await response.json()) as { states?: OpenSkyState[] };
 
     if (!payload.states || payload.states.length === 0) {
-      return NextResponse.json(fallbackFlights);
+      return fallbackFlights;
     }
 
     const flights: FlightData[] = payload.states
@@ -68,7 +69,7 @@ export async function GET() {
         (state: OpenSkyState) =>
           state[5] !== null &&
           state[6] !== null &&
-          !state[8], // exclude on-ground
+          !state[8],
       )
       .slice(0, 200)
       .map((state: OpenSkyState) => ({
@@ -83,9 +84,13 @@ export async function GET() {
         on_ground: !!state[8],
       }));
 
-    return NextResponse.json(flights.length > 0 ? flights : fallbackFlights);
-  } catch (error: unknown) {
-    console.error("Flight data error:", error instanceof Error ? error.message : error);
-    return NextResponse.json(fallbackFlights);
+    return flights.length > 0 ? flights : fallbackFlights;
+  } catch {
+    return fallbackFlights;
   }
+}
+
+export async function GET() {
+  const flights = await cached("regional-flights:opensky", 30, loadRegionalFlights);
+  return NextResponse.json(flights);
 }

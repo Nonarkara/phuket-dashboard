@@ -565,10 +565,16 @@ export async function loadOperationsDashboard(options?: {
   scenario?: GovernorScenarioId | null;
 }): Promise<OperationsDashboardResponse> {
   const scenario = options?.scenario ?? "live";
+  const scenarioTraffic = {
+    generatedAt: new Date().toISOString(),
+    provider: "Longdo/ITIC",
+    status: "scenario",
+    events: [],
+  };
   const [arrivals, buses, traffic, rainfall, marine, maritime] = await Promise.all([
     loadFlightArrivals({ scenario }),
     loadPksbBusPositions({ scenario }),
-    loadTrafficFeed(),
+    scenario === "live" ? loadTrafficFeed() : Promise.resolve(scenarioTraffic),
     loadRainfallPoints(),
     loadMarineStatus({ scenario }),
     loadMaritimeSecurity({ scenario }),
