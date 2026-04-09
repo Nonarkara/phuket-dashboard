@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import {
   useEffect,
@@ -369,7 +370,7 @@ function debugLog(
   }
 
   // #region agent log
-  fetch("/api/debug/ingest", {
+  fetch(apiUrl("/api/debug/ingest"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ runId, hypothesisId, location, message, data }),

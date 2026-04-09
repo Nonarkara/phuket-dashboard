@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import {
   useCallback,
@@ -164,7 +165,7 @@ export default function DatabaseExplorerModal({
     setError(null);
 
     try {
-      const response = await fetch("/api/data/catalog", { cache: "no-store" });
+      const response = await fetch(apiUrl("/api/data/catalog"), { cache: "no-store" });
       const payload: unknown = await response.json();
 
       if (!isDatabaseCatalogResponse(payload)) {
@@ -205,7 +206,7 @@ export default function DatabaseExplorerModal({
         table: tableId,
         limit: String(limit),
       });
-      const response = await fetch(`/api/data/table?${params.toString()}`, {
+      const response = await fetch(apiUrl(`/api/data/table?${params.toString()}`), {
         cache: "no-store",
       });
       const payload: unknown = await response.json();

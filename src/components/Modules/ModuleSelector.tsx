@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
@@ -39,7 +40,7 @@ export default function ModuleSelector({ onClose, onEnabledChange }: ModuleSelec
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/modules/catalog")
+    fetch(apiUrl("/api/modules/catalog"))
       .then((res) => res.json())
       .then((json: ModuleCatalogResponse) => {
         setModules(json.modules ?? []);

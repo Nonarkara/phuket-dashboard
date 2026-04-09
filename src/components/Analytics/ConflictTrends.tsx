@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import React from "react";
 import { RefreshCw } from "lucide-react";
@@ -35,7 +36,7 @@ export default function ConflictTrends() {
 
   const load = React.useCallback(
     () =>
-      fetch("/api/conflict-trends")
+      fetch(apiUrl("/api/conflict-trends"))
         .then((res) => res.json())
         .then(setData)
         .catch(() => setData(null)),

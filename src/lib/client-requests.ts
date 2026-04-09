@@ -1,7 +1,10 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+
 export function buildScenarioUrl(path: string, scenarioId?: string | null) {
+  const base = path.startsWith("/api/") ? `${API_BASE}${path}` : path;
   return scenarioId
-    ? `${path}${path.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(scenarioId)}`
-    : path;
+    ? `${base}${base.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(scenarioId)}`
+    : base;
 }
 
 export function isAbortError(error: unknown) {
@@ -12,7 +15,8 @@ export async function fetchJson<T>(
   url: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(url, options);
+  const resolved = url.startsWith("/api/") ? `${API_BASE}${url}` : url;
+  const response = await fetch(resolved, options);
   if (!response.ok) {
     throw new Error(`Request failed for ${url}: HTTP ${response.status}`);
   }

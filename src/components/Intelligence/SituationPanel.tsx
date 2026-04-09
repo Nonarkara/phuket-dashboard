@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useEffect, useState } from "react";
 import {
@@ -48,10 +49,10 @@ export default function SituationPanel({
     const load = async () => {
       try {
         const [weatherRes, trafficRes, flightRes, arrivalsRes] = await Promise.all([
-          fetch("/api/weather/tmd").then((r) => r.ok ? r.json() : null).catch(() => null),
-          fetch("/api/traffic").then((r) => r.ok ? r.json() : null).catch(() => null),
-          fetch("/api/flights").then((r) => r.ok ? r.json() : null).catch(() => null),
-          fetch("/api/flights/arrivals").then((r) => r.ok ? r.json() : null).catch(() => null),
+          fetch(apiUrl("/api/weather/tmd")).then((r) => r.ok ? r.json() : null).catch(() => null),
+          fetch(apiUrl("/api/traffic")).then((r) => r.ok ? r.json() : null).catch(() => null),
+          fetch(apiUrl("/api/flights")).then((r) => r.ok ? r.json() : null).catch(() => null),
+          fetch(apiUrl("/api/flights/arrivals")).then((r) => r.ok ? r.json() : null).catch(() => null),
         ]);
 
         // Extract from governor brief

@@ -29,6 +29,10 @@ const nextConfig = {
       process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ??
       process.env.MAPBOX_ACCESS_TOKEN ??
       "",
+    NEXT_PUBLIC_BASE_PATH: isStaticExport ? "/phuket-dashboard" : "",
+    NEXT_PUBLIC_API_BASE: isStaticExport
+      ? "https://phuket-dashboard.drnon.workers.dev"
+      : "",
   },
   webpack: (config) => {
     config.resolve.alias = {

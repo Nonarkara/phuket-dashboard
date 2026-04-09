@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useEffect, useState } from "react";
 import { Plane, RefreshCw } from "lucide-react";
@@ -67,7 +68,7 @@ export default function FlightArrivals() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("/api/flights/arrivals");
+        const res = await fetch(apiUrl("/api/flights/arrivals"));
         if (res.ok) {
           const json = (await res.json()) as ArrivalsData;
           setData(json);

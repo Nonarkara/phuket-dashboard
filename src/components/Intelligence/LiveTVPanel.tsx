@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, MapPin, Tv, Volume2, VolumeX } from "lucide-react";
@@ -32,7 +33,7 @@ function TVSlot({
 
   useEffect(() => {
     if (channelHandle && !dynamicId) {
-      fetch(`/api/live-tv?handle=${encodeURIComponent(channelHandle)}`)
+      fetch(apiUrl(`/api/live-tv?handle=${encodeURIComponent(channelHandle)}`))
         .then((response) => response.json())
         .then((data) => {
           if (data.videoId) {

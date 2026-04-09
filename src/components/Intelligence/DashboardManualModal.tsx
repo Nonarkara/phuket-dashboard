@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { assetPath } from "../../lib/asset-path";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
@@ -271,7 +272,7 @@ export default function DashboardManualModal({
           <figure className="order-1 flex min-h-0 flex-col lg:order-2">
             <div className="dashboard-panel flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[24px] border-[var(--line-bright)] p-3 sm:p-4">
               <Image
-                src={page.imageSrc}
+                src={assetPath(page.imageSrc)}
                 alt={page.imageAlt}
                 width={1600}
                 height={1200}

@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import React from "react";
 import { RefreshCw } from "lucide-react";
@@ -92,7 +93,7 @@ export default function EconomicMonitor() {
 
   const fetchEconomics = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/markets");
+      const res = await fetch(apiUrl("/api/markets"));
       const payload: unknown = await res.json();
 
       if (isMarketRadarResponse(payload)) {

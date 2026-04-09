@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { assetPath, apiUrl } from "../../lib/asset-path";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type {
   ExecutiveStatus,
@@ -68,7 +69,7 @@ export default function TopBar({
   useEffect(() => {
     const loadNews = async () => {
       try {
-        const res = await fetch(`/api/news/multilingual?t=${Date.now()}`);
+        const res = await fetch(apiUrl(`/api/news/multilingual?t=${Date.now()}`));
         if (res.ok) {
           const data = await res.json();
           const all = [...(data.en ?? []), ...(data.th ?? [])];
@@ -92,7 +93,7 @@ export default function TopBar({
 
   const loadTrend = async (range: string) => {
     try {
-      const res = await fetch(`/api/governor/trend?range=${range}`);
+      const res = await fetch(apiUrl(`/api/governor/trend?range=${range}`));
       if (res.ok) setTrendData(await res.json());
     } catch { /* silent */ }
   };
@@ -113,7 +114,7 @@ export default function TopBar({
   useEffect(() => {
     const loadNarrative = async () => {
       try {
-        const res = await fetch("/api/governor/popularity");
+        const res = await fetch(apiUrl("/api/governor/popularity"));
         if (res.ok) {
           const data = (await res.json()) as GovernorNarrativeResponse;
           if (data && typeof data.mentionCount === "number") {
@@ -157,21 +158,21 @@ export default function TopBar({
           {/* Logos */}
           <div className="hidden sm:flex items-center gap-1.5 shrink-0">
             <Image
-              src="/logos/slic.jpg"
+              src={assetPath("/logos/slic.jpg")}
               alt="SLIC"
               width={50}
               height={24}
               className="h-6 min-[3000px]:h-10 w-auto rounded-sm"
             />
             <Image
-              src="/logos/depa.jpg"
+              src={assetPath("/logos/depa.jpg")}
               alt="depa"
               width={50}
               height={24}
               className="h-6 min-[3000px]:h-10 w-auto rounded-sm"
             />
             <Image
-              src="/logos/smart-city-thailand.jpg"
+              src={assetPath("/logos/smart-city-thailand.jpg")}
               alt="Smart City Thailand"
               width={70}
               height={24}
@@ -434,7 +435,7 @@ export default function TopBar({
                 className="flex shrink-0 items-center gap-1.5 border border-[var(--line)] px-1.5 py-0.5"
               >
                 <Image
-                  src={origin.logo}
+                  src={assetPath(origin.logo)}
                   alt={origin.country}
                   width={12}
                   height={12}

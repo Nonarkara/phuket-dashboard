@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useEffect, useState } from "react";
 import type {
@@ -77,7 +78,7 @@ export default function ConvergenceAlerts() {
   useEffect(() => {
     const load = async () => {
       try {
-        const response = await fetch("/api/intelligence/convergence");
+        const response = await fetch(apiUrl("/api/intelligence/convergence"));
         const nextPayload: unknown = await response.json();
         if (isCorridorConvergenceResponse(nextPayload)) setPayload(nextPayload);
       } catch {

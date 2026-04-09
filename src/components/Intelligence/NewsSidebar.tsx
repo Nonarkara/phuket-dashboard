@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, ExternalLink, Globe, Newspaper } from "lucide-react";
@@ -169,7 +170,7 @@ export default function NewsSidebar() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/news/multilingual?t=${Date.now()}`);
+        const res = await fetch(apiUrl(`/api/news/multilingual?t=${Date.now()}`));
         if (res.ok) {
           setData(await res.json());
         }

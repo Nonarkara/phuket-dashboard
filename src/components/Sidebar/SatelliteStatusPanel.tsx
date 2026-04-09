@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Satellite } from "lucide-react";
@@ -41,7 +42,7 @@ export default function SatelliteStatusPanel() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/satellite/catalog");
+      const response = await fetch(apiUrl("/api/satellite/catalog"));
       const data: unknown = await response.json();
       if (isCatalogPayload(data)) setPayload(data);
     } catch {

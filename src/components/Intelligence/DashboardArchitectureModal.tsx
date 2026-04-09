@@ -1,4 +1,5 @@
 "use client";
+import { apiUrl } from "../../lib/asset-path";
 
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import {
@@ -600,7 +601,7 @@ export default function DashboardArchitectureModal({
 
   const loadStatus = useCallback(async () => {
     try {
-      const response = await fetch("/api/status");
+      const response = await fetch(apiUrl("/api/status"));
       const payload: unknown = await response.json();
 
       if (isStatusPayload(payload)) {
