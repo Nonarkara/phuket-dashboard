@@ -11,7 +11,11 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test:ui": "node scripts/test-ui.mjs"
+    "test:ui": "node scripts/test-ui.mjs",
+    "build:cf": "npx @opennextjs/cloudflare build",
+    "deploy:cf": "npx @opennextjs/cloudflare build && wrangler pages deploy",
+    "preview:cf": "npx @opennextjs/cloudflare build && wrangler pages dev",
+    "build:static": "node scripts/static-export.mjs"
   },
   "dependencies": {
     "@deck.gl/aggregation-layers": "^9.2.11",
@@ -52,6 +56,7 @@
     "typescript": "^5"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.18.0",
     "playwright": "^1.58.2"
   }
 }

@@ -111,25 +111,25 @@ export default function ShowcaseScrollStory({
       ref={rootRef}
       className="grid gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start"
     >
-      <ol className="space-y-8 lg:space-y-16">
+      <ol className="space-y-4 lg:space-y-6">
         {corridors.map((corridor, index) => {
           const isActive = corridor.id === activeCorridor.id;
           return (
             <li
               key={corridor.id}
               data-story-step
-              className={`border px-5 py-5 transition-colors duration-300 ${
+              className={`border px-4 py-4 transition-colors duration-300 backdrop-blur-sm ${
                 isActive
-                  ? "border-[var(--ink)] bg-[rgba(255,247,230,0.88)]"
-                  : "border-[rgba(17,17,17,0.1)] bg-[rgba(255,255,255,0.68)]"
+                  ? "border-[var(--cool)] bg-[var(--panel-strong)]"
+                  : "border-[var(--line)] bg-[var(--panel)]"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--dim)]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--dim)] [font-family:var(--font-mono)]">
                     {String(index + 1).padStart(2, "0")}
                   </div>
-                  <h3 className="mt-1 text-[22px] font-semibold tracking-[-0.04em] text-[var(--ink)] [font-family:var(--font-display)]">
+                  <h3 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[var(--ink)]">
                     {corridor.label}
                   </h3>
                 </div>
@@ -141,26 +141,26 @@ export default function ShowcaseScrollStory({
                   {corridor.lensId}
                 </div>
               </div>
-              <p className="mt-3 text-[14px] leading-7 text-[var(--muted)]">
+              <p className="mt-2 text-[13px] leading-6 text-[var(--muted)]">
                 {corridor.summary}
               </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="border border-[rgba(17,17,17,0.1)] bg-[rgba(255,255,255,0.68)] px-3 py-3">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="border border-[var(--line)] bg-[var(--bg-surface)] px-3 py-2.5">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
                     Signal
                   </div>
-                  <div className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[var(--ink)]">
+                  <div className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[var(--ink)] [font-family:var(--font-mono)]">
                     {corridor.signalValue}
                   </div>
-                  <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-[var(--dim)]">
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dim)]">
                     {corridor.signalLabel}
                   </div>
                 </div>
-                <div className="border border-[rgba(17,17,17,0.1)] bg-[rgba(255,255,255,0.68)] px-3 py-3">
+                <div className="border border-[var(--line)] bg-[var(--bg-surface)] px-3 py-2.5">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
                     Action
                   </div>
-                  <p className="mt-1 text-[13px] leading-6 text-[var(--ink)]">
+                  <p className="mt-1 text-[12px] leading-5 text-[var(--ink)]">
                     {corridor.action}
                   </p>
                 </div>
@@ -172,9 +172,9 @@ export default function ShowcaseScrollStory({
 
       <div
         data-story-stage
-        className="top-24 space-y-5 lg:sticky"
+        className="top-24 space-y-4 lg:sticky"
       >
-        <div className="overflow-hidden border border-[rgba(17,17,17,0.12)] bg-[linear-gradient(160deg,rgba(6,15,28,0.98),rgba(10,30,48,0.94)_55%,rgba(24,68,83,0.88))] px-6 py-6 text-white">
+        <div className="overflow-hidden border border-[var(--line-bright)] bg-[var(--ink)] px-5 py-5 text-white">
           <div className="flex flex-wrap items-center gap-2">
             {lenses.map((lens) => {
               const active = lens.id === activeCorridor.lensId;
@@ -183,8 +183,8 @@ export default function ShowcaseScrollStory({
                   key={lens.id}
                   className={`border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] transition-colors ${
                     active
-                      ? "border-white bg-white text-[#081424]"
-                      : "border-white/25 text-white/70"
+                      ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+                      : "border-white/20 text-white/60"
                   }`}
                 >
                   {lens.label}
@@ -193,65 +193,65 @@ export default function ShowcaseScrollStory({
             })}
           </div>
 
-          <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.24em] text-white/60">
+              <div className="text-[10px] uppercase tracking-[0.24em] text-white/50">
                 Active corridor
               </div>
-              <h3 className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.05em] [font-family:var(--font-display)]">
+              <h3 className="mt-2 text-[26px] font-semibold leading-none tracking-[-0.03em]">
                 {activeCorridor.label}
               </h3>
-              <p className="mt-4 max-w-[36ch] text-[14px] leading-7 text-white/74">
+              <p className="mt-3 max-w-[36ch] text-[13px] leading-6 text-white/70">
                 {activeCorridor.summary}
               </p>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="border border-white/16 bg-white/6 px-3 py-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/56">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="border border-white/12 bg-white/5 px-3 py-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
                     Signal
                   </div>
-                  <div className="mt-2 text-[18px] font-semibold tracking-[-0.03em] text-white">
+                  <div className="mt-1.5 text-[16px] font-semibold tracking-[-0.02em] text-white [font-family:var(--font-mono)]">
                     {activeCorridor.signalValue}
                   </div>
-                  <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/56">
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/50">
                     {activeCorridor.signalLabel}
                   </div>
                 </div>
-                <div className="border border-white/16 bg-white/6 px-3 py-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/56">
+                <div className="border border-white/12 bg-white/5 px-3 py-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/50">
                     Focus areas
                   </div>
-                  <div className="mt-2 text-[14px] leading-6 text-white/82">
+                  <div className="mt-1.5 text-[13px] leading-5 text-white/80">
                     {activeCorridor.focusAreas.join(" / ")}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="border border-white/12 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_42%),rgba(255,255,255,0.04)] px-4 py-4">
+            <div className="border border-white/10 bg-white/3 px-4 py-4">
               <svg
                 viewBox="0 0 100 100"
-                className="h-[320px] w-full"
+                className="h-[280px] w-full"
                 aria-hidden="true"
               >
                 <defs>
                   <linearGradient id="corridor-glow" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="rgba(255,223,166,1)" />
+                    <stop offset="0%" stopColor="rgba(15,111,136,1)" />
                     <stop offset="100%" stopColor="rgba(87,220,208,1)" />
                   </linearGradient>
                 </defs>
 
                 <path
                   d="M14 20C22 16 30 12 40 16C51 20 57 28 66 32C78 37 84 45 88 57C92 69 84 82 72 84C59 86 49 82 39 75C29 68 18 57 15 44C13 36 9 26 14 20Z"
-                  fill="rgba(255,255,255,0.06)"
-                  stroke="rgba(255,255,255,0.14)"
+                  fill="rgba(255,255,255,0.04)"
+                  stroke="rgba(255,255,255,0.10)"
                   strokeWidth="0.8"
                 />
                 <polyline
                   points={connectionPoints}
                   fill="none"
                   stroke="url(#corridor-glow)"
-                  strokeOpacity="0.65"
+                  strokeOpacity="0.6"
                   strokeWidth="0.9"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -265,14 +265,14 @@ export default function ShowcaseScrollStory({
                       transform={`translate(${corridor.mapPosition.x} ${corridor.mapPosition.y})`}
                     >
                       <circle
-                        r={active ? 7.5 : 4.7}
-                        fill={active ? "rgba(255,223,166,0.24)" : "rgba(255,255,255,0.08)"}
-                        stroke={active ? "#ffdfa6" : "rgba(255,255,255,0.24)"}
+                        r={active ? 7 : 4.5}
+                        fill={active ? "rgba(15,111,136,0.3)" : "rgba(255,255,255,0.06)"}
+                        stroke={active ? "var(--cool)" : "rgba(255,255,255,0.20)"}
                         strokeWidth={active ? 1.4 : 1}
                       />
                       <circle
-                        r={active ? 2.4 : 1.9}
-                        fill={active ? "#ffdfa6" : "#9fe1db"}
+                        r={active ? 2.2 : 1.8}
+                        fill={active ? "#57dcd0" : "rgba(255,255,255,0.40)"}
                       />
                     </g>
                   );
@@ -288,16 +288,16 @@ export default function ShowcaseScrollStory({
             return (
               <div
                 key={lens.id}
-                className={`border px-4 py-4 transition-colors duration-300 ${
+                className={`border px-4 py-3 transition-colors duration-300 backdrop-blur-sm ${
                   active
-                    ? "border-[var(--ink)] bg-[rgba(255,248,235,0.92)]"
-                    : "border-[rgba(17,17,17,0.1)] bg-[rgba(255,255,255,0.72)]"
+                    ? "border-[var(--cool)] bg-[var(--panel-strong)]"
+                    : "border-[var(--line)] bg-[var(--panel)]"
                 }`}
               >
                 <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
                   {lens.label}
                 </div>
-                <p className="mt-2 text-[13px] leading-6 text-[var(--muted)]">
+                <p className="mt-1.5 text-[12px] leading-5 text-[var(--muted)]">
                   {lens.summary}
                 </p>
               </div>

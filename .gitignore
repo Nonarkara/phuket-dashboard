@@ -43,3 +43,9 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Cursor IDE
+.cursor
+
+# OpenNext build output
+.open-next
