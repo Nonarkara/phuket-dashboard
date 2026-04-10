@@ -1,6 +1,7 @@
 "use client";
 
 import { ListTodo, Radio, Video } from "lucide-react";
+import { SkeletonStrip } from "../Skeleton";
 import type {
   DataFreshness,
   FeedMode,
@@ -148,9 +149,7 @@ export default function OpsControlStrip({
                 </div>
               ))
             ) : (
-              <div className="border border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2 text-[11px] text-[var(--dim)]">
-                Loading operator actions...
-              </div>
+              <SkeletonStrip />
             )}
           </div>
         </div>
@@ -191,9 +190,7 @@ export default function OpsControlStrip({
                 </div>
               ))
             ) : (
-              <div className="border border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2 text-[11px] text-[var(--dim)]">
-                Loading feed health...
-              </div>
+              <SkeletonStrip />
             )}
           </div>
         </div>
@@ -219,9 +216,7 @@ export default function OpsControlStrip({
             </div>
           ))
         ) : (
-          <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[10px] text-[var(--dim)]">
-            Loading operator actions...
-          </div>
+          <SkeletonStrip />
         )}
         <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5">
           <div className="flex items-center gap-1.5">
@@ -246,9 +241,7 @@ export default function OpsControlStrip({
             </div>
           ))
         ) : (
-          <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[10px] text-[var(--dim)]">
-            Loading feed health...
-          </div>
+          <SkeletonStrip />
         )}
       </div>
     </section>

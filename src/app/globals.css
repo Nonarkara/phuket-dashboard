@@ -12,9 +12,9 @@
 }
 
 :root {
-  --font-ui: "SF Pro Display", "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
-  --font-mono: "IBM Plex Mono", "SF Mono", "JetBrains Mono", monospace;
+  --font-ui: var(--font-inter), "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif;
+  --font-display: var(--font-inter), "Iowan Old Style", "Palatino Linotype", serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", "SF Mono", "JetBrains Mono", monospace;
   --bg: #efede5;
   --bg-raised: #f5f3ec;
   --bg-surface: rgba(245, 243, 236, 0.94);
@@ -207,6 +207,54 @@ main[data-surface="phuket-dashboard"] [class*="shadow-"] {
 
 ::selection {
   background: rgba(17, 17, 17, 0.12);
+}
+
+/* ── Dark mode (war room) ── */
+.dark {
+  --bg: #0d1117;
+  --bg-raised: #161b22;
+  --bg-surface: rgba(22, 27, 34, 0.94);
+  --panel: rgba(22, 27, 34, 0.9);
+  --panel-strong: rgba(30, 36, 44, 0.98);
+  --line: rgba(240, 240, 240, 0.08);
+  --line-bright: rgba(240, 240, 240, 0.14);
+  --ink: #e6edf3;
+  --muted: #8b949e;
+  --dim: #6e7681;
+  --accent: #e6edf3;
+  --accent-soft: #8b949e;
+  --cool: #58a6ff;
+  --cool-dim: rgba(88, 166, 255, 0.1);
+  --danger: #f85149;
+  --success: #3fb950;
+}
+
+.dark .map-overlay-panel {
+  background: rgba(22, 27, 34, 0.88);
+}
+
+.dark .skip-link {
+  background: #161b22;
+}
+
+.dark ::selection {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(200, 210, 220, 0.25);
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-raised) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 
 :focus-visible {

@@ -16,6 +16,7 @@ import {
   Filler,
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
+import { SkeletonChart } from "../Skeleton";
 import type { ConflictTrendsResponse } from "../../types/dashboard";
 
 ChartJS.register(
@@ -56,9 +57,7 @@ export default function ConflictTrends() {
 
   if (!data) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-[var(--bg-surface)] select-none">
-        <span className="eyebrow">Preparing operating trend view</span>
-      </div>
+      <div className="flex h-full items-center justify-center"><SkeletonChart /></div>
     );
   }
 
@@ -113,6 +112,7 @@ export default function ConflictTrends() {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: { duration: 800, easing: "easeOutQuart" as const },
     plugins: {
       legend: { display: false },
       tooltip: {

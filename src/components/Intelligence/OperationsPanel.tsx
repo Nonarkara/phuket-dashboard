@@ -10,6 +10,7 @@ import {
   Route,
 } from "lucide-react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
+import { SkeletonOpsPanel } from "../Skeleton";
 import type {
   DemandSupplySnapshot,
   ExecutiveStatus,
@@ -272,11 +273,7 @@ export default function OperationsPanel({ data }: OperationsPanelProps) {
   const is4K = useWarRoomScale();
 
   if (!data) {
-    return (
-      <div className="flex h-full items-center justify-center border-l border-[var(--line)] bg-[var(--bg-raised)] px-6 text-[11px] uppercase tracking-[0.18em] text-[var(--dim)]">
-        Loading operations desk
-      </div>
-    );
+    return <SkeletonOpsPanel />;
   }
 
   return (

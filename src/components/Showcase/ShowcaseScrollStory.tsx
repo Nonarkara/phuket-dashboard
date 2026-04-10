@@ -58,6 +58,18 @@ export default function ShowcaseScrollStory({
             { opacity: 1, y: 0, duration: 0.9, ease: "power2.out" },
           );
 
+          const polyline = rootRef.current?.querySelector("polyline");
+          if (polyline) {
+            const length = (polyline as SVGPolylineElement).getTotalLength();
+            gsap.set(polyline, { strokeDasharray: length, strokeDashoffset: length });
+            gsap.to(polyline, {
+              strokeDashoffset: 0,
+              duration: 2.4,
+              ease: "power2.inOut",
+              scrollTrigger: { trigger: polyline, start: "top 80%" },
+            });
+          }
+
           rootRef.current
             ?.querySelectorAll<HTMLElement>("[data-story-step]")
             .forEach((step, index) => {

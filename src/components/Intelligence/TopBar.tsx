@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { assetPath, apiUrl } from "../../lib/asset-path";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Moon, Sun } from "lucide-react";
 import type {
   ExecutiveStatus,
   GovernorBrief,
@@ -18,6 +18,8 @@ interface TopBarProps {
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
   onOpenModuleSelector?: () => void;
+  isDark?: boolean;
+  onToggleDark?: () => void;
 }
 
 function formatMainClock() {
@@ -49,6 +51,8 @@ export default function TopBar({
   onOpenArchitecture,
   onOpenDataExplorer,
   onOpenModuleSelector,
+  isDark,
+  onToggleDark,
 }: TopBarProps) {
   const [time, setTime] = useState("");
   const [narrative, setNarrative] = useState<GovernorNarrativeResponse | null>(null);
@@ -190,6 +194,7 @@ export default function TopBar({
           <div className="hidden items-center gap-1.5 border border-[var(--line)] px-2 py-1 lg:flex">
             <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Posture</span>
             <span
+              role="status"
               className={`border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.16em] ${statusClasses(
                 brief?.posture.level ?? "watch",
               )}`}
@@ -350,6 +355,16 @@ export default function TopBar({
             </span>
           </div>
           <div className="hidden h-6 w-[1px] bg-[var(--line)] sm:block" />
+          {onToggleDark && (
+            <button
+              type="button"
+              onClick={onToggleDark}
+              className="border border-[var(--line)] px-2 py-1 text-[var(--dim)] transition-colors hover:text-[var(--ink)]"
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDark ? <Sun size={12} /> : <Moon size={12} />}
+            </button>
+          )}
           <div ref={adminMenuRef} className="relative">
             <button
               type="button"

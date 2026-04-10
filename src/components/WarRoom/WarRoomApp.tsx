@@ -13,6 +13,7 @@ import ProvinceDashboard from "../Analytics/ProvinceDashboard";
 import BorderMap from "../Map/BorderMap";
 import NewsSidebar from "../Intelligence/NewsSidebar";
 import ModuleSelector from "../Modules/ModuleSelector";
+import { useDarkMode } from "../../hooks/useDarkMode";
 import {
   buildScenarioUrl,
   fetchJsonOrNull,
@@ -65,6 +66,7 @@ function WarRoomShell({
 }: {
   scenarioId: string | null;
 }) {
+  const [isDark, toggleDark] = useDarkMode();
   const [selectedProvince, setSelectedProvince] =
     useState<ProvinceSelection | null>(null);
   const [selectedCorridorId, setSelectedCorridorId] = useState("airport-patong");
@@ -240,6 +242,8 @@ function WarRoomShell({
         onOpenArchitecture={openArchitecture}
         onOpenDataExplorer={openDataExplorer}
         onOpenModuleSelector={() => setIsModuleSelectorOpen(true)}
+        isDark={isDark}
+        onToggleDark={toggleDark}
       />
 
       <OpsControlStrip operations={operations} cameraFeed={cameraPayload} />

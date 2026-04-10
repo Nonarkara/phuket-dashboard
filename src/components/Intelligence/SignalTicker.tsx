@@ -124,7 +124,7 @@ export default function SignalTicker({
   const items = is4K ? [...coreItems, ...extraItems] : coreItems;
 
   return (
-    <section className={`grid bg-[var(--bg-surface)] h-[28px] min-[3000px]:h-[48px] grid-cols-2 lg:grid-cols-4 min-[3000px]:grid-cols-8`}>
+    <section aria-live="polite" className={`grid bg-[var(--bg-surface)] h-[28px] min-[3000px]:h-[48px] grid-cols-2 lg:grid-cols-4 min-[3000px]:grid-cols-8`}>
       {items.map((item) => {
         const toneClass =
           item.tone === "up"

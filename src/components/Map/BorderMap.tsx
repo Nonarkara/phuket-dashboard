@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "../../lib/asset-path";
+import MapLegend from "./MapLegend";
 
 import {
   useEffect,
@@ -1126,6 +1127,7 @@ export default function BorderMap({
                 <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
               )}
             </DeckGL>
+            <MapLegend />
           </div>
 
           {/* Wireframe street map (4K split-view only) */}

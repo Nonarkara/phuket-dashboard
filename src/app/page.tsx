@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import AnimatedCounter from "../components/AnimatedCounter";
 import ShowcaseScrollStory from "../components/Showcase/ShowcaseScrollStory";
 import { buildScenarioUrl } from "../lib/client-requests";
 import { resolveScenario } from "../lib/scenario";
@@ -163,7 +164,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     {metric.label}
                   </div>
                   <div className="mt-2 text-[36px] font-semibold leading-none tracking-[-0.04em] text-[var(--ink)] [font-family:var(--font-mono)]">
-                    {metric.value}
+                    <AnimatedCounter value={metric.value} />
                   </div>
                   <p className="mt-2 text-[13px] leading-6 text-[var(--muted)]">
                     {metric.detail}
@@ -342,6 +343,66 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </section>
 
+        <section className="border-y border-[rgba(17,17,17,0.08)] bg-[rgba(255,250,242,0.52)]">
+          <div className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
+            <div className="max-w-3xl">
+              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[var(--dim)]">
+                Design philosophy
+              </div>
+              <h2 className="mt-4 text-[clamp(2.2rem,4.6vw,4.2rem)] font-semibold leading-[0.96] tracking-[-0.06em] text-[var(--ink)] [font-family:var(--font-display)]">
+                Clarity is the feature.
+              </h2>
+            </div>
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Zero decoration", detail: "No gradients, no shadows, no rounded corners. Every pixel carries signal." },
+                { label: "Information density", detail: "A governor glances once and reads posture. An operator drills into corridors without switching screens." },
+                { label: "Operational legibility", detail: "Red means intervene. Amber means watch. Teal means stable. The same language everywhere." },
+                { label: "Graceful degradation", detail: "Live, hybrid, modeled, degraded. The system always tells the truth about what it knows and when." },
+              ].map((principle) => (
+                <div key={principle.label} className="border border-[rgba(17,17,17,0.08)] bg-[rgba(255,255,255,0.78)] px-5 py-5">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--ink)]">
+                    {principle.label}
+                  </div>
+                  <p className="mt-3 text-[14px] leading-7 text-[var(--muted)]">
+                    {principle.detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <div className="max-w-3xl">
+            <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[var(--dim)]">
+              For evaluators
+            </div>
+            <h2 className="mt-4 text-[clamp(2rem,4vw,3.4rem)] font-semibold leading-[0.98] tracking-[-0.05em] text-[var(--ink)] [font-family:var(--font-display)]">
+              Three minutes to understand the product.
+            </h2>
+          </div>
+          <div className="mt-10 grid gap-4 lg:grid-cols-3">
+            {[
+              { step: "01", title: "Read the showcase", detail: "Scroll this page. The story explains the problem, the corridors, and the stress-test scenarios." },
+              { step: "02", title: "Open a scenario", detail: "Click any scenario card above. The war room loads with deterministic data so you see the product under pressure." },
+              { step: "03", title: "Enter the live wall", detail: "Open the war room without a scenario. Real feeds, real weather, real maritime data. Toggle dark mode for the full operating picture." },
+            ].map((item) => (
+              <div key={item.step} className="border border-[rgba(17,17,17,0.08)] bg-[rgba(255,255,255,0.72)] px-5 py-5">
+                <div className="text-[28px] font-semibold tracking-[-0.06em] text-[var(--dim)] [font-family:var(--font-display)]">
+                  {item.step}
+                </div>
+                <h3 className="mt-2 text-[15px] font-semibold text-[var(--ink)]">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-[13px] leading-6 text-[var(--muted)]">
+                  {item.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="border-t border-[var(--line)] bg-[var(--ink)] text-white">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-10 sm:px-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
             <div className="max-w-3xl">
@@ -372,6 +433,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   {link.scenario.replaceAll("-", " ")}
                 </Link>
               ))}
+            </div>
+
+            <div className="mt-8 border-t border-white/10 pt-6 text-[11px] tracking-[0.12em] text-white/44 lg:mt-0 lg:border-t-0 lg:pt-0">
+              Designed and engineered by Dr Non Arkaraprasertkul
             </div>
           </div>
         </section>
