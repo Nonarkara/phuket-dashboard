@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s | Phuket Dashboard",
   },
   description:
-    "Curated showcase plus live war room for Phuket Dashboard. Coastal corridor intelligence, modeled scenarios, maritime posture, weather operations, tourism demand, and resilient civic decision support in one product.",
+    "Live operations + Governor's Daily Brief for Phuket. Today's fires, wins ready to announce, tomorrow's risk, and reality checks comparing public narrative to measured ground truth across corridors, marine, weather, and transit.",
   applicationName: "Phuket Dashboard",
   authors: [{ name: "Phuket Dashboard" }],
   creator: "Phuket Dashboard",
@@ -45,27 +45,27 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   openGraph: {
-    title: "Phuket Dashboard",
+    title: "Phuket Dashboard — Governor's Daily Brief",
     description:
-      "Curated showcase plus live war room for Phuket Dashboard. Coastal corridor intelligence, modeled scenarios, and resilient civic decision support in one product.",
+      "Live operations + Governor's Daily Brief: today's fires, wins, risks, and a reality check comparing public narrative to ground truth.",
     type: "website",
     locale: "en_US",
-    url: "/",
+    url: "/war-room",
     siteName: "Phuket Dashboard",
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Phuket Dashboard showcase preview",
+        alt: "Phuket Dashboard — Governor's Daily Brief",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Phuket Dashboard",
+    title: "Phuket Dashboard — Governor's Daily Brief",
     description:
-      "Curated showcase plus live war room for Phuket Dashboard. Coastal corridor intelligence, modeled scenarios, and resilient civic decision support in one product.",
+      "Live operations + Governor's Daily Brief: today's fires, wins, risks, and a reality check comparing public narrative to ground truth.",
     images: ["/twitter-image"],
   },
   robots: {
@@ -87,6 +87,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${ibmPlexMono.variable}`}>
+      <head>
+        {/* Cloudflare Web Analytics — cookie-free, GDPR clean */}
+        <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "0da324da0e204440a172088c0fafc92c"}' />
+      </head>
       <body className="bg-[var(--bg)] text-[var(--ink)] antialiased">
         <a href="#main-content" className="skip-link">
           Skip to main content
