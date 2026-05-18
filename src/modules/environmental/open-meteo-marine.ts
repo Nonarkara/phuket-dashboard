@@ -59,12 +59,14 @@ function floodRisk(h: number): string {
 }
 
 async function fetchStation(lat: number, lon: number) {
-  // Open-Meteo Marine API — current + next hour
+  // Open-Meteo Marine API — current conditions
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
     `&current=wave_height,wave_period,wave_direction,swell_wave_height,` +
     `sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
     `&length_unit=metric&timezone=Asia%2FBangkok`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  // Note: no AbortSignal.timeout — flaky on Cloudflare Workers,
+  // platform applies its own timeout.
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Marine API ${res.status}`);
   return res.json();
 }

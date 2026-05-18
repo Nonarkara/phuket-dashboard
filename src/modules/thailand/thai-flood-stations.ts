@@ -61,7 +61,7 @@ async function fetchPhuketRain24h(lat: number, lon: number): Promise<number> {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&past_hours=24&hourly=precipitation&timezone=Asia%2FBangkok`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url);
     if (!res.ok) return 0;
     const json = await res.json();
     const precip: number[] = json?.hourly?.precipitation ?? [];
