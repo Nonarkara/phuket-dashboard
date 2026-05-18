@@ -58,13 +58,21 @@ function floodRisk(h: number): string {
   return "Severe — coastal flooding very likely at high tide.";
 }
 
+/** Manual timeout — race fetch against a setTimeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function fetchStation(lat: number, lon: number) {
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
     `&current=wave_height,wave_period,wave_direction,swell_wave_height,` +
     `sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
     `&length_unit=metric&timezone=Asia%2FBangkok`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Marine API ${res.status}`);
+  const res = await withTimeout(fetch(url), 6000);
+  if (!res || !res.ok) return null;
   return res.json();
 }
 
@@ -83,13 +91,12 @@ export const openMeteoMarineModule: ModuleDefinition<MarineReading[]> = {
   ],
 
   async fetchData() {
-    // Per-station, parallel via Promise.allSettled — partial failures don't kill the response
     const settled = await Promise.allSettled(
       PHUKET_MARINE_STATIONS.map((s) => fetchStation(s.lat, s.lon)),
     );
     const out: MarineReading[] = [];
     settled.forEach((result, i) => {
-      if (result.status !== "fulfilled") return;
+      if (result.status !== "fulfilled" || !result.value) return;
       const s = PHUKET_MARINE_STATIONS[i];
       const c = result.value?.current ?? {};
       const waveH = Number(c.wave_height ?? 0);
@@ -111,6 +118,11 @@ export const openMeteoMarineModule: ModuleDefinition<MarineReading[]> = {
         timestamp: c.time ?? new Date().toISOString(),
       });
     });
+    // If every fetch timed out (marine-api unreachable from edge), fall back to
+    // mockData so the map still has markers and the side panel shows context.
+    if (out.length === 0) {
+      return openMeteoMarineModule.mockData ?? [];
+    }
     return out;
   },
 
