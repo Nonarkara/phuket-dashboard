@@ -58,17 +58,20 @@ function floodRisk(h: number): string {
   return "Severe — coastal flooding very likely at high tide.";
 }
 
-async function fetchStation(lat: number, lon: number) {
-  // Open-Meteo Marine API — current conditions
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
+/** Batched fetch — Open-Meteo accepts comma-separated coords in a single call. */
+async function fetchAllStations(stations: typeof PHUKET_MARINE_STATIONS) {
+  const lats = stations.map(s => s.lat).join(",");
+  const lons = stations.map(s => s.lon).join(",");
+  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}` +
     `&current=wave_height,wave_period,wave_direction,swell_wave_height,` +
     `sea_surface_temperature,ocean_current_velocity,ocean_current_direction` +
     `&length_unit=metric&timezone=Asia%2FBangkok`;
-  // Note: no AbortSignal.timeout — flaky on Cloudflare Workers,
-  // platform applies its own timeout.
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Marine API ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  // Multi-location: returns an array of result objects in same order
+  // Single-location: returns one result object
+  return Array.isArray(json) ? json : [json];
 }
 
 export const openMeteoMarineModule: ModuleDefinition<MarineReading[]> = {
@@ -86,35 +89,34 @@ export const openMeteoMarineModule: ModuleDefinition<MarineReading[]> = {
   ],
 
   async fetchData() {
-    const readings = await Promise.all(
-      PHUKET_MARINE_STATIONS.map(async (s) => {
-        try {
-          const data = await fetchStation(s.lat, s.lon);
-          const c = data?.current ?? {};
-          const waveH = Number(c.wave_height ?? 0);
-          return {
-            id: s.id,
-            station: s.name,
-            lat: s.lat,
-            lon: s.lon,
-            waveHeight: waveH,
-            wavePeriod: Number(c.wave_period ?? 0),
-            waveDirection: Number(c.wave_direction ?? 0),
-            swellHeight: Number(c.swell_wave_height ?? 0),
-            sst: Number(c.sea_surface_temperature ?? 0),
-            currentVelocity: Number(c.ocean_current_velocity ?? 0),
-            currentDirection: Number(c.ocean_current_direction ?? 0),
-            riskLevel: classifyWaves(waveH),
-            fishingAdvice: fishingAdvice(waveH, Number(c.wave_period ?? 0)),
-            floodRisk: floodRisk(waveH),
-            timestamp: c.time ?? new Date().toISOString(),
-          } as MarineReading;
-        } catch (err) {
-          return null;
-        }
-      }),
-    );
-    return readings.filter((r): r is MarineReading => r !== null);
+    try {
+      const results = await fetchAllStations(PHUKET_MARINE_STATIONS);
+      return PHUKET_MARINE_STATIONS.map((s, i): MarineReading | null => {
+        const r = results[i];
+        if (!r) return null;
+        const c = r.current ?? {};
+        const waveH = Number(c.wave_height ?? 0);
+        return {
+          id: s.id,
+          station: s.name,
+          lat: s.lat,
+          lon: s.lon,
+          waveHeight: waveH,
+          wavePeriod: Number(c.wave_period ?? 0),
+          waveDirection: Number(c.wave_direction ?? 0),
+          swellHeight: Number(c.swell_wave_height ?? 0),
+          sst: Number(c.sea_surface_temperature ?? 0),
+          currentVelocity: Number(c.ocean_current_velocity ?? 0),
+          currentDirection: Number(c.ocean_current_direction ?? 0),
+          riskLevel: classifyWaves(waveH),
+          fishingAdvice: fishingAdvice(waveH, Number(c.wave_period ?? 0)),
+          floodRisk: floodRisk(waveH),
+          timestamp: c.time ?? new Date().toISOString(),
+        };
+      }).filter((r): r is MarineReading => r !== null);
+    } catch {
+      return [];
+    }
   },
 
   mockData: PHUKET_MARINE_STATIONS.map(s => ({
