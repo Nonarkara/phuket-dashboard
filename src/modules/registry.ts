@@ -38,6 +38,7 @@ import { aqicnThailand } from "./environmental/aqicn-thailand";
 import { tmdWeather } from "./environmental/tmd-weather";
 import { meteoblue } from "./environmental/meteoblue";
 import { meteosourceThai } from "./environmental/meteosource-thai";
+import { openMeteoMarineModule } from "./environmental/open-meteo-marine";
 
 // News & Information
 import { googleTrends } from "./news-info/google-trends";
@@ -52,6 +53,7 @@ import { highwayCameras } from "./thailand/highway-cameras";
 import { thailandOpenData } from "./thailand/thailand-open-data";
 import { thailandAdmin } from "./thailand/thailand-admin";
 import { gtfsBuses } from "./thailand/gtfs-buses";
+import { thaiFloodStationsModule } from "./thailand/thai-flood-stations";
 
 const ALL_MODULES: ModuleDefinition[] = [
   // Earth Observation
@@ -79,6 +81,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   tmdWeather,
   meteoblue,
   meteosourceThai,
+  openMeteoMarineModule,
   // News & Information
   googleTrends,
   newsApi,
@@ -91,6 +94,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   thailandOpenData,
   thailandAdmin,
   gtfsBuses,
+  thaiFloodStationsModule,
 ];
 
 // ── Lookup functions ───────────────────────────────────────────────────────

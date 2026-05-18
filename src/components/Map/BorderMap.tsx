@@ -23,28 +23,59 @@ const DeckGL = dynamic<DeckGLProps>(
   { ssr: false },
 );
 import {
-  createAirQualityHeatmapLayers,
+  createAqiFlagLayers,
   createDisasterAlertLayer,
   createFireLayer,
   createFlightPathsLayer,
-  createHeatmapLayer,
   createIncidentLayer,
+  createKilometerGridLayer,
   createMaritimeTrafficLayers,
   createPksbBusLayers,
   createPksbRouteLayers,
   createPublicCameraLayer,
-  createRasterOverlayLayer,
   createRainfallLayer,
+  createRasterTileLayer,
   createRefugeeLayer,
+  createSeaRoutesLayers,
   createTrafficEventLayers,
   createTourismHotspotLayer,
+  createWaterwaysLayer,
+  createPoiLayers,
+  createRoadNetworkLayer,
+  createCanalsLayer,
+  createFloodStationLayer,
+  createMarineLayer,
+  POI_AMENITY_LABEL,
+  type PoiCollection,
+  type PoiFeature,
+  type RoadCollection,
+  type RoadFeature,
+  type CanalCollection,
+  type CanalFeature,
+  type FloodStationPoint,
+  type MarinePoint,
 } from "../../services/map-engine";
+import {
+  createSatelliteTileLayer,
+  fetchRainViewerLatest,
+  freshnessLabel as satelliteFreshnessLabel,
+  freshnessTier as satelliteFreshnessTier,
+} from "../../services/satellite-layers";
+import type { SatelliteSource } from "../../services/satellite-layers";
+import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
+import { PHUKET_WATERWAYS } from "../../data/phuket-waterways";
+import {
+  BASEMAP_OPTIONS,
+  basemapStyle,
+  type BasemapId,
+} from "../../services/basemap-styles";
 import { luma } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
 import { GOVERNOR_CORRIDORS, findCorridorById } from "../../lib/governor-config";
 import {
   buildScenarioUrl,
   fetchJsonOrFallback,
+  fetchJsonOrNull,
   isAbortError,
 } from "../../lib/client-requests";
 import { getUsableMapboxToken } from "../../lib/mapbox";
@@ -52,7 +83,9 @@ import type {
   AirQualityPoint,
   DisasterAlert,
   DisasterFeedResponse,
+  FeedMode,
   FireEvent,
+  FlightArrivalsResponse,
   IncidentFeature,
   MaritimeSecurityResponse,
   MaritimeVessel,
@@ -73,7 +106,38 @@ import type {
   TourismHotspotsResponse,
 } from "../../types/dashboard";
 
-const MapboxMap = dynamic(() => import("react-map-gl/mapbox"), { ssr: false });
+function countArrivalsNextMinutes(
+  arrivals: ReadonlyArray<{ scheduledTime?: string }>,
+  windowMin: number,
+): number {
+  if (!arrivals.length) return 0;
+  const now = new Date();
+  const bangkokOffsetMin = 7 * 60;
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const nowMin = (utcMin + bangkokOffsetMin + 24 * 60) % (24 * 60);
+  return arrivals.reduce((count, arrival) => {
+    const time = arrival?.scheduledTime;
+    if (!time) return count;
+    const [hh, mm] = time.split(":").map((part) => Number(part));
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return count;
+    const arrMin = hh * 60 + mm;
+    let diff = arrMin - nowMin;
+    if (diff < -12 * 60) diff += 24 * 60;
+    if (diff > 12 * 60) diff -= 24 * 60;
+    return diff >= -10 && diff <= windowMin ? count + 1 : count;
+  }, 0);
+}
+
+function modeDotClass(mode: FeedMode | "unavailable"): string {
+  if (mode === "live") return "bg-[#22c55e]";
+  if (mode === "modeled" || mode === "hybrid") return "bg-[#f59e0b]";
+  if (mode === "degraded") return "bg-[#ef4444]";
+  return "bg-[var(--line)]";
+}
+
+import "maplibre-gl/dist/maplibre-gl.css";
+
+const MapboxMap = dynamic(() => import("react-map-gl/maplibre"), { ssr: false });
 const MAPBOX_TOKEN = getUsableMapboxToken(
   process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
 );
@@ -101,14 +165,42 @@ function notifyLumaReady() {
   lumaReadyListeners.forEach((listener) => listener());
 }
 
+const PHUKET_BOUNDS = {
+  latMin: 7.4,
+  latMax: 8.5,
+  lonMin: 98.0,
+  lonMax: 99.0,
+} as const;
+
+const PHUKET_MIN_ZOOM = 9;
+const PHUKET_MAX_ZOOM = 16;
+
+function clampViewToPhuket(viewState: MapViewState): MapViewState {
+  return {
+    ...viewState,
+    latitude: Math.max(
+      PHUKET_BOUNDS.latMin,
+      Math.min(PHUKET_BOUNDS.latMax, viewState.latitude),
+    ),
+    longitude: Math.max(
+      PHUKET_BOUNDS.lonMin,
+      Math.min(PHUKET_BOUNDS.lonMax, viewState.longitude),
+    ),
+    zoom: Math.max(
+      PHUKET_MIN_ZOOM,
+      Math.min(PHUKET_MAX_ZOOM, viewState.zoom),
+    ),
+  };
+}
+
 const INITIAL_VIEW_STATE: MapViewState = {
   longitude: 98.334,
   latitude: 7.886,
   zoom: 10,
   pitch: 45,
   bearing: -5,
-  minZoom: 5,
-  maxZoom: 18,
+  minZoom: PHUKET_MIN_ZOOM,
+  maxZoom: PHUKET_MAX_ZOOM,
 };
 
 const EMPTY_PKSB_ROUTES = {
@@ -116,28 +208,7 @@ const EMPTY_PKSB_ROUTES = {
   features: [],
 } as const satisfies PksbTransitResponse["routes"];
 
-type BasemapId =
-  | "esri-aerial"
-  | "eox-sentinel2"
-  | "osm-streets"
-  | "carto-light"
-  | "stadia-dark"
-  | "mapbox-satellite"
-  | "mapbox-light";
-
-const BASEMAP_FALLBACK_CHAIN: BasemapId[] = [
-  "eox-sentinel2",
-  "esri-aerial",
-  "osm-streets",
-  "carto-light",
-  "stadia-dark",
-];
-
-const BASEMAP_FALLBACK_CHAIN_WITH_MAPBOX: BasemapId[] = [
-  "mapbox-light",
-  "mapbox-satellite",
-  ...BASEMAP_FALLBACK_CHAIN,
-];
+// Basemap ids, options, and styles live in src/services/basemap-styles.ts
 
 const EMPTY_PKSB_STOPS = {
   type: "FeatureCollection",
@@ -216,118 +287,19 @@ function detectWebglSupport() {
   return Boolean(canvas.getContext("webgl2")) || Boolean(canvas.getContext("webgl"));
 }
 
-type ViewPreset = "operations" | "safety" | "weather" | "tourism";
+type GridScale = "off" | "1km" | "5km" | "10km";
 
 type OverlayState = {
-  rainfallAnomalies: boolean;
-  disasterAlerts: boolean;
-  aqiHeatmap: boolean;
-  incidentHeatmap: boolean;
-  incidentPoints: boolean;
-  thermalHotspots: boolean;
-  populationMovement: boolean;
-  pksbRoutes: boolean;
-  pksbLiveBuses: boolean;
-  maritimeTraffic: boolean;
-  publicCameras: boolean;
-  tourismHotspots: boolean;
-  trafficEvents: boolean;
-  flightPaths: boolean;
+  precipitationRadar: boolean;
+  waterways: boolean;
+  aqiFlag: boolean;
+  publicInfrastructure: boolean;
+  roadNetwork: boolean;
+  canalsDrainage: boolean;
+  floodStations: boolean;
+  marineConditions: boolean;
+  gridScale: GridScale;
 };
-
-const PRESET_LAYER_MAP: Record<ViewPreset, OverlayState> = {
-  operations: {
-    rainfallAnomalies: false,
-    disasterAlerts: false,
-    aqiHeatmap: false,
-    incidentHeatmap: false,
-    incidentPoints: false,
-    thermalHotspots: false,
-    populationMovement: true,
-    pksbRoutes: true,
-    pksbLiveBuses: true,
-    maritimeTraffic: true,
-    publicCameras: true,
-    tourismHotspots: false,
-    trafficEvents: true,
-    flightPaths: false,
-  },
-  safety: {
-    rainfallAnomalies: false,
-    disasterAlerts: true,
-    aqiHeatmap: false,
-    incidentHeatmap: false,
-    incidentPoints: true,
-    thermalHotspots: true,
-    populationMovement: false,
-    pksbRoutes: true,
-    pksbLiveBuses: true,
-    maritimeTraffic: false,
-    publicCameras: true,
-    tourismHotspots: false,
-    trafficEvents: true,
-    flightPaths: false,
-  },
-  weather: {
-    rainfallAnomalies: true,
-    disasterAlerts: true,
-    aqiHeatmap: true,
-    incidentHeatmap: false,
-    incidentPoints: false,
-    thermalHotspots: false,
-    populationMovement: false,
-    pksbRoutes: false,
-    pksbLiveBuses: false,
-    maritimeTraffic: true,
-    publicCameras: false,
-    tourismHotspots: false,
-    trafficEvents: false,
-    flightPaths: false,
-  },
-  tourism: {
-    rainfallAnomalies: false,
-    disasterAlerts: false,
-    aqiHeatmap: false,
-    incidentHeatmap: false,
-    incidentPoints: false,
-    thermalHotspots: false,
-    populationMovement: true,
-    pksbRoutes: true,
-    pksbLiveBuses: true,
-    maritimeTraffic: false,
-    publicCameras: true,
-    tourismHotspots: true,
-    trafficEvents: true,
-    flightPaths: true,
-  },
-};
-
-const LENS_OPTIONS: Array<{
-  id: ViewPreset;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "operations",
-    label: "Operations",
-    description: "Airport transfers, buses, roads, and pier lift.",
-  },
-  {
-    id: "safety",
-    label: "Safety",
-    description: "Incidents, alerts, cameras, and thermal pressure.",
-  },
-  {
-    id: "weather",
-    label: "Weather",
-    description: "Rain load, air quality, sea state, and warnings.",
-  },
-  {
-    id: "tourism",
-    label: "Tourism",
-    description: "Visitor flow, flights, hotspots, and movement load.",
-  },
-];
 
 function interpolateMotionFrame<
   T extends { id: string; lat: number; lng: number; heading?: number | null },
@@ -490,7 +462,60 @@ function isTourismHotspot(value: unknown): value is TourismHotspot {
   );
 }
 
+// ── POI / Road / Canal / Flood tooltip type guards ──
+function isPoiFeature(o: unknown): o is PoiFeature {
+  return !!o && typeof o === "object" && "properties" in o
+    && typeof (o as { properties?: { amenity?: unknown } }).properties?.amenity === "string"
+    && (o as { geometry?: { type?: string } }).geometry?.type === "Point";
+}
+function isRoadFeature(o: unknown): o is RoadFeature {
+  return !!o && typeof o === "object" && "properties" in o
+    && typeof (o as { properties?: { highway?: unknown } }).properties?.highway === "string";
+}
+function isCanalFeature(o: unknown): o is CanalFeature {
+  return !!o && typeof o === "object" && "properties" in o
+    && typeof (o as { properties?: { waterway?: unknown } }).properties?.waterway === "string";
+}
+function isFloodStation(o: unknown): o is FloodStationPoint {
+  return !!o && typeof o === "object" && "warningLevel" in o && "waterLevel" in o;
+}
+function isMarinePoint(o: unknown): o is MarinePoint {
+  return !!o && typeof o === "object" && "waveHeight" in o && "sst" in o && "fishingAdvice" in o;
+}
+
 function getTooltipText(object: unknown): string | null {
+  if (isPoiFeature(object)) {
+    const a = object.properties.amenity;
+    const label = POI_AMENITY_LABEL[a] ?? a;
+    const name  = object.properties.name || label;
+    const parts = [`${label}: ${name}`];
+    if (object.properties.name_th) parts.push(`(${object.properties.name_th})`);
+    if (object.properties.phone)   parts.push(`☎ ${object.properties.phone}`);
+    if (object.properties.address) parts.push(object.properties.address);
+    return parts.join(" • ");
+  }
+
+  if (isRoadFeature(object)) {
+    const h = object.properties.highway;
+    const name = object.properties.name || object.properties.ref || h.toUpperCase();
+    return `${h.toUpperCase()} • ${name}${object.properties.lanes ? ` • ${object.properties.lanes} lanes` : ""}`;
+  }
+
+  if (isCanalFeature(object)) {
+    const w = object.properties.waterway;
+    const name = object.properties.name || w.toUpperCase();
+    return `${w.toUpperCase()} • ${name}`;
+  }
+
+  if (isFloodStation(object)) {
+    const pct = Math.round((object.waterLevel / object.criticalLevel) * 100);
+    return `${object.name} (${object.district}) • ${object.waterLevel}m / ${object.criticalLevel}m crit • ${pct}% • ${object.status.toUpperCase()} • ${object.advice}`;
+  }
+
+  if (isMarinePoint(object)) {
+    return `${object.station} • Wave ${object.waveHeight.toFixed(1)}m (${object.riskLevel.replace("_", " ")}) • SST ${object.sst.toFixed(1)}°C • Current ${object.currentVelocity.toFixed(2)} m/s • 🎣 ${object.fishingAdvice} • 🌊 ${object.floodRisk}`;
+  }
+
   if (isIncidentFeature(object)) {
     return object.properties.notes || object.properties.title;
   }
@@ -579,17 +604,8 @@ export default function BorderMap({
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
   // ─── Basemap: exactly one active at a time (radio) ───
-  const hasMapbox = MAPBOX_TOKEN.length > 0;
-  const [activeBasemap, setActiveBasemap] = useState<BasemapId>(
-    hasMapbox ? "mapbox-light" : "osm-streets",
-  );
+  const [activeBasemap, setActiveBasemap] = useState<BasemapId>("street");
 
-  const [activePreset, setActivePreset] = useState<ViewPreset>("operations");
-
-  const applyPreset = (preset: ViewPreset) => {
-    setActivePreset(preset);
-    setEnabledOverlays({ ...PRESET_LAYER_MAP[preset] });
-  };
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
   const [fires, setFires] = useState<FireEvent[]>([]);
@@ -597,6 +613,11 @@ export default function BorderMap({
   const [rainfall, setRainfall] = useState<RainfallPoint[]>([]);
   const [airQuality, setAirQuality] = useState<AirQualityPoint[]>([]);
   const [flights, setFlights] = useState<FlightData[]>([]);
+  const [arrivalsResp, setArrivalsResp] = useState<FlightArrivalsResponse | null>(null);
+  const [rainViewerSource, setRainViewerSource] = useState<SatelliteSource | null>(null);
+  const [pksbBusesMode, setPksbBusesMode] = useState<FeedMode | null>(null);
+  const [maritimeMode, setMaritimeMode] = useState<FeedMode | null>(null);
+  const [trafficStatus, setTrafficStatus] = useState<string>("");
   const [pksbRoutes, setPksbRoutes] =
     useState<PksbTransitResponse["routes"]>(EMPTY_PKSB_ROUTES);
   const [pksbStops, setPksbStops] =
@@ -616,8 +637,72 @@ export default function BorderMap({
   const maritimeVesselsRef = useRef<MaritimeVessel[]>(maritimeSecurityFeed?.vessels ?? []);
   const [animationNow, setAnimationNow] = useState(() => Date.now());
   const [enabledOverlays, setEnabledOverlays] = useState<OverlayState>(() => ({
-    ...PRESET_LAYER_MAP.operations,
+    precipitationRadar: false,
+    waterways: false,
+    aqiFlag: false,
+    publicInfrastructure: false,
+    roadNetwork: false,
+    canalsDrainage: false,
+    floodStations: false,
+    marineConditions: false,
+    gridScale: "off",
   }));
+
+  // ── Lazy-loaded GeoJSON / data caches for new overlays ──
+  const [poiData, setPoiData] = useState<PoiCollection | null>(null);
+  const [roadsData, setRoadsData] = useState<RoadCollection | null>(null);
+  const [canalsData, setCanalsData] = useState<CanalCollection | null>(null);
+  const [floodStations, setFloodStations] = useState<FloodStationPoint[]>([]);
+  const [marineStations, setMarineStations] = useState<MarinePoint[]>([]);
+
+  useEffect(() => {
+    if (enabledOverlays.publicInfrastructure && !poiData) {
+      fetch("/data/phuket-poi.geojson")
+        .then(r => r.json())
+        .then((d: PoiCollection) => setPoiData(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.publicInfrastructure, poiData]);
+
+  useEffect(() => {
+    if (enabledOverlays.roadNetwork && !roadsData) {
+      fetch("/data/phuket-roads.geojson")
+        .then(r => r.json())
+        .then((d: RoadCollection) => setRoadsData(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.roadNetwork, roadsData]);
+
+  useEffect(() => {
+    if (enabledOverlays.canalsDrainage && !canalsData) {
+      fetch("/data/phuket-canals.geojson")
+        .then(r => r.json())
+        .then((d: CanalCollection) => setCanalsData(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.canalsDrainage, canalsData]);
+
+  useEffect(() => {
+    if (enabledOverlays.floodStations && floodStations.length === 0) {
+      fetch("/api/modules/thai-flood-stations")
+        .then(r => r.json())
+        .then((d: { data?: FloodStationPoint[] }) => {
+          if (Array.isArray(d?.data)) setFloodStations(d.data);
+        })
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.floodStations, floodStations.length]);
+
+  useEffect(() => {
+    if (enabledOverlays.marineConditions && marineStations.length === 0) {
+      fetch("/api/modules/open-meteo-marine")
+        .then(r => r.json())
+        .then((d: { data?: MarinePoint[] }) => {
+          if (Array.isArray(d?.data)) setMarineStations(d.data);
+        })
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.marineConditions, marineStations.length]);
   const disasterAlerts = disasterFeed?.alerts ?? [];
   const publicCameras = [
     ...(cameraFeed?.cameras ?? []),
@@ -639,19 +724,17 @@ export default function BorderMap({
   ).length;
   const disasterAlertCount = disasterAlerts.length;
   const maritimeVesselCount = animatedMaritimeVessels.length;
+  const arrivalsNext60Count = countArrivalsNextMinutes(arrivalsResp?.arrivals ?? [], 60);
   const verifiedCameraCount = publicCameras.filter(
     (camera) => camera.operationalState === "live" || camera.operationalState === "reachable",
   ).length;
-  const hasMapboxBaseMap = hasMapbox && (activeBasemap === "mapbox-satellite" || activeBasemap === "mapbox-light");
+  const hasMapboxBaseMap = true;
   const activeCorridor = selectedCorridorId
     ? findCorridorById(selectedCorridorId)
     : GOVERNOR_CORRIDORS[0];
-  const mapStyle = activeBasemap === "mapbox-light"
-    ? "mapbox://styles/mapbox/light-v11"
-    : "mapbox://styles/mapbox/satellite-streets-v12";
+  const mapStyle = basemapStyle(activeBasemap);
   const fallbackBackgroundClass =
     "bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.08),_rgba(8,20,34,0.95)_62%)]";
-  const activeLens = LENS_OPTIONS.find((option) => option.id === activePreset);
   const slowMapControllerRef = useRef<AbortController | null>(null);
   const slowMapRequestIdRef = useRef(0);
   const flightControllerRef = useRef<AbortController | null>(null);
@@ -715,6 +798,7 @@ export default function BorderMap({
       setPksbRoutes(pksbTransitData.routes);
       setPksbStops(pksbTransitData.stops);
       setTrafficEvents(Array.isArray(trafficData.events) ? trafficData.events : []);
+      setTrafficStatus(typeof trafficData.status === "string" ? trafficData.status : "");
     } catch (error) {
       if (isAbortError(error)) return;
     }
@@ -727,16 +811,23 @@ export default function BorderMap({
     flightControllerRef.current = controller;
 
     try {
-      const flightData = await fetchJsonOrFallback<FlightData[]>(
-        buildScenarioUrl("/api/flights", scenarioId),
-        [],
-        { signal: controller.signal },
-      );
+      const [flightData, arrivalsData] = await Promise.all([
+        fetchJsonOrFallback<FlightData[]>(
+          buildScenarioUrl("/api/flights", scenarioId),
+          [],
+          { signal: controller.signal },
+        ),
+        fetchJsonOrNull<FlightArrivalsResponse>(
+          buildScenarioUrl("/api/flights/arrivals", scenarioId),
+          { signal: controller.signal },
+        ),
+      ]);
       if (controller.signal.aborted || requestId !== flightRequestIdRef.current) {
         return;
       }
 
       setFlights(Array.isArray(flightData) ? flightData : []);
+      if (arrivalsData) setArrivalsResp(arrivalsData);
     } catch (error) {
       if (isAbortError(error)) return;
     }
@@ -762,6 +853,7 @@ export default function BorderMap({
       setPreviousPksbBuses(pksbBusesRef.current);
       pksbBusesRef.current = nextBuses;
       setPksbBuses(nextBuses);
+      setPksbBusesMode(busData.mode ?? null);
       setBusFrameStartedAt(Date.now());
     } catch (error) {
       if (isAbortError(error)) return;
@@ -788,6 +880,7 @@ export default function BorderMap({
       setPreviousMaritimeVessels(maritimeVesselsRef.current);
       maritimeVesselsRef.current = nextVessels;
       setMaritimeVessels(nextVessels);
+      setMaritimeMode(maritimeData.mode ?? null);
       setMaritimeFrameStartedAt(Date.now());
     } catch (error) {
       if (isAbortError(error)) return;
@@ -797,17 +890,18 @@ export default function BorderMap({
   const handleViewStateChange = ({
     viewState: nextViewState,
   }: ViewStateChangeParameters<MapViewState>) => {
-    setViewState(nextViewState);
+    setViewState(clampViewToPhuket(nextViewState));
   };
 
   const handleWireframeViewStateChange = ({
     viewState: nextViewState,
   }: ViewStateChangeParameters<MapViewState>) => {
+    const clamped = clampViewToPhuket(nextViewState);
     setViewState((prev) => ({
       ...prev,
-      longitude: nextViewState.longitude,
-      latitude: nextViewState.latitude,
-      zoom: nextViewState.zoom,
+      longitude: clamped.longitude,
+      latitude: clamped.latitude,
+      zoom: clamped.zoom,
     }));
   };
 
@@ -897,55 +991,62 @@ export default function BorderMap({
     };
   }, [scenarioId]);
 
+  useEffect(() => {
+    if (!enabledOverlays.precipitationRadar) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const load = async () => {
+      const source = await fetchRainViewerLatest(controller.signal);
+      if (!cancelled && source) setRainViewerSource(source);
+    };
+    void load();
+    const interval = window.setInterval(() => void load(), 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [enabledOverlays.precipitationRadar]);
+
+  const gridScale: 1 | 5 | 10 | null =
+    enabledOverlays.gridScale === "1km"
+      ? 1
+      : enabledOverlays.gridScale === "5km"
+        ? 5
+        : enabledOverlays.gridScale === "10km"
+          ? 10
+          : null;
+  const precipitationSource =
+    enabledOverlays.precipitationRadar && rainViewerSource ? rainViewerSource : null;
   const layers = [
-    enabledOverlays.rainfallAnomalies && createRainfallLayer(rainfall),
-    ...(enabledOverlays.disasterAlerts
-      ? createDisasterAlertLayer(disasterAlerts)
-      : []),
-    ...(enabledOverlays.aqiHeatmap
-      ? createAirQualityHeatmapLayers(airQuality, "aqi")
-      : []),
-    enabledOverlays.incidentHeatmap
-      ? createHeatmapLayer(incidents)
-      : enabledOverlays.incidentPoints
-        ? createIncidentLayer(incidents)
-        : null,
-    enabledOverlays.thermalHotspots ? createFireLayer(fires) : null,
-    enabledOverlays.populationMovement ? createRefugeeLayer(refugees) : null,
-    ...(enabledOverlays.pksbRoutes
-      ? createPksbRouteLayers(pksbRoutes, pksbStops)
-      : []),
-    ...(enabledOverlays.pksbLiveBuses
-      ? createPksbBusLayers(animatedPksbBuses)
-      : []),
-    ...(enabledOverlays.maritimeTraffic
-      ? createMaritimeTrafficLayers(animatedMaritimeVessels)
-      : []),
-    enabledOverlays.publicCameras
-      ? createPublicCameraLayer(publicCameras)
-      : null,
-    ...(enabledOverlays.tourismHotspots
-      ? createTourismHotspotLayer(tourismHotspots)
-      : []),
-    ...(enabledOverlays.trafficEvents
-      ? createTrafficEventLayers(trafficEvents)
-      : []),
-    ...(enabledOverlays.flightPaths ? (createFlightPathsLayer(flights) ?? []) : []),
+    // ── User-toggleable overlays (above basemap, below operational layers) ──
+    ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
+    ...(enabledOverlays.waterways ? createWaterwaysLayer(PHUKET_WATERWAYS) : []),
+    ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
+    ...(enabledOverlays.roadNetwork && roadsData ? createRoadNetworkLayer(roadsData) : []),
+    ...(enabledOverlays.canalsDrainage && canalsData ? createCanalsLayer(canalsData) : []),
+    ...(enabledOverlays.publicInfrastructure && poiData ? createPoiLayers(poiData) : []),
+    ...(enabledOverlays.floodStations && floodStations.length ? createFloodStationLayer(floodStations) : []),
+    ...(enabledOverlays.marineConditions && marineStations.length ? createMarineLayer(marineStations) : []),
+    // ── Foundation layers (always on) ──
+    ...(gridScale !== null ? createKilometerGridLayer(gridScale) : []),
+    ...createSeaRoutesLayers(PHUKET_SEA_ROUTES),
+    ...createDisasterAlertLayer(disasterAlerts),
+    createRainfallLayer(rainfall),
+    createIncidentLayer(incidents),
+    createFireLayer(fires),
+    createRefugeeLayer(refugees),
+    ...createPksbRouteLayers(pksbRoutes, pksbStops),
+    ...createPksbBusLayers(animatedPksbBuses),
+    ...createMaritimeTrafficLayers(animatedMaritimeVessels),
+    createPublicCameraLayer(publicCameras),
+    ...createTourismHotspotLayer(tourismHotspots),
+    ...createTrafficEventLayers(trafficEvents),
+    ...(createFlightPathsLayer(flights) ?? []),
   ].filter(Boolean);
 
   const focusPresets = GOVERNOR_CORRIDORS;
 
-  const [, setBasemapErrorCount] = useState(0);
-  const basemapFallbackChain = hasMapbox
-    ? BASEMAP_FALLBACK_CHAIN_WITH_MAPBOX
-    : BASEMAP_FALLBACK_CHAIN;
-
-  const basemapChoice =
-    activeBasemap === "esri-aerial" ||
-    activeBasemap === "eox-sentinel2" ||
-    activeBasemap === "mapbox-satellite"
-      ? "aerial"
-      : "map";
 
   const handleMapClick = ({ object }: PickingInfo<unknown>) => {
     if (isIncidentFeature(object)) {
@@ -1034,60 +1135,8 @@ export default function BorderMap({
     }
   };
 
-  // ─── Basemap tile layer (exactly one, sits at the bottom) ───
-  const handleBasemapTileError = () => {
-    setBasemapErrorCount((count) => {
-      const nextCount = count + 1;
-      if (nextCount < 3) {
-        return nextCount;
-      }
-
-      const currentIdx = basemapFallbackChain.indexOf(activeBasemap);
-      const nextIdx = (currentIdx + 1) % basemapFallbackChain.length;
-      setActiveBasemap(basemapFallbackChain[nextIdx]);
-      return 0;
-    });
-  };
-
-  const makeBasemapLayer = (id: string, label: string, tileTemplate: string, maxZoom: number) =>
-    createRasterOverlayLayer(
-      {
-        id, label, shortLabel: label, description: label, source: label,
-        family: "imagery", role: "base-option", kind: "raster" as const,
-        defaultOpacity: 1, enabledByDefault: true, maxZoom, tileTemplate,
-        updatedAt: new Date().toISOString(),
-      },
-      1,
-      handleBasemapTileError,
-    );
-
-  const basemapTileLayer = (() => {
-    if (activeBasemap === "eox-sentinel2") {
-      return makeBasemapLayer("basemap-eox", "EOX Sentinel-2 Cloudless",
-        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg", 15);
-    }
-    if (activeBasemap === "esri-aerial") {
-      return makeBasemapLayer("basemap-esri", "ESRI Aerial",
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 19);
-    }
-    if (activeBasemap === "osm-streets") {
-      return makeBasemapLayer("basemap-osm", "OpenStreetMap",
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png", 19);
-    }
-    if (activeBasemap === "carto-light") {
-      return makeBasemapLayer("basemap-carto", "CartoDB Positron",
-        "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png", 19);
-    }
-    if (activeBasemap === "stadia-dark") {
-      return makeBasemapLayer("basemap-stadia", "Stadia Dark",
-        "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}@2x.png", 20);
-    }
-    // mapbox-satellite and mapbox-light are handled by the MapboxMap component
-    return null;
-  })();
-
-  // Basemap tile goes first, then the operator overlays
-  const allLayers = [basemapTileLayer, ...layers].filter(Boolean);
+  // Basemap is rendered by MapLibre (mapStyle below). DeckGL only carries operator overlays.
+  const allLayers = layers.filter(Boolean);
 
   if (!mounted || !lumaReady) {
     return (
@@ -1118,9 +1167,8 @@ export default function BorderMap({
             >
               {hasMapboxBaseMap ? (
                 <MapboxMap
-                  mapboxAccessToken={MAPBOX_TOKEN}
+                  key={activeBasemap}
                   mapStyle={mapStyle}
-                  reuseMaps
                   attributionControl={false}
                 />
               ) : (
@@ -1141,16 +1189,15 @@ export default function BorderMap({
                   onViewStateChange={handleWireframeViewStateChange}
                   controller={true}
                   layers={[
-                    makeBasemapLayer("wireframe-carto", "CartoDB Positron",
-                      "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png", 19),
-                    ...(enabledOverlays.pksbLiveBuses
-                      ? createPksbBusLayers(animatedPksbBuses)
-                      : []),
-                    enabledOverlays.trafficEvents ? createTrafficEventLayers(trafficEvents) : null,
-                    enabledOverlays.publicCameras ? createPublicCameraLayer(publicCameras) : null,
-                    ...(enabledOverlays.maritimeTraffic
-                      ? createMaritimeTrafficLayers(animatedMaritimeVessels)
-                      : []),
+                    createRasterTileLayer({
+                      id: "wireframe-carto",
+                      data: "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+                      maxZoom: 19,
+                    }),
+                    ...createPksbBusLayers(animatedPksbBuses),
+                    ...createTrafficEventLayers(trafficEvents),
+                    createPublicCameraLayer(publicCameras),
+                    ...createMaritimeTrafficLayers(animatedMaritimeVessels),
                   ].flat().filter(Boolean)}
                   getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
                 />
@@ -1215,10 +1262,10 @@ export default function BorderMap({
                     Operator focus
                   </div>
                   <div className="pt-1 text-[12px] font-semibold text-[var(--ink)]">
-                    {activeLens?.label ?? "Operations"} lens active
+                    {BASEMAP_OPTIONS.find((b) => b.id === activeBasemap)?.label ?? "Street"} basemap
                   </div>
                   <div className="pt-1 text-[10px] leading-4 text-[var(--muted)]">
-                    The main controls stay limited to corridor focus, lens selection, and basemap choice.
+                    The main controls stay limited to corridor focus, basemap choice, and three overlay toggles.
                   </div>
                 </div>
               </div>
@@ -1227,149 +1274,237 @@ export default function BorderMap({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 p-3 xl:p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <section className="pointer-events-auto w-full max-w-[620px] border border-[rgba(255,255,255,0.2)] bg-[linear-gradient(135deg,rgba(248,246,240,0.94),rgba(233,244,240,0.84))] px-4 py-3 backdrop-blur-md">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-                  Phuket operator map
-                </div>
-                <div className="border border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.08)] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
-                  {activeLens?.label ?? "Operations"} lens
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap items-end gap-3">
-                <h3 className="text-[18px] font-bold tracking-[-0.04em] text-[var(--ink)]">
-                  {activeCorridor?.label ?? "Airport to pier corridor"}
-                </h3>
-                <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--dim)]">
-                  {activeCorridor?.focusAreas.join(" / ") ?? "Phuket transfer watch"}
-                </div>
-              </div>
-              <p className="mt-2 max-w-[560px] text-[11px] leading-5 text-[var(--muted)]">
-                Airport arrivals, road friction, bus lift, and ferry handoff stay on one wall so the operator can see where timing breaks first.
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  { label: "Flights inbound", value: flights.length },
-                  { label: "Buses moving", value: movingBusCount },
-                  { label: "Road events", value: trafficEvents.length },
-                  { label: "Boat contacts", value: maritimeVesselCount },
-                ].map((item) => (
-                  <div key={item.label} className="border border-[rgba(15,111,136,0.18)] bg-[rgba(255,255,255,0.58)] px-3 py-2">
-                    <div className="text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
-                      {item.label}
-                    </div>
-                    <div className="mt-1 text-[18px] font-mono font-bold text-[var(--ink)]">
-                      {item.value}
-                    </div>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 p-2 sm:p-3 xl:p-4">
+        <section
+          className="pointer-events-auto max-h-[calc(100%-1rem)] w-full max-w-[620px] overflow-y-auto border border-[rgba(15,23,42,0.16)] bg-[#f1ede2] px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3"
+          style={{
+            color: "#0d1117",
+            ["--ink" as never]: "#0d1117",
+            ["--dim" as never]: "#475569",
+            ["--muted" as never]: "#1e293b",
+            ["--cool" as never]: "#0f6f88",
+            ["--line" as never]: "rgba(15,23,42,0.18)",
+            ["--line-bright" as never]: "rgba(15,23,42,0.45)",
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+              Phuket operator map
+            </div>
+            <div className="border border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.08)] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
+              {BASEMAP_OPTIONS.find((b) => b.id === activeBasemap)?.label ?? "Street"}
+            </div>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-end gap-2 sm:mt-2 sm:gap-3">
+            <h3 className="text-[16px] font-bold tracking-normal text-[var(--ink)] sm:text-[18px]">
+              {activeCorridor?.label ?? "Airport to pier corridor"}
+            </h3>
+            <div className="hidden text-[10px] uppercase tracking-[0.14em] text-[var(--dim)] sm:block">
+              {activeCorridor?.focusAreas.join(" / ") ?? "Phuket transfer watch"}
+            </div>
+          </div>
+          <p className="mt-2 hidden max-w-[560px] text-[11px] leading-5 text-[var(--muted)] sm:block">
+            Airport arrivals, road friction, bus lift, and ferry handoff stay on one wall so the operator can see where timing breaks first.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:mt-3 sm:gap-2 md:grid-cols-4">
+            {[
+              {
+                label: "Arrivals 60m",
+                value: arrivalsNext60Count,
+                mode: arrivalsResp?.mode ?? "unavailable",
+                title: arrivalsResp
+                  ? `${arrivalsResp.totalFlights} scheduled today · ${arrivalsResp.sourceSummary?.label ?? arrivalsResp.source}`
+                  : "Awaiting arrivals feed",
+              },
+              {
+                label: "Buses moving",
+                value: movingBusCount,
+                mode: pksbBusesMode ?? "unavailable",
+                title: `PKSB transit · ${pksbBusesMode ?? "no signal"}`,
+              },
+              {
+                label: "Road events",
+                value: trafficEvents.length,
+                mode: trafficStatus === "ok" || trafficEvents.length > 0 ? "live" : "unavailable",
+                title: `Traffic feed · ${trafficStatus || "no signal"}`,
+              },
+              {
+                label: "Boat contacts",
+                value: maritimeVesselCount,
+                mode: maritimeMode ?? "unavailable",
+                title: `Maritime security · ${maritimeMode ?? "no signal"}`,
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                title={item.title}
+                className="min-w-0 border border-[rgba(15,111,136,0.18)] bg-[rgba(255,255,255,0.72)] px-2 py-1.5 sm:bg-[rgba(255,255,255,0.58)] sm:px-3 sm:py-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate text-[7px] uppercase tracking-[0.12em] text-[var(--dim)] sm:tracking-[0.16em]">
+                    {item.label}
                   </div>
-                ))}
+                  <span
+                    aria-label={`${item.label} data state: ${item.mode}`}
+                    className={`h-1.5 w-1.5 rounded-full ${modeDotClass(item.mode as FeedMode | "unavailable")}`}
+                  />
+                </div>
+                <div className="mt-0.5 font-mono text-[16px] font-bold text-[var(--ink)] sm:mt-1 sm:text-[18px]">
+                  {item.value}
+                </div>
               </div>
-            </section>
-
-            <section className="pointer-events-auto border border-[rgba(255,255,255,0.2)] bg-[rgba(248,246,240,0.9)] px-3 py-3 backdrop-blur-md">
-              <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-                Basemap
-              </div>
-              <div className="mt-2 flex gap-1.5">
-                <button
-                  type="button"
-                  aria-pressed={basemapChoice === "map"}
-                  data-control-classification="changes view"
-                  onClick={() => setActiveBasemap(hasMapbox ? "mapbox-light" : "osm-streets")}
-                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
-                    basemapChoice === "map"
-                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-                  }`}
-                >
-                  Map
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={basemapChoice === "aerial"}
-                  data-control-classification="changes view"
-                  onClick={() =>
-                    setActiveBasemap(hasMapbox ? "mapbox-satellite" : "esri-aerial")
-                  }
-                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
-                    basemapChoice === "aerial"
-                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-                  }`}
-                >
-                  Aerial
-                </button>
-              </div>
-            </section>
+            ))}
           </div>
 
-          <section className="pointer-events-none border border-[rgba(255,255,255,0.16)] bg-[rgba(248,246,240,0.86)] px-3 py-2 backdrop-blur-md">
-            <div className="pointer-events-none flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div className="pointer-events-none shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-                Corridor
-              </div>
-              <div className="pointer-events-auto no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto xl:justify-end">
-                {focusPresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    aria-pressed={activeCorridor?.id === preset.id}
-                    data-control-classification="selects corridor"
-                    onClick={() => {
-                      onCorridorSelect?.(preset.id);
-                      setViewState((current) => ({
-                        ...current,
-                        ...preset.view,
-                      }));
-                    }}
-                    className={`whitespace-nowrap border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
-                      selectedCorridorId === preset.id
-                        ? "border-[var(--ink)] bg-[rgba(17,17,17,0.08)] text-[var(--ink)]"
-                        : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
-                    } relative z-10`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 p-3 xl:p-4">
-        <section className="pointer-events-none border border-[rgba(255,255,255,0.16)] bg-[rgba(248,246,240,0.9)] px-3 py-3 backdrop-blur-md">
-          <div className="pointer-events-none flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-              <div className="pointer-events-none text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-                Lens
-              </div>
-              {LENS_OPTIONS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  aria-pressed={activePreset === preset.id}
-                  data-control-classification="changes view"
-                  onClick={() => applyPreset(preset.id)}
-                  className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
-                    activePreset === preset.id
-                      ? "border-[var(--ink)] bg-[var(--ink)] text-white"
-                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
-                  } relative z-10`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <div className="max-w-[420px] text-[10px] leading-4 text-[var(--muted)] xl:text-right">
-              {activeLens?.description ?? "Operator lens active."}
-            </div>
+          <div className="mt-3 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
+            <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Corridor
+            </span>
+            {focusPresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                aria-pressed={activeCorridor?.id === preset.id}
+                data-control-classification="selects corridor"
+                onClick={() => {
+                  onCorridorSelect?.(preset.id);
+                  setViewState((current) => ({
+                    ...current,
+                    ...preset.view,
+                  }));
+                }}
+                className={`whitespace-nowrap border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  selectedCorridorId === preset.id
+                    ? "border-[var(--ink)] bg-[rgba(17,17,17,0.08)] text-[var(--ink)]"
+                    : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
+
+          <div className="mt-2 hidden flex-wrap items-center gap-1.5 sm:flex">
+            <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Basemap
+            </span>
+            {BASEMAP_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={activeBasemap === option.id}
+                data-control-classification="changes view"
+                onClick={() => setActiveBasemap(option.id)}
+                className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  activeBasemap === option.id
+                    ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
+            <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Overlays
+            </span>
+            {[
+              { id: "aqiFlag" as const, label: "AQI" },
+              { id: "precipitationRadar" as const, label: "Precipitation" },
+              { id: "waterways" as const, label: "Waterways" },
+              { id: "roadNetwork" as const, label: "Roads" },
+              { id: "canalsDrainage" as const, label: "Canals" },
+              { id: "publicInfrastructure" as const, label: "POI" },
+              { id: "floodStations" as const, label: "Flood" },
+              { id: "marineConditions" as const, label: "Marine" },
+            ].map((toggle) => (
+              <button
+                key={toggle.id}
+                type="button"
+                aria-pressed={enabledOverlays[toggle.id]}
+                onClick={() =>
+                  setEnabledOverlays((prev) => ({
+                    ...prev,
+                    [toggle.id]: !prev[toggle.id],
+                  }))
+                }
+                className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  enabledOverlays[toggle.id]
+                    ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                }`}
+              >
+                {toggle.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,23,42,0.18)] pt-2 sm:flex">
+            <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+              Grid
+            </span>
+            {(["off", "1km", "5km", "10km"] as const).map((scale) => (
+              <button
+                key={scale}
+                type="button"
+                aria-pressed={enabledOverlays.gridScale === scale}
+                onClick={() =>
+                  setEnabledOverlays((prev) => ({ ...prev, gridScale: scale }))
+                }
+                className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  enabledOverlays.gridScale === scale
+                    ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--line-bright)]"
+                }`}
+              >
+                {scale === "off" ? "Off" : scale}
+              </button>
+            ))}
+          </div>
+
+          {precipitationSource && (
+            <div className="mt-2 hidden space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:block">
+              {[precipitationSource]
+                .filter((s): s is SatelliteSource => Boolean(s))
+                .map((s) => {
+                  const tier = satelliteFreshnessTier(s.capturedAt, s.cadence);
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-wrap items-center gap-1.5"
+                    >
+                      <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                        {s.cadence === "minute" ? "Radar" : "Satellite"}
+                      </span>
+                      <span
+                        className="shrink-0 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--ink)]"
+                        title={s.attribution}
+                      >
+                        {s.shortLabel}
+                      </span>
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          tier === "fresh"
+                            ? "bg-[#22c55e]"
+                            : tier === "acceptable"
+                              ? "bg-[#f59e0b]"
+                              : "bg-[#ef4444]"
+                        }`}
+                        aria-label={`${s.shortLabel} freshness: ${tier}`}
+                      />
+                      <span className="shrink-0 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
+                        {satelliteFreshnessLabel(s.capturedAt)}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </section>
       </div>
+
     </div>
   );
 }

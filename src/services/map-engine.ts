@@ -5,9 +5,13 @@ import {
   BitmapLayer,
   GeoJsonLayer,
   LineLayer,
+  PathLayer,
   ScatterplotLayer,
   TextLayer,
 } from "@deck.gl/layers";
+import type { SeaRoute } from "../data/phuket-sea-routes";
+import { PHUKET_PIERS } from "../data/phuket-sea-routes";
+import type { Waterway } from "../data/phuket-waterways";
 import { getProvinceLabels } from "../lib/thai-provinces";
 import type {
   AirQualityPoint,
@@ -53,56 +57,55 @@ interface TileDataRequest {
 }
 
 function extractTileBounds(tile: unknown): TileBounds["bbox"] | null {
-  if (typeof tile !== "object" || tile === null || !("bbox" in tile)) {
+  if (typeof tile !== "object" || tile === null) {
     return null;
   }
 
-  const bbox = tile.bbox;
+  const t = tile as Record<string, unknown>;
 
-  if (typeof bbox !== "object" || bbox === null) {
-    return null;
+  // deck.gl v9 shape: tile.boundingBox = [[west, south], [east, north]]
+  if (Array.isArray(t.boundingBox) && t.boundingBox.length === 2) {
+    const [sw, ne] = t.boundingBox as [unknown, unknown];
+    if (Array.isArray(sw) && Array.isArray(ne) && sw.length === 2 && ne.length === 2) {
+      const [west, south] = sw as [number, number];
+      const [east, north] = ne as [number, number];
+      if ([west, south, east, north].every((n) => typeof n === "number" && Number.isFinite(n))) {
+        return { west, south, east, north };
+      }
+    }
   }
 
-  const box = bbox as Record<string, unknown>;
-
-  if (
-    "west" in box &&
-    "south" in box &&
-    "east" in box &&
-    "north" in box &&
-    [box.west, box.south, box.east, box.north].every(
-      (value) => typeof value === "number" && Number.isFinite(value),
-    )
-  ) {
-    return {
-      west: box.west as number,
-      south: box.south as number,
-      east: box.east as number,
-      north: box.north as number,
-    };
-  }
-
-  if (
-    "left" in box &&
-    "bottom" in box &&
-    "right" in box &&
-    "top" in box &&
-    [box.left, box.bottom, box.right, box.top].every(
-      (value) => typeof value === "number" && Number.isFinite(value),
-    )
-  ) {
-    return {
-      west: box.left as number,
-      south: box.bottom as number,
-      east: box.right as number,
-      north: box.top as number,
-    };
+  // legacy shape: tile.bbox = { west, south, east, north } | { left, bottom, right, top }
+  const bbox = t.bbox;
+  if (typeof bbox === "object" && bbox !== null) {
+    const box = bbox as Record<string, unknown>;
+    if (
+      typeof box.west === "number" &&
+      typeof box.south === "number" &&
+      typeof box.east === "number" &&
+      typeof box.north === "number"
+    ) {
+      return { west: box.west, south: box.south, east: box.east, north: box.north };
+    }
+    if (
+      typeof box.left === "number" &&
+      typeof box.bottom === "number" &&
+      typeof box.right === "number" &&
+      typeof box.top === "number"
+    ) {
+      return {
+        west: box.left,
+        south: box.bottom,
+        east: box.right,
+        north: box.top,
+      };
+    }
   }
 
   return null;
 }
 
-function createRasterTileLayer({
+export function createRasterTileLayer({
   id,
   data,
   maxZoom,
@@ -123,36 +126,23 @@ function createRasterTileLayer({
     tileSize: 256,
     opacity,
     onTileError,
-    getTileData: async (tile: TileDataRequest) => {
-      if (!tile.url) return null;
-      try {
-        const response = await fetch(tile.url);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const blob = await response.blob();
-        return await createImageBitmap(blob);
-      } catch (e) {
-        if (onTileError) onTileError(e);
-        return null;
-      }
-    },
     renderSubLayers: (props) => {
-      const { data: image, tile, ...layerProps } = props;
-      const bounds = extractTileBounds(tile);
-
-      if (!image || !bounds) {
+      const image = props.data;
+      if (!image) return null;
+      const tile = props.tile as unknown as { boundingBox?: [[number, number], [number, number]]; bbox?: { west: number; south: number; east: number; north: number } };
+      let west: number, south: number, east: number, north: number;
+      if (tile?.boundingBox) {
+        [[west, south], [east, north]] = tile.boundingBox;
+      } else if (tile?.bbox) {
+        ({ west, south, east, north } = tile.bbox);
+      } else {
         return null;
       }
-
-      const { west, south, east, north } = bounds;
-      const layerId = typeof layerProps.id === "string" ? layerProps.id : id;
-
       return new BitmapLayer({
-        ...layerProps,
-        id: `${layerId}-bitmap`,
-        data: undefined,
+        id: `${props.id}-bitmap`,
         image,
-        opacity,
         bounds: [west, south, east, north],
+        opacity: props.opacity,
       });
     },
   });
@@ -1019,6 +1009,524 @@ export function createTrafficEventLayers(events: TrafficEvent[]) {
       fontFamily: "monospace",
       fontWeight: 700,
       outlineWidth: 2,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+export function createSeaRoutesLayers(routes: SeaRoute[]) {
+  if (!routes.length) return [];
+  const colorByOperator: Record<SeaRoute["operatorClass"], [number, number, number, number]> = {
+    ferry: [56, 189, 248, 220],
+    speedboat: [251, 191, 36, 220],
+    longtail: [167, 139, 250, 220],
+  };
+  return [
+    new PathLayer({
+      id: "phuket-sea-routes",
+      data: routes,
+      getPath: (d: SeaRoute) => d.path,
+      getColor: (d: SeaRoute) => colorByOperator[d.operatorClass],
+      getWidth: 2,
+      widthUnits: "pixels" as const,
+      widthMinPixels: 1.5,
+      jointRounded: false,
+      capRounded: false,
+      pickable: false,
+    }),
+    new ScatterplotLayer({
+      id: "phuket-sea-piers",
+      data: PHUKET_PIERS,
+      getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat],
+      getRadius: 4,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 3,
+      radiusMaxPixels: 6,
+      getFillColor: [56, 189, 248, 240],
+      getLineColor: [15, 23, 42, 255],
+      lineWidthMinPixels: 1,
+      stroked: true,
+      pickable: true,
+    }),
+    new TextLayer({
+      id: "phuket-sea-pier-labels",
+      data: PHUKET_PIERS,
+      getPosition: (d: { lng: number; lat: number }) => [d.lng, d.lat],
+      getText: (d: { name: string }) => d.name,
+      getSize: 10,
+      getColor: [15, 23, 42, 240],
+      getAlignmentBaseline: "top" as const,
+      getTextAnchor: "middle" as const,
+      getPixelOffset: [0, 8],
+      fontFamily: "JetBrains Mono, SF Mono, monospace",
+      outlineColor: [248, 250, 252, 230],
+      outlineWidth: 2,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
+}
+
+export function createWaterwaysLayer(waterways: Waterway[]) {
+  if (!waterways.length) return [];
+  return [
+    new PathLayer({
+      id: "phuket-waterways",
+      data: waterways,
+      getPath: (d: Waterway) => d.path,
+      getColor: (d: Waterway) =>
+        d.kind === "river"
+          ? [29, 78, 216, 245]
+          : [14, 165, 233, 230],
+      getWidth: (d: Waterway) => (d.kind === "river" ? 4.5 : 3),
+      widthUnits: "pixels" as const,
+      widthMinPixels: 2.5,
+      jointRounded: true,
+      capRounded: true,
+      pickable: false,
+    }),
+  ];
+}
+
+// ─── Public Infrastructure (POI) ────────────────────────────────
+// Sources: OpenStreetMap (Overpass API) → public/data/phuket-poi.geojson
+
+export type PoiAmenity =
+  | "police"
+  | "fire_station"
+  | "hospital"
+  | "clinic"
+  | "school"
+  | "university"
+  | "college";
+
+export interface PoiFeature {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: {
+    id: string;
+    amenity: PoiAmenity | string;
+    name: string;
+    name_th?: string;
+    operator?: string;
+    phone?: string;
+    address?: string;
+    emergency?: string;
+  };
+}
+
+export interface PoiCollection {
+  type: "FeatureCollection";
+  features: PoiFeature[];
+}
+
+/** Consistent palette — emergency reds, civic blues, health magenta, education amber */
+function poiColor(amenity: string): [number, number, number, number] {
+  switch (amenity) {
+    case "police":       return [37, 99, 235, 240];
+    case "fire_station": return [220, 38, 38, 240];
+    case "hospital":     return [236, 72, 153, 240];
+    case "clinic":       return [244, 114, 182, 230];
+    case "school":       return [245, 158, 11, 240];
+    case "university":   return [217, 119, 6, 240];
+    case "college":      return [217, 119, 6, 240];
+    default:             return [148, 163, 184, 230];
+  }
+}
+
+function poiRadius(amenity: string): number {
+  switch (amenity) {
+    case "hospital": return 9;
+    case "police": return 8;
+    case "fire_station": return 8;
+    case "university": return 8;
+    case "college": return 7;
+    case "clinic": return 6;
+    case "school": return 6;
+    default: return 5;
+  }
+}
+
+export const POI_AMENITY_LABEL: Record<string, string> = {
+  police: "Police",
+  fire_station: "Fire Station",
+  hospital: "Hospital",
+  clinic: "Clinic",
+  school: "School",
+  university: "University",
+  college: "College",
+};
+
+/** Creates one ScatterplotLayer per amenity (toggleable, pickable). */
+export function createPoiLayers(
+  poi: PoiCollection,
+  enabledAmenities: Set<string> | null = null,
+) {
+  if (!poi?.features?.length) return [];
+  const grouped = new Map<string, PoiFeature[]>();
+  for (const f of poi.features) {
+    const a = f.properties.amenity;
+    if (enabledAmenities && !enabledAmenities.has(a)) continue;
+    if (!grouped.has(a)) grouped.set(a, []);
+    grouped.get(a)!.push(f);
+  }
+
+  return Array.from(grouped.entries()).map(([amenity, features]) =>
+    new ScatterplotLayer<PoiFeature>({
+      id: `phuket-poi-${amenity}`,
+      data: features,
+      getPosition: (f) => f.geometry.coordinates,
+      getFillColor: () => poiColor(amenity),
+      getLineColor: [255, 255, 255, 200],
+      getRadius: () => poiRadius(amenity),
+      lineWidthUnits: "pixels" as const,
+      lineWidthMinPixels: 1,
+      stroked: true,
+      filled: true,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: poiRadius(amenity),
+      radiusMaxPixels: poiRadius(amenity) + 3,
+      pickable: true,
+    }),
+  );
+}
+
+// ─── Road network (OSM) ─────────────────────────────────────────
+
+export interface RoadFeature {
+  type: "Feature";
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  properties: {
+    id: string;
+    highway: string;
+    name?: string;
+    ref?: string;
+    lanes?: string;
+  };
+}
+
+export interface RoadCollection {
+  type: "FeatureCollection";
+  features: RoadFeature[];
+}
+
+function roadColor(highway: string): [number, number, number, number] {
+  switch (highway) {
+    case "motorway": return [251, 191, 36, 220];
+    case "trunk":    return [250, 204, 21, 200];
+    case "primary":  return [241, 245, 249, 180];
+    case "secondary":return [148, 163, 184, 150];
+    case "tertiary": return [100, 116, 139, 130];
+    default:         return [71, 85, 105, 100];
+  }
+}
+
+function roadWidth(highway: string): number {
+  switch (highway) {
+    case "motorway": return 4.5;
+    case "trunk":    return 3.8;
+    case "primary":  return 3.2;
+    case "secondary":return 2.4;
+    case "tertiary": return 1.6;
+    default:         return 1.2;
+  }
+}
+
+export function createRoadNetworkLayer(roads: RoadCollection) {
+  if (!roads?.features?.length) return [];
+  return [
+    new GeoJsonLayer({
+      id: "phuket-roads",
+      data: roads,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: "pixels" as const,
+      lineWidthMinPixels: 1.2,
+      getLineColor: (f: { properties?: { highway?: string } }) => roadColor(f.properties?.highway ?? ""),
+      getLineWidth: (f: { properties?: { highway?: string } }) => roadWidth(f.properties?.highway ?? ""),
+      pickable: true,
+      lineJointRounded: true,
+      lineCapRounded: true,
+    }),
+  ];
+}
+
+// ─── Canals + drainage (flood prevention) ──────────────────────
+
+export interface CanalFeature {
+  type: "Feature";
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  properties: {
+    id: string;
+    waterway: string;
+    name?: string;
+  };
+}
+
+export interface CanalCollection {
+  type: "FeatureCollection";
+  features: CanalFeature[];
+}
+
+function canalColor(waterway: string): [number, number, number, number] {
+  switch (waterway) {
+    case "river":  return [29, 78, 216, 230];
+    case "canal":  return [6, 182, 212, 220];
+    case "stream": return [56, 189, 248, 200];
+    case "drain":  return [251, 146, 60, 210];
+    default:       return [14, 165, 233, 180];
+  }
+}
+
+function canalWidth(waterway: string): number {
+  switch (waterway) {
+    case "river":  return 3.5;
+    case "canal":  return 2.8;
+    case "stream": return 1.6;
+    case "drain":  return 1.4;
+    default:       return 1.2;
+  }
+}
+
+export function createCanalsLayer(canals: CanalCollection) {
+  if (!canals?.features?.length) return [];
+  return [
+    new GeoJsonLayer({
+      id: "phuket-canals",
+      data: canals,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: "pixels" as const,
+      lineWidthMinPixels: 1,
+      getLineColor: (f: { properties?: { waterway?: string } }) => canalColor(f.properties?.waterway ?? ""),
+      getLineWidth: (f: { properties?: { waterway?: string } }) => canalWidth(f.properties?.waterway ?? ""),
+      pickable: true,
+      lineJointRounded: true,
+      lineCapRounded: true,
+    }),
+  ];
+}
+
+// ─── Flood monitoring stations ──────────────────────────────────
+
+export interface FloodStationPoint {
+  id: string;
+  name: string;
+  district: string;
+  lat: number;
+  lon: number;
+  waterLevel: number;
+  warningLevel: number;
+  criticalLevel: number;
+  status: "normal" | "watch" | "warning" | "critical";
+  rainfall24h: number;
+  capacity: number;
+  advice: string;
+}
+
+function floodStatusColor(status: FloodStationPoint["status"]): [number, number, number, number] {
+  switch (status) {
+    case "normal":   return [34, 197, 94, 220];   // green
+    case "watch":    return [234, 179, 8, 235];   // yellow
+    case "warning":  return [249, 115, 22, 245];  // orange
+    case "critical": return [220, 38, 38, 255];   // red
+  }
+}
+
+function floodStatusRadius(status: FloodStationPoint["status"]): number {
+  switch (status) {
+    case "critical": return 14;
+    case "warning":  return 11;
+    case "watch":    return 9;
+    case "normal":   return 7;
+  }
+}
+
+export function createFloodStationLayer(stations: FloodStationPoint[]) {
+  if (!stations.length) return [];
+  return [
+    // Outer pulse halo for elevated stations
+    new ScatterplotLayer<FloodStationPoint>({
+      id: "phuket-flood-halo",
+      data: stations.filter(s => s.status === "warning" || s.status === "critical"),
+      getPosition: (s) => [s.lon, s.lat],
+      getFillColor: (s) => [...floodStatusColor(s.status).slice(0, 3), 60] as [number, number, number, number],
+      getRadius: (s) => floodStatusRadius(s.status) + 8,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 12,
+      pickable: false,
+      stroked: false,
+    }),
+    // Inner solid marker
+    new ScatterplotLayer<FloodStationPoint>({
+      id: "phuket-flood-stations",
+      data: stations,
+      getPosition: (s) => [s.lon, s.lat],
+      getFillColor: (s) => floodStatusColor(s.status),
+      getLineColor: [255, 255, 255, 230],
+      getRadius: (s) => floodStatusRadius(s.status),
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 7,
+      stroked: true,
+      filled: true,
+      lineWidthUnits: "pixels" as const,
+      lineWidthMinPixels: 1.5,
+      pickable: true,
+    }),
+  ];
+}
+
+// ─── Marine conditions (coastal sea state) ────────────────────
+// Open-Meteo Marine API: wave height, SST, currents at 6 Phuket coastal points.
+// For fishermen, boat operators, and coastal flood awareness.
+
+export interface MarinePoint {
+  id: string;
+  station: string;
+  lat: number;
+  lon: number;
+  waveHeight: number;        // meters
+  wavePeriod: number;
+  sst: number;               // °C
+  currentVelocity: number;
+  riskLevel: "calm" | "moderate" | "rough" | "very_rough" | "phenomenal";
+  fishingAdvice: string;
+  floodRisk: string;
+}
+
+function marineColor(risk: MarinePoint["riskLevel"]): [number, number, number, number] {
+  switch (risk) {
+    case "calm":        return [34, 197, 94, 230];   // green — safe to fish
+    case "moderate":    return [125, 211, 252, 235]; // sky cyan
+    case "rough":       return [234, 179, 8, 240];   // yellow
+    case "very_rough":  return [249, 115, 22, 245];  // orange
+    case "phenomenal":  return [220, 38, 38, 255];   // red — stay in port
+  }
+}
+
+function marineRadius(waveHeight: number): number {
+  // 5px minimum, +1.5px per meter of wave height
+  return Math.max(5, 5 + waveHeight * 1.5);
+}
+
+export function createMarineLayer(stations: MarinePoint[]) {
+  if (!stations.length) return [];
+  return [
+    // Outer ring — wave height visualization (scales with wave size)
+    new ScatterplotLayer<MarinePoint>({
+      id: "phuket-marine-waves",
+      data: stations,
+      getPosition: (s) => [s.lon, s.lat],
+      getFillColor: (s) => [...marineColor(s.riskLevel).slice(0, 3), 35] as [number, number, number, number],
+      getRadius: (s) => marineRadius(s.waveHeight) + 6,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 8,
+      pickable: false,
+      stroked: false,
+    }),
+    // Inner solid marker — sea state status
+    new ScatterplotLayer<MarinePoint>({
+      id: "phuket-marine-stations",
+      data: stations,
+      getPosition: (s) => [s.lon, s.lat],
+      getFillColor: (s) => marineColor(s.riskLevel),
+      getLineColor: [255, 255, 255, 220],
+      getRadius: (s) => marineRadius(s.waveHeight),
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 5,
+      stroked: true,
+      filled: true,
+      lineWidthUnits: "pixels" as const,
+      lineWidthMinPixels: 1.5,
+      pickable: true,
+    }),
+    // Station label
+    new TextLayer<MarinePoint>({
+      id: "phuket-marine-labels",
+      data: stations,
+      getPosition: (s) => [s.lon, s.lat],
+      getText: (s) => `${s.waveHeight.toFixed(1)}m`,
+      getColor: [255, 255, 255, 240],
+      getSize: 10,
+      getPixelOffset: [0, -16],
+      getAlignmentBaseline: "center",
+      getTextAnchor: "middle",
+      fontFamily: "IBM Plex Mono",
+      fontWeight: "bold",
+      background: true,
+      backgroundPadding: [3, 1],
+      getBackgroundColor: [0, 0, 0, 180],
+    }),
+  ];
+}
+
+function aqiCategoryColor(aqi: number): [number, number, number, number] {
+  if (aqi >= 201) return [136, 28, 36, 230]; // very unhealthy / hazardous
+  if (aqi >= 151) return [216, 36, 36, 230]; // unhealthy
+  if (aqi >= 101) return [240, 130, 33, 230]; // unhealthy for sensitive
+  if (aqi >= 51) return [241, 196, 15, 230]; // moderate
+  return [78, 165, 88, 230]; // good
+}
+
+/**
+ * Marks the worst-AQI station on the map with a small flag — a downward
+ * pointer + value chip. Per Dr Non's brief: "small little flag coming down to
+ * see which area has more AQI".
+ */
+export function createAqiFlagLayers(points: AirQualityPoint[]) {
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => b.aqi - a.aqi);
+  const worst = sorted[0];
+  if (!Number.isFinite(worst.aqi)) return [];
+  const color = aqiCategoryColor(worst.aqi);
+  const data = [worst];
+  return [
+    // pin shaft (vertical line from anchor up to the chip)
+    new LineLayer({
+      id: "aqi-flag-shaft",
+      data,
+      getSourcePosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getTargetPosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getColor: color,
+      getWidth: 2,
+      widthUnits: "pixels" as const,
+      // shaft is rendered via TextLayer offset; LineLayer only used to
+      // anchor the dot below.
+      pickable: false,
+    }),
+    // dot at the actual station position
+    new ScatterplotLayer({
+      id: "aqi-flag-dot",
+      data,
+      getPosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getRadius: 9,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 7,
+      radiusMaxPixels: 12,
+      getFillColor: color,
+      getLineColor: [15, 23, 42, 255],
+      lineWidthMinPixels: 2,
+      stroked: true,
+      pickable: true,
+    }),
+    // chip above the dot showing AQI value + label
+    new TextLayer({
+      id: "aqi-flag-label",
+      data,
+      getPosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getText: (d: AirQualityPoint) => `▼ AQI ${Math.round(d.aqi)} · ${d.label}`,
+      getSize: 14,
+      getColor: [15, 23, 42, 250],
+      getAlignmentBaseline: "bottom" as const,
+      getTextAnchor: "middle" as const,
+      getPixelOffset: [0, -16],
+      fontFamily: "JetBrains Mono, SF Mono, monospace",
+      fontWeight: 700,
+      outlineColor: [248, 250, 252, 250],
+      outlineWidth: 4,
       sizeUnits: "pixels" as const,
       billboard: false,
       pickable: false,
