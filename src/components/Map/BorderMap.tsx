@@ -3,6 +3,7 @@ import { apiUrl } from "../../lib/asset-path";
 import MapLegend from "./MapLegend";
 
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -136,6 +137,7 @@ function modeDotClass(mode: FeedMode | "unavailable"): string {
 }
 
 import "maplibre-gl/dist/maplibre-gl.css";
+import type maplibregl from "maplibre-gl";
 
 const MapboxMap = dynamic(() => import("react-map-gl/maplibre"), { ssr: false });
 const MAPBOX_TOKEN = getUsableMapboxToken(
@@ -603,6 +605,25 @@ export default function BorderMap({
   );
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
+  // ─── 3D view mode ───────────────────────────────────────────────────────────
+  const [is3D, setIs3D] = useState(false);
+  // Stable ref so the building-layer helper can always read the current value
+  // without needing to be recreated on every state change.
+  const is3DRef = useRef(false);
+  // Underlying MapLibre map instance — set once per map load / basemap change.
+  const mlMapRef = useRef<maplibregl.Map | null>(null);
+
+  // Camera follows view mode (matching Chula dashboard transition cadence).
+  useEffect(() => {
+    is3DRef.current = is3D;
+    setViewState((prev) => ({
+      ...prev,
+      pitch: is3D ? 60 : 45,
+      bearing: is3D ? -15 : -5,
+      transitionDuration: 700,
+    }));
+  }, [is3D]);
+
   // ─── Basemap: exactly one active at a time (radio) ───
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("street");
 
@@ -647,6 +668,89 @@ export default function BorderMap({
     marineConditions: false,
     gridScale: "off",
   }));
+
+  // ─── 3D building layer helpers ────────────────────────────────────────────
+  // Injects or toggles a fill-extrusion layer on the underlying MapLibre map.
+  // Called on every map load (including basemap changes) and on is3D changes.
+  // Uses is3DRef so the function itself is stable (no deps that change often).
+  const applyBuilding3DLayer = useCallback((mlMap: maplibregl.Map) => {
+    if (!mlMap?.isStyleLoaded?.()) return;
+    const SOURCE = "phuket-bldg-src";
+    const LAYER  = "phuket-bldg-3d";
+    const show   = is3DRef.current;
+
+    if (show) {
+      if (!mlMap.getSource(SOURCE)) {
+        mlMap.addSource(SOURCE, {
+          type: "vector",
+          // OpenFreeMap — free, keyless, OpenStreetMap-based vector tiles
+          tiles: ["https://tiles.openfreemap.org/planet/{z}/{x}/{y}"],
+          minzoom: 0,
+          maxzoom: 14,
+          attribution: "© OpenFreeMap · © OpenStreetMap contributors",
+        });
+      }
+      if (!mlMap.getLayer(LAYER)) {
+        // Insert below the first text/symbol layer so labels stay on top
+        const firstLabel = (mlMap.getStyle()?.layers ?? []).find(
+          (l: { type: string; layout?: Record<string, unknown> }) =>
+            l.type === "symbol" && l.layout?.["text-field"],
+        )?.id;
+        mlMap.addLayer(
+          {
+            id: LAYER,
+            type: "fill-extrusion",
+            source: SOURCE,
+            "source-layer": "building",
+            minzoom: 12,
+            paint: {
+              // Height-graded colour: dark navy → slate blue for taller buildings
+              "fill-extrusion-color": [
+                "interpolate", ["linear"],
+                ["to-number", ["coalesce", ["get", "render_height"], ["get", "height"], 6]],
+                0,   "#0d1e2c",
+                15,  "#152a3c",
+                35,  "#1c3450",
+                70,  "#234064",
+                120, "#2b4d78",
+              ],
+              "fill-extrusion-height": [
+                "to-number",
+                ["coalesce", ["get", "render_height"], ["get", "height"], 6],
+              ],
+              "fill-extrusion-base": [
+                "to-number",
+                ["coalesce", ["get", "render_min_height"], 0],
+              ],
+              "fill-extrusion-opacity": 0.78,
+            },
+          },
+          firstLabel,
+        );
+      } else {
+        mlMap.setLayoutProperty(LAYER, "visibility", "visible");
+      }
+    } else {
+      if (mlMap.getLayer(LAYER)) {
+        mlMap.setLayoutProperty(LAYER, "visibility", "none");
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // stable — reads is3DRef, not is3D directly
+
+  // Re-sync building layer whenever is3D toggles
+  useEffect(() => {
+    if (mlMapRef.current) applyBuilding3DLayer(mlMapRef.current);
+  }, [is3D, applyBuilding3DLayer]);
+
+  // On every map load (fires for fresh mount and on basemap key change)
+  const handleMapLoad = useCallback(
+    (event: { target: maplibregl.Map }) => {
+      mlMapRef.current = event.target;
+      applyBuilding3DLayer(event.target);
+    },
+    [applyBuilding3DLayer],
+  );
 
   // ── Lazy-loaded GeoJSON / data caches for new overlays ──
   const [poiData, setPoiData] = useState<PoiCollection | null>(null);
@@ -1166,10 +1270,12 @@ export default function BorderMap({
               getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
             >
               {hasMapboxBaseMap ? (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 <MapboxMap
                   key={activeBasemap}
                   mapStyle={mapStyle}
                   attributionControl={false}
+                  onLoad={handleMapLoad as any}
                 />
               ) : (
                 <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
@@ -1404,6 +1510,25 @@ export default function BorderMap({
                 {option.label}
               </button>
             ))}
+
+            {/* ── 3D toggle — sits inline with basemap row ── */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">View</span>
+              <button
+                type="button"
+                aria-pressed={is3D}
+                data-control-classification="changes view"
+                onClick={() => setIs3D((v) => !v)}
+                title={is3D ? "Switch to 2D flat view" : "Switch to 3D — buildings extrude"}
+                className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
+                  is3D
+                    ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-[0_0_8px_rgba(15,111,136,0.5)]"
+                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--cool)] hover:text-[var(--cool)]"
+                }`}
+              >
+                {is3D ? "3D" : "2D"}
+              </button>
+            </div>
           </div>
 
           <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
