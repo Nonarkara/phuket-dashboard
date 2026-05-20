@@ -61,8 +61,12 @@ import {
   fetchRainViewerLatest,
   freshnessLabel as satelliteFreshnessLabel,
   freshnessTier as satelliteFreshnessTier,
+  buildGistdaOceanMeta,
+  GISTDA_OCEAN_WMS_BASE,
+  GISTDA_OCEAN_LAYERS,
 } from "../../services/satellite-layers";
 import type { SatelliteSource } from "../../services/satellite-layers";
+import { createWmsTileLayer, createTambonLayer } from "../../services/map-engine";
 import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
 import { PHUKET_WATERWAYS } from "../../data/phuket-waterways";
 import {
@@ -301,6 +305,9 @@ type OverlayState = {
   floodStations: boolean;
   marineConditions: boolean;
   gridScale: GridScale;
+  sstAndaman: boolean;
+  chlAndaman: boolean;
+  tambonBoundaries: boolean;
 };
 
 function interpolateMotionFrame<
@@ -618,8 +625,8 @@ export default function BorderMap({
     is3DRef.current = is3D;
     setViewState((prev) => ({
       ...prev,
-      pitch: is3D ? 60 : 45,
-      bearing: is3D ? -15 : -5,
+      pitch: is3D ? 65 : 45,
+      bearing: is3D ? -20 : -5,
       transitionDuration: 700,
     }));
   }, [is3D]);
@@ -666,6 +673,9 @@ export default function BorderMap({
     canalsDrainage: false,
     floodStations: false,
     marineConditions: false,
+    sstAndaman: false,
+    chlAndaman: false,
+    tambonBoundaries: false,
     gridScale: "off",
   }));
 
@@ -675,65 +685,113 @@ export default function BorderMap({
   // Uses is3DRef so the function itself is stable (no deps that change often).
   const applyBuilding3DLayer = useCallback((mlMap: maplibregl.Map) => {
     if (!mlMap?.isStyleLoaded?.()) return;
-    const SOURCE = "phuket-bldg-src";
-    const LAYER  = "phuket-bldg-3d";
-    const show   = is3DRef.current;
+    const BLDG_SRC  = "phuket-bldg-src";
+    const BLDG_LAYER = "phuket-bldg-3d";
+    const DEM_SRC   = "phuket-terrain-dem";
+    const SKY_LAYER = "phuket-sky";
+    const show = is3DRef.current;
+
+    // ── Height expression ───────────────────────────────────────
+    // Priority: render_height → height → levels * 3.2m → 6m default
+    // Buildings with many levels (hotels, condos) will extrude dramatically.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const heightExpr: any = [
+      "to-number",
+      ["coalesce",
+        ["get", "render_height"],
+        ["get", "height"],
+        ["*", ["to-number", ["coalesce", ["get", "building:levels"], ["get", "levels"], 0]], 3.2],
+        6,
+      ],
+    ];
 
     if (show) {
-      if (!mlMap.getSource(SOURCE)) {
-        mlMap.addSource(SOURCE, {
+      // ── 1. DEM terrain — AWS Terrarium (free, global, 15m resolution) ──
+      if (!mlMap.getSource(DEM_SRC)) {
+        mlMap.addSource(DEM_SRC, {
+          type: "raster-dem",
+          tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          maxzoom: 15,
+          encoding: "terrarium",
+          attribution: "Terrain Tiles · Mapzen / AWS",
+        });
+      }
+      // Exaggeration 2.0 — Phuket's ridgeline (max 529m) will tower visually
+      (mlMap as maplibregl.Map & { setTerrain?: (opt: unknown) => void }).setTerrain?.({
+        source: DEM_SRC,
+        exaggeration: 2.0,
+      });
+
+      // ── 2. Sky atmosphere — dramatic look for 3D ──
+      // maplibre v5 removed BackgroundPaint/AnyLayer exports — cast via unknown
+      if (!mlMap.getLayer(SKY_LAYER)) {
+        mlMap.addLayer({
+          id: SKY_LAYER,
+          type: "sky" as unknown as "background",
+          paint: {
+            "sky-type": "atmosphere",
+            "sky-atmosphere-sun": [0.0, 90.0],
+            "sky-atmosphere-sun-intensity": 15,
+          },
+        } as unknown as Parameters<typeof mlMap.addLayer>[0]);
+      }
+
+      // ── 3. Building extrusions ──
+      if (!mlMap.getSource(BLDG_SRC)) {
+        mlMap.addSource(BLDG_SRC, {
           type: "vector",
-          // OpenFreeMap — free, keyless, OpenStreetMap-based vector tiles
           tiles: ["https://tiles.openfreemap.org/planet/{z}/{x}/{y}"],
           minzoom: 0,
           maxzoom: 14,
           attribution: "© OpenFreeMap · © OpenStreetMap contributors",
         });
       }
-      if (!mlMap.getLayer(LAYER)) {
-        // Insert below the first text/symbol layer so labels stay on top
+      if (!mlMap.getLayer(BLDG_LAYER)) {
         const firstLabel = (mlMap.getStyle()?.layers ?? []).find(
           (l: { type: string; layout?: Record<string, unknown> }) =>
             l.type === "symbol" && l.layout?.["text-field"],
         )?.id;
         mlMap.addLayer(
           {
-            id: LAYER,
+            id: BLDG_LAYER,
             type: "fill-extrusion",
-            source: SOURCE,
+            source: BLDG_SRC,
             "source-layer": "building",
-            minzoom: 12,
+            minzoom: 10,
             paint: {
-              // Height-graded colour: dark navy → slate blue for taller buildings
+              // Warm amber for tall (hotels/towers) → teal for mid → cool gray for ground-floor
+              // Tall Patong hotels (~50–80m) glow amber; Old Town shophouses (~6–9m) stay gray
               "fill-extrusion-color": [
                 "interpolate", ["linear"],
-                ["to-number", ["coalesce", ["get", "render_height"], ["get", "height"], 6]],
-                0,   "#0d1e2c",
-                15,  "#152a3c",
-                35,  "#1c3450",
-                70,  "#234064",
-                120, "#2b4d78",
+                heightExpr,
+                0,   "#1c2b3a",   // ground-floor: dark gray-blue
+                6,   "#253545",   // 2-storey: slate
+                10,  "#2a4a5c",   // 3-storey: teal-gray
+                20,  "#1e7896",   // mid-rise: teal
+                40,  "#d47a1e",   // tall: amber (big hotels start here)
+                70,  "#f5a623",   // tower: golden amber
+                100, "#ff6b35",   // high-rise: orange-amber
+                150, "#ff4444",   // ultra-tall: red (visual alarm — stands out)
               ],
-              "fill-extrusion-height": [
-                "to-number",
-                ["coalesce", ["get", "render_height"], ["get", "height"], 6],
-              ],
+              "fill-extrusion-height": heightExpr,
               "fill-extrusion-base": [
                 "to-number",
                 ["coalesce", ["get", "render_min_height"], 0],
               ],
-              "fill-extrusion-opacity": 0.78,
+              "fill-extrusion-opacity": 0.88,
             },
           },
           firstLabel,
         );
       } else {
-        mlMap.setLayoutProperty(LAYER, "visibility", "visible");
+        mlMap.setLayoutProperty(BLDG_LAYER, "visibility", "visible");
       }
     } else {
-      if (mlMap.getLayer(LAYER)) {
-        mlMap.setLayoutProperty(LAYER, "visibility", "none");
-      }
+      // ── Disable terrain, sky, buildings ──
+      (mlMap as maplibregl.Map & { setTerrain?: (opt: null) => void }).setTerrain?.(null);
+      if (mlMap.getLayer(BLDG_LAYER)) mlMap.setLayoutProperty(BLDG_LAYER, "visibility", "none");
+      if (mlMap.getLayer(SKY_LAYER)) mlMap.setLayoutProperty(SKY_LAYER, "visibility", "none");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // stable — reads is3DRef, not is3D directly
@@ -758,6 +816,7 @@ export default function BorderMap({
   const [canalsData, setCanalsData] = useState<CanalCollection | null>(null);
   const [floodStations, setFloodStations] = useState<FloodStationPoint[]>([]);
   const [marineStations, setMarineStations] = useState<MarinePoint[]>([]);
+  const [tambonGeoJson, setTambonGeoJson] = useState<object | null>(null);
 
   useEffect(() => {
     if (enabledOverlays.publicInfrastructure && !poiData) {
@@ -807,6 +866,17 @@ export default function BorderMap({
         .catch(() => undefined);
     }
   }, [enabledOverlays.marineConditions, marineStations.length]);
+
+  // GISTDA tambon boundaries — lazy fetch on first toggle
+  useEffect(() => {
+    if (enabledOverlays.tambonBoundaries && !tambonGeoJson) {
+      fetch("/api/gistda/tambons")
+        .then((r) => r.json())
+        .then((d: object) => setTambonGeoJson(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.tambonBoundaries, tambonGeoJson]);
+
   const disasterAlerts = disasterFeed?.alerts ?? [];
   const publicCameras = [
     ...(cameraFeed?.cameras ?? []),
@@ -1122,8 +1192,17 @@ export default function BorderMap({
           : null;
   const precipitationSource =
     enabledOverlays.precipitationRadar && rainViewerSource ? rainViewerSource : null;
+  const gistdaOceanDate = buildGistdaOceanMeta().capturedAt;
   const layers = [
+    // ── GISTDA ocean WMS overlays (raster — bottommost so operational layers sit on top) ──
+    ...(enabledOverlays.sstAndaman
+      ? [createWmsTileLayer({ id: "gistda-sst", baseUrl: GISTDA_OCEAN_WMS_BASE, layers: GISTDA_OCEAN_LAYERS.sst, maxZoom: 10, opacity: 0.72 })]
+      : []),
+    ...(enabledOverlays.chlAndaman
+      ? [createWmsTileLayer({ id: "gistda-chl", baseUrl: GISTDA_OCEAN_WMS_BASE, layers: GISTDA_OCEAN_LAYERS.chl, maxZoom: 10, opacity: 0.68 })]
+      : []),
     // ── User-toggleable overlays (above basemap, below operational layers) ──
+    ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
     ...(enabledOverlays.waterways ? createWaterwaysLayer(PHUKET_WATERWAYS) : []),
     ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
@@ -1518,8 +1597,15 @@ export default function BorderMap({
                 type="button"
                 aria-pressed={is3D}
                 data-control-classification="changes view"
-                onClick={() => setIs3D((v) => !v)}
-                title={is3D ? "Switch to 2D flat view" : "Switch to 3D — buildings extrude"}
+                onClick={() => {
+                  setIs3D((v) => !v);
+                  setViewState((prev) =>
+                    !is3D && prev.zoom < 13
+                      ? { ...prev, zoom: 13, pitch: 65, bearing: -20 }
+                      : prev,
+                  );
+                }}
+                title={is3D ? "Switch to 2D flat view" : "Switch to 3D — buildings extrude (auto-zooms to a useful level)"}
                 className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
                   is3D
                     ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-[0_0_8px_rgba(15,111,136,0.5)]"
@@ -1544,6 +1630,9 @@ export default function BorderMap({
               { id: "publicInfrastructure" as const, label: "POI" },
               { id: "floodStations" as const, label: "Flood" },
               { id: "marineConditions" as const, label: "Marine" },
+              { id: "sstAndaman" as const, label: "Sea Temp" },
+              { id: "chlAndaman" as const, label: "Chl-a" },
+              { id: "tambonBoundaries" as const, label: "Districts" },
             ].map((toggle) => (
               <button
                 key={toggle.id}

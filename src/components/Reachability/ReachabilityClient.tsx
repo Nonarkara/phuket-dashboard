@@ -59,34 +59,39 @@ export default function ReachabilityClient() {
   // Initialise map
   useEffect(() => {
     if (!containerRef.current) return;
+    // Carto Voyager dark-on-light raster tiles — reliable from Cloudflare
+    // Worker IPs (OSM tile servers rate-limit shared egress). Permissive CORS.
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: {
         version: 8,
         sources: {
-          osm: {
+          carto: {
             type: "raster",
             tiles: [
-              "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+              "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+              "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+              "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
             ],
             tileSize: 256,
-            attribution: "© OpenStreetMap",
+            attribution: "© OpenStreetMap · © CARTO",
           },
         },
         layers: [
-          { id: "osm", type: "raster", source: "osm" },
+          { id: "carto-base", type: "raster", source: "carto" },
         ],
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       },
       center: PHUKET_CENTER,
       zoom: 10,
       minZoom: 7,           // §11.9 — never let the world repeat
       maxZoom: 17,
       renderWorldCopies: false,
+      attributionControl: false,
     });
     mapRef.current = map;
+    // Resize on first paint — handles late layout transitions
+    setTimeout(() => map.resize(), 100);
 
     map.on("load", () => {
       // Iso source + 3 fill layers
@@ -251,7 +256,15 @@ export default function ReachabilityClient() {
 
   return (
     <>
-      <div ref={containerRef} className="absolute inset-0" />
+      <div
+        ref={containerRef}
+        style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          width: "100%", height: "100%",
+          background: "#0d1117",
+        }}
+      />
 
       {/* Top-left info / tool panel — compact corner overlay (§11 rule) */}
       <div
