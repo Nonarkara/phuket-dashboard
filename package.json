@@ -12,9 +12,9 @@
     "start": "next start",
     "lint": "eslint",
     "test:ui": "node scripts/test-ui.mjs",
-    "build:cf": "npx @opennextjs/cloudflare build",
-    "deploy:cf": "npx @opennextjs/cloudflare build && wrangler pages deploy",
-    "preview:cf": "npx @opennextjs/cloudflare build && wrangler pages dev",
+    "build:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build",
+    "deploy:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build && wrangler pages deploy",
+    "preview:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build && wrangler pages dev",
     "build:static": "node scripts/static-export.mjs"
   },
   "dependencies": {
@@ -43,6 +43,7 @@
     "gsap": "^3.14.2",
     "lucide-react": "^0.577.0",
     "mapbox-gl": "^3.19.1",
+    "maplibre-gl": "^5.24.0",
     "next": "16.1.6",
     "pg": "^8.20.0",
     "postcss": "^8.5.8",

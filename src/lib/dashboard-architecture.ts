@@ -880,4 +880,7 @@ export const architectureSummary = {
   architectureLayerCount: architectureLayers.length,
   optionalProviderCount: externalProviderCatalog.filter((provider) => provider.optional)
     .length,
+  /** Digital twin maturity — UNDP-JTC + ADB framework alignment */
+  digitalTwinLevel: "Level 2 — Informative",
+  digitalTwinFrameworks: "UNDP-JTC Urban Digital Twin (Jul 2025) · ADB Digital Twin Framework (May 2025)",
 };

@@ -124,7 +124,7 @@ export default function SignalTicker({
   const items = is4K ? [...coreItems, ...extraItems] : coreItems;
 
   return (
-    <section aria-live="polite" className={`grid bg-[var(--bg-surface)] h-[28px] min-[3000px]:h-[48px] grid-cols-2 lg:grid-cols-4 min-[3000px]:grid-cols-8`}>
+    <section aria-live="polite" className="no-scrollbar flex h-[48px] overflow-x-auto bg-[var(--bg-raised)] min-[3000px]:h-[48px] sm:grid sm:h-[28px] sm:grid-cols-2 sm:overflow-visible sm:bg-[var(--bg-surface)] lg:grid-cols-4 min-[3000px]:grid-cols-8">
       {items.map((item) => {
         const toneClass =
           item.tone === "up"
@@ -142,18 +142,18 @@ export default function SignalTicker({
         return (
           <div
             key={item.id}
-            className="flex min-w-0 items-center justify-between gap-3 border-r border-[var(--line)] px-4 last:border-r-0"
+            className="flex w-[190px] shrink-0 items-center justify-between gap-2 border-r border-[var(--line)] px-3 last:border-r-0 sm:w-auto sm:min-w-0 sm:px-4"
           >
-            <div className="min-w-0 flex items-center gap-3">
-              <span className="text-[8px] min-[3000px]:text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="text-[7px] font-bold uppercase tracking-[0.14em] text-[var(--dim)] min-[3000px]:text-[11px] sm:text-[8px] sm:tracking-[0.18em]">
                 {item.label}
               </span>
-              <span className="truncate text-[12px] min-[3000px]:text-[16px] font-bold font-mono tabular-nums text-[var(--ink)]">
+              <span className="truncate font-mono text-[11px] font-bold tabular-nums text-[var(--ink)] min-[3000px]:text-[16px] sm:text-[12px]">
                 {item.value}
               </span>
             </div>
             <div
-              className={`flex items-center gap-1 text-[9px] min-[3000px]:text-[12px] font-mono tabular-nums ${toneClass}`}
+              className={`flex shrink-0 items-center gap-1 font-mono text-[8px] tabular-nums min-[3000px]:text-[12px] sm:text-[9px] ${toneClass}`}
             >
               <Icon size={is4K ? 14 : 10} />
               <span className="truncate">{item.delta}</span>

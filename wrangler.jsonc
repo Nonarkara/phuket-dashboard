@@ -7,5 +7,10 @@
     "binding": "ASSETS"
   },
   "compatibility_date": "2025-04-01",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [
+    { "pattern": "phuket-dashboard.nonarkara.org", "custom_domain": true }
+  ]
 }

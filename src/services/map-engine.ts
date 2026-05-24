@@ -3,6 +3,7 @@ import { TileLayer } from "@deck.gl/geo-layers";
 import {
   ArcLayer,
   BitmapLayer,
+  ColumnLayer,
   GeoJsonLayer,
   LineLayer,
   PathLayer,
@@ -103,6 +104,82 @@ function extractTileBounds(tile: unknown): TileBounds["bbox"] | null {
   }
 
   return null;
+}
+
+/**
+ * Converts a TMS tile coordinate to an EPSG:3857 bounding-box string
+ * suitable for WMS GetMap requests.
+ */
+function tileToBboxEpsg3857(x: number, y: number, z: number): string {
+  const half = 20037508.342789244;
+  const size = half * 2;
+  const tileCount = Math.pow(2, z);
+  const tileW = size / tileCount;
+  const minX = -half + x * tileW;
+  const maxX = minX + tileW;
+  const maxY = half - y * tileW;
+  const minY = maxY - tileW;
+  return `${minX},${minY},${maxX},${maxY}`;
+}
+
+/**
+ * WMS GetMap tile layer. Builds a bbox URL on-the-fly so that any OGC WMS
+ * service can be rendered as a deck.gl raster overlay (works on servers that
+ * don't expose WMTS / TMS endpoints).
+ */
+export function createWmsTileLayer({
+  id,
+  baseUrl,
+  layers,
+  maxZoom = 10,
+  opacity = 0.75,
+  extraParams = "",
+}: {
+  id: string;
+  baseUrl: string;
+  layers: string;
+  maxZoom?: number;
+  opacity?: number;
+  extraParams?: string;
+}) {
+  return new TileLayer({
+    id,
+    data: "null",     // dummy — getTileData builds real URL
+    minZoom: 0,
+    maxZoom,
+    tileSize: 256,
+    opacity,
+    getTileData: async (tile: { index: { x: number; y: number; z: number } }) => {
+      const bbox = tileToBboxEpsg3857(tile.index.x, tile.index.y, tile.index.z);
+      const url =
+        `${baseUrl}?service=WMS&version=1.1.1&request=GetMap` +
+        `&layers=${layers}&bbox=${bbox}` +
+        `&width=256&height=256&srs=EPSG:3857&styles=&format=image/png&transparent=true` +
+        (extraParams ? `&${extraParams}` : "");
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+        if (!res.ok || res.headers.get("content-type")?.includes("xml")) return null;
+        const blob = await res.blob();
+        return await createImageBitmap(blob);
+      } catch {
+        return null;
+      }
+    },
+    renderSubLayers: (props) => {
+      const image = props.data;
+      if (!image) return null;
+      const tile = props.tile as unknown as { boundingBox?: [[number, number], [number, number]]; bbox?: { west: number; south: number; east: number; north: number } };
+      let west: number, south: number, east: number, north: number;
+      if (tile?.boundingBox) { [[west, south], [east, north]] = tile.boundingBox; }
+      else if (tile?.bbox) { ({ west, south, east, north } = tile.bbox); }
+      else { return null; }
+      return new BitmapLayer(props, {
+        data: undefined,
+        image,
+        bounds: [west, south, east, north],
+      });
+    },
+  });
 }
 
 export function createRasterTileLayer({
@@ -1215,23 +1292,23 @@ export interface RoadCollection {
 
 function roadColor(highway: string): [number, number, number, number] {
   switch (highway) {
-    case "motorway": return [251, 191, 36, 220];
-    case "trunk":    return [250, 204, 21, 200];
-    case "primary":  return [241, 245, 249, 180];
-    case "secondary":return [148, 163, 184, 150];
-    case "tertiary": return [100, 116, 139, 130];
-    default:         return [71, 85, 105, 100];
+    case "motorway": return [251, 191, 36, 255];
+    case "trunk":    return [253, 224, 71, 245];
+    case "primary":  return [255, 255, 255, 235];
+    case "secondary":return [226, 232, 240, 215];
+    case "tertiary": return [203, 213, 225, 195];
+    default:         return [148, 163, 184, 175];
   }
 }
 
 function roadWidth(highway: string): number {
   switch (highway) {
-    case "motorway": return 4.5;
-    case "trunk":    return 3.8;
-    case "primary":  return 3.2;
-    case "secondary":return 2.4;
-    case "tertiary": return 1.6;
-    default:         return 1.2;
+    case "motorway": return 6;
+    case "trunk":    return 5;
+    case "primary":  return 4;
+    case "secondary":return 3;
+    case "tertiary": return 2.2;
+    default:         return 1.6;
   }
 }
 
@@ -1244,7 +1321,7 @@ export function createRoadNetworkLayer(roads: RoadCollection) {
       stroked: true,
       filled: false,
       lineWidthUnits: "pixels" as const,
-      lineWidthMinPixels: 1.2,
+      lineWidthMinPixels: 1.8,
       getLineColor: (f: { properties?: { highway?: string } }) => roadColor(f.properties?.highway ?? ""),
       getLineWidth: (f: { properties?: { highway?: string } }) => roadWidth(f.properties?.highway ?? ""),
       pickable: true,
@@ -1273,21 +1350,21 @@ export interface CanalCollection {
 
 function canalColor(waterway: string): [number, number, number, number] {
   switch (waterway) {
-    case "river":  return [29, 78, 216, 230];
-    case "canal":  return [6, 182, 212, 220];
-    case "stream": return [56, 189, 248, 200];
-    case "drain":  return [251, 146, 60, 210];
-    default:       return [14, 165, 233, 180];
+    case "river":  return [29, 78, 216, 250];
+    case "canal":  return [6, 182, 212, 245];
+    case "stream": return [56, 189, 248, 235];
+    case "drain":  return [251, 146, 60, 235];
+    default:       return [14, 165, 233, 220];
   }
 }
 
 function canalWidth(waterway: string): number {
   switch (waterway) {
-    case "river":  return 3.5;
-    case "canal":  return 2.8;
-    case "stream": return 1.6;
-    case "drain":  return 1.4;
-    default:       return 1.2;
+    case "river":  return 5;
+    case "canal":  return 4;
+    case "stream": return 2.4;
+    case "drain":  return 2.2;
+    default:       return 1.8;
   }
 }
 
@@ -1300,7 +1377,7 @@ export function createCanalsLayer(canals: CanalCollection) {
       stroked: true,
       filled: false,
       lineWidthUnits: "pixels" as const,
-      lineWidthMinPixels: 1,
+      lineWidthMinPixels: 1.8,
       getLineColor: (f: { properties?: { waterway?: string } }) => canalColor(f.properties?.waterway ?? ""),
       getLineWidth: (f: { properties?: { waterway?: string } }) => canalWidth(f.properties?.waterway ?? ""),
       pickable: true,
@@ -1532,4 +1609,79 @@ export function createAqiFlagLayers(points: AirQualityPoint[]) {
       pickable: false,
     }),
   ];
+}
+
+/**
+ * Phuket sub-district (tambon) boundary choropleth.
+ * Renders district polygons as subtle outlines + faint fill.
+ * Data: GISTDA administrative boundary FeatureServer (DOPA source).
+ * Pickable — click a tambon → shows name + district.
+ */
+/**
+ * PM2.5 vertical bar columns — one glowing column per AQI station,
+ * height proportional to AQI value. Green/amber/red color by category.
+ * Use in 3D mode so the bars rise above the terrain surface.
+ */
+const AQI_COLUMN_COLORS: Record<string, [number, number, number, number]> = {
+  "Good":                           [34,  197,  94,  200],
+  "Moderate":                       [250, 204,  21,  200],
+  "Unhealthy for Sensitive Groups": [251, 146,  60,  200],
+  "Unhealthy":                      [239,  68,  68,  210],
+  "Very Unhealthy":                 [168,  85, 247,  220],
+  "Hazardous":                      [127,  29,  29,  230],
+};
+
+export function createAqiColumnLayers(points: AirQualityPoint[]) {
+  if (!points.length) return [];
+  return [
+    new ColumnLayer({
+      id: "aqi-columns",
+      data: points,
+      diskResolution: 16,
+      radius: 450,
+      extruded: true,
+      getPosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getElevation: (d: AirQualityPoint) => Math.max(50, d.aqi * 12),
+      getFillColor: (d: AirQualityPoint) =>
+        AQI_COLUMN_COLORS[d.category ?? "Good"] ?? [34, 197, 94, 200],
+      opacity: 0.75,
+      pickable: true,
+    }),
+    // Label at top of column
+    new TextLayer({
+      id: "aqi-column-labels",
+      data: points,
+      getPosition: (d: AirQualityPoint) => [d.lng, d.lat],
+      getText: (d: AirQualityPoint) => `AQI ${Math.round(d.aqi)}\n${d.label}`,
+      getSize: 13,
+      getColor: [248, 250, 252, 240],
+      getAlignmentBaseline: "bottom" as const,
+      getTextAnchor: "middle" as const,
+      getPixelOffset: [0, -8],
+      getElevation: (d: AirQualityPoint) => Math.max(50, d.aqi * 12) + 10,
+      fontFamily: "JetBrains Mono, SF Mono, monospace",
+      fontWeight: 700,
+      outlineColor: [15, 23, 42, 220],
+      outlineWidth: 3,
+      sizeUnits: "pixels" as const,
+      billboard: true,
+      pickable: false,
+    }),
+  ];
+}
+
+export function createTambonLayer(geojson: unknown) {
+  return new GeoJsonLayer({
+    id: "gistda-tambons",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: geojson as any,
+    stroked: true,
+    filled: true,
+    pickable: true,
+    getFillColor: [88, 166, 255, 18],      // very faint blue tint
+    getLineColor: [88, 166, 255, 140],     // cool blue hairline
+    lineWidthMinPixels: 1,
+    getLineWidth: 1,
+    lineWidthUnits: "pixels" as const,
+  });
 }

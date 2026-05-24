@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { assetPath, apiUrl } from "../../lib/asset-path";
 import { TrendingUp, TrendingDown, Minus, Moon, Sun } from "lucide-react";
@@ -30,6 +31,19 @@ function formatMainClock() {
     second: "2-digit",
     hour12: false,
   });
+}
+
+function formatLocalClock(timezone: string): string {
+  try {
+    return new Date().toLocaleTimeString("en-GB", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return "--:--";
+  }
 }
 
 function statusClasses(status: ExecutiveStatus) {
@@ -66,34 +80,7 @@ export default function TopBar({
     source: string;
   } | null>(null);
 
-  const [newsHeadlines, setNewsHeadlines] = useState<{ title: string; url: string; source: string; severity: string }[]>([]);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
-
-  // Fetch news headlines for ticker
-  useEffect(() => {
-    const loadNews = async () => {
-      try {
-        const res = await fetch(apiUrl(`/api/news/multilingual?t=${Date.now()}`));
-        if (res.ok) {
-          const data = await res.json();
-          const all = [...(data.en ?? []), ...(data.th ?? [])];
-          setNewsHeadlines(
-            all.sort((a: { publishedAt: string }, b: { publishedAt: string }) =>
-              new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-            ).slice(0, 10).map((item: { title: string; url?: string; source: string; severity: string }) => ({
-              title: item.title?.substring(0, 80) ?? "",
-              url: item.url ?? "#",
-              source: item.source ?? "",
-              severity: item.severity ?? "stable",
-            }))
-          );
-        }
-      } catch { /* silent */ }
-    };
-    void loadNews();
-    const interval = setInterval(() => void loadNews(), 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const loadTrend = async (range: string) => {
     try {
@@ -149,16 +136,15 @@ export default function TopBar({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [showAdminMenu]);
 
-  const topConcerns = brief?.topConcerns ?? [];
   const feederOrigins = visitorOrigins?.origins ?? [];
   const visitorOriginSourceLabel =
     visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-4 py-1 min-[3000px]:py-2 backdrop-blur-xl sm:px-5">
-      <div className="flex items-center justify-between gap-4">
+    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 min-[3000px]:py-2 backdrop-blur-xl sm:px-5">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Title + posture */}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           {/* Logos */}
           <div className="hidden sm:flex items-center gap-1.5 shrink-0">
             <Image
@@ -184,9 +170,9 @@ export default function TopBar({
             />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
-          <div className="min-w-0 shrink-0">
-            <div className="text-[8px] min-[3000px]:text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">Phuket Dashboard v7.0</div>
-            <div className="text-[13px] min-[3000px]:text-[22px] font-bold tracking-tight text-[var(--ink)] whitespace-nowrap">
+          <div className="min-w-0">
+            <div className="truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
+            <div className="truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] sm:text-[13px]">
               Governor War Room
             </div>
           </div>
@@ -325,32 +311,13 @@ export default function TopBar({
           )}
         </div>
 
-        {/* Center: Key metrics strip */}
-        <div className="hidden items-center gap-3 lg:flex">
-          {topConcerns.slice(0, 6).map((concern) => (
-            <div key={concern.id} className="flex items-center gap-1.5">
-              <span className="text-[11px] font-mono font-bold text-[var(--ink)]">{concern.metricValue}</span>
-              <span className="text-[7px] uppercase tracking-[0.14em] text-[var(--dim)]">{concern.label}</span>
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  concern.status === "intervene"
-                    ? "bg-[#ef4444]"
-                    : concern.status === "watch"
-                      ? "bg-[#f59e0b]"
-                      : "bg-[var(--cool)]"
-                }`}
-              />
-            </div>
-          ))}
-        </div>
-
         {/* Right: Clock + utils */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-[18px] min-[3000px]:text-[36px] font-bold tracking-tighter text-[var(--ink)]">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <div className="flex items-baseline gap-1 sm:gap-1.5">
+            <span className="font-mono text-[14px] font-bold tracking-normal text-[var(--ink)] min-[3000px]:text-[36px] sm:text-[18px] sm:tracking-tighter">
               {time || "--:--:--"}
             </span>
-            <span className="text-[8px] min-[3000px]:text-[12px] font-mono text-[var(--dim)] uppercase tracking-wider">
+            <span className="hidden font-mono text-[8px] uppercase tracking-wider text-[var(--dim)] min-[3000px]:text-[12px] sm:inline">
               HKT
             </span>
           </div>
@@ -359,12 +326,19 @@ export default function TopBar({
             <button
               type="button"
               onClick={onToggleDark}
-              className="border border-[var(--line)] px-2 py-1 text-[var(--dim)] transition-colors hover:text-[var(--ink)]"
+              className="hidden border border-[var(--line)] px-2 py-1 text-[var(--dim)] transition-colors hover:text-[var(--ink)] sm:block"
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDark ? <Sun size={12} /> : <Moon size={12} />}
             </button>
           )}
+          <Link
+            href="/showcase"
+            className="hidden border border-[var(--line)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] transition-colors hover:border-[var(--line-bright)] hover:text-[var(--ink)] sm:block"
+            title="Narrative showcase — design philosophy and scenario guide"
+          >
+            Showcase
+          </Link>
           <div ref={adminMenuRef} className="relative">
             <button
               type="button"
@@ -372,7 +346,7 @@ export default function TopBar({
               aria-expanded={showAdminMenu}
               aria-haspopup="menu"
               data-control-classification="opens panel"
-              className="border border-[var(--line)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)]"
+              className="border border-[var(--line)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)] sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em]"
             >
               Admin
             </button>
@@ -444,53 +418,50 @@ export default function TopBar({
         </span>
         <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar">
           {feederOrigins.length > 0 ? (
-            feederOrigins.map((origin) => (
-              <div
-                key={origin.countryCode}
-                className="flex shrink-0 items-center gap-1.5 border border-[var(--line)] px-1.5 py-0.5"
-              >
-                <Image
-                  src={assetPath(origin.logo)}
-                  alt={origin.country}
-                  width={12}
-                  height={12}
-                  className="h-3 w-3"
-                />
-                <div className="leading-tight">
-                  <div className="text-[8px] font-semibold text-[var(--ink)]">
-                    {origin.rank}. {origin.country}
+            feederOrigins.map((origin) => {
+              const localTime = origin.timezone ? formatLocalClock(origin.timezone) : "";
+              return (
+                <div
+                  key={origin.countryCode}
+                  className="flex shrink-0 items-center gap-1.5 border border-[var(--line)] px-1.5 py-0.5"
+                  title={`${origin.country} · local time ${localTime}${origin.timezoneShort ? ` ${origin.timezoneShort}` : ""}`}
+                >
+                  <Image
+                    src={assetPath(origin.logo)}
+                    alt={origin.country}
+                    width={12}
+                    height={12}
+                    className="h-3 w-3"
+                  />
+                  <div className="leading-tight">
+                    <div className="text-[8px] font-semibold text-[var(--ink)]">
+                      {origin.rank}. {origin.country}
+                    </div>
+                    <div className="text-[7px] font-mono text-[var(--dim)]">
+                      ${origin.gdpPerCapitaUsd ? Math.round(origin.gdpPerCapitaUsd / 1000) + "k" : "--"}
+                      {origin.year ? ` • ${origin.year}` : ""}
+                    </div>
                   </div>
-                  <div className="text-[7px] font-mono text-[var(--dim)]">
-                    ${origin.gdpPerCapitaUsd ? Math.round(origin.gdpPerCapitaUsd / 1000) + "k" : "--"}
-                    {origin.year ? ` • ${origin.year}` : ""}
-                  </div>
+                  {origin.timezone && (
+                    <div className="border-l border-[var(--line)] pl-1.5 leading-tight">
+                      <div className="font-mono text-[10px] font-bold text-[var(--ink)] tabular-nums">
+                        {localTime}
+                      </div>
+                      <div className="font-mono text-[7px] uppercase tracking-[0.14em] text-[var(--dim)]">
+                        {origin.timezoneShort}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="border border-[var(--line)] px-2 py-0.5 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
               Loading
             </div>
           )}
         </div>
-        <div className="h-3 w-[1px] bg-[var(--line)] shrink-0" />
-
-        {/* Scrolling news headline ticker */}
-        <div className="min-w-0 flex-1 overflow-hidden relative">
-          <div className="animate-marquee whitespace-nowrap flex items-center gap-6">
-            {newsHeadlines.map((h, i) => (
-              <a key={i} href={h.url} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[8px] hover:text-[var(--cool)] transition-colors shrink-0">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
-                  h.severity === "alert" ? "bg-[#ef4444]" : h.severity === "watch" ? "bg-[#f59e0b]" : "bg-[var(--cool)]"
-                }`} />
-                <span className="font-semibold text-[var(--ink)]">{h.title}</span>
-                <span className="text-[var(--dim)]">({h.source})</span>
-              </a>
-            ))}
-          </div>
-        </div>
-        <span className="shrink-0 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
+        <span className="ml-auto shrink-0 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
           {visitorOriginSourceLabel}
         </span>
       </div>

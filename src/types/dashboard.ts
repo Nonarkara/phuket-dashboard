@@ -887,6 +887,10 @@ export interface PhuketVisitorOrigin {
   countryCode: string;
   country: string;
   logo: string;
+  /** IANA timezone for the country's primary metro / capital, used for emergency-coordination clocks. */
+  timezone: string;
+  /** Short tz abbreviation displayed next to the local time chip. */
+  timezoneShort: string;
   gdpPerCapitaUsd: number | null;
   year: number | null;
   source: string;

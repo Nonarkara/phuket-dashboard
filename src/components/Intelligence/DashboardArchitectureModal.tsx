@@ -171,6 +171,13 @@ function OverviewTab() {
         />
       </section>
 
+      <section className="dashboard-panel rounded-2xl p-4 sm:p-5 text-xs font-mono opacity-70"
+               title={architectureSummary.digitalTwinFrameworks}>
+        <span className="eyebrow mr-3">Digital Twin Framework</span>
+        <span>{architectureSummary.digitalTwinLevel}</span>
+        <span className="opacity-50 ml-2">· {architectureSummary.digitalTwinFrameworks}</span>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="dashboard-panel rounded-2xl p-4 sm:p-5">
           <div className="eyebrow">System Layers</div>

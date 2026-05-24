@@ -1,6 +1,6 @@
 "use client";
 
-import { ListTodo, Radio, Video } from "lucide-react";
+import { ListTodo, Video } from "lucide-react";
 import { SkeletonStrip } from "../Skeleton";
 import type {
   DataFreshness,
@@ -121,82 +121,8 @@ export default function OpsControlStrip({
   const feedHealth = buildFeedHealth(operations, cameraFeed);
 
   return (
-    <section className="border-b border-[var(--line)] bg-[var(--bg-surface)] px-4 py-2 sm:px-5">
-      <div className="hidden items-start gap-3 xl:grid xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="border border-[var(--line)] bg-[var(--panel)] px-3 py-3">
-          <div className="flex items-center gap-2">
-            <ListTodo size={14} className="text-[var(--cool)]" />
-            <div>
-              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-                Action queue
-              </div>
-              <div className="text-[12px] font-bold tracking-tight text-[var(--ink)]">
-                Top operator moves
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {actions.length > 0 ? (
-              actions.map((action, index) => (
-                <div
-                  key={`${index + 1}-${action}`}
-                  className="flex items-start gap-2 border border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2"
-                >
-                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border border-[var(--line)] text-[9px] font-mono font-bold text-[var(--ink)]">
-                    {index + 1}
-                  </div>
-                  <p className="text-[11px] leading-5 text-[var(--muted)]">{action}</p>
-                </div>
-              ))
-            ) : (
-              <SkeletonStrip />
-            )}
-          </div>
-        </div>
-
-        <div className="border border-[var(--line)] bg-[var(--panel)] px-3 py-3">
-          <div className="flex items-center gap-2">
-            <Radio size={14} className="text-[var(--cool)]" />
-            <div>
-              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-                Feed health
-              </div>
-              <div className="text-[12px] font-bold tracking-tight text-[var(--ink)]">
-                Live vs modeled posture
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {feedHealth.length > 0 ? (
-              feedHealth.map((item) => (
-                <div
-                  key={item.id}
-                  className={`min-w-[140px] border px-3 py-2 ${modeClasses(item.mode, item.freshness)}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[8px] font-bold uppercase tracking-[0.16em]">
-                      {item.label}
-                    </div>
-                    <div className="text-[8px] font-bold uppercase tracking-[0.16em]">
-                      {item.mode}
-                    </div>
-                  </div>
-                  <div className="mt-1 text-[10px] leading-4 text-[var(--ink)]">
-                    {item.note}
-                  </div>
-                  <div className="mt-1 text-[8px] uppercase tracking-[0.14em] text-[var(--dim)]">
-                    {freshnessLabel(item.freshness)}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <SkeletonStrip />
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar xl:hidden">
+    <section className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 sm:bg-[var(--bg-surface)] sm:px-5">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
         <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5">
           <div className="flex items-center gap-1.5">
             <ListTodo size={12} className="text-[var(--cool)]" />
@@ -209,7 +135,8 @@ export default function OpsControlStrip({
           actions.map((action, index) => (
             <div
               key={`${index + 1}-${action}`}
-              className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[10px] text-[var(--muted)]"
+              className="max-w-[82vw] shrink-0 truncate border border-[var(--line)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-[10px] text-[var(--muted)] sm:max-w-none sm:bg-[var(--panel)]"
+              title={action}
             >
               <span className="font-mono font-bold text-[var(--ink)]">{index + 1}.</span>{" "}
               {action}
@@ -231,6 +158,7 @@ export default function OpsControlStrip({
             <div
               key={item.id}
               className={`shrink-0 border px-2.5 py-1.5 ${modeClasses(item.mode, item.freshness)}`}
+              title={item.note}
             >
               <div className="text-[8px] font-bold uppercase tracking-[0.16em]">
                 {item.label} {item.mode}

@@ -11,17 +11,28 @@ import {
 } from "lucide-react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import { SkeletonOpsPanel } from "../Skeleton";
+import GovernorDailyBrief from "./GovernorDailyBrief";
 import type {
   DemandSupplySnapshot,
   ExecutiveStatus,
+  FeedMode,
+  GovernorBrief,
   InterchangeTouchpoint,
   OperationalWeatherResponse,
   OperationsConstraint,
   OperationsDashboardResponse,
 } from "../../types/dashboard";
 
+function modeDotClass(mode: FeedMode | undefined | null): string {
+  if (mode === "live") return "bg-[#22c55e]";
+  if (mode === "modeled" || mode === "hybrid") return "bg-[#f59e0b]";
+  if (mode === "degraded") return "bg-[#ef4444]";
+  return "bg-[var(--line)]";
+}
+
 interface OperationsPanelProps {
   data: OperationsDashboardResponse | null;
+  brief?: GovernorBrief | null;
 }
 
 function statusTheme(status: ExecutiveStatus) {
@@ -80,17 +91,24 @@ function SnapshotCard({
 }) {
   const theme = statusTheme(snapshot.status);
   return (
-    <section className={`border ${theme.border} ${theme.bg} px-3 py-3`}>
+    <section className={`overflow-hidden border ${theme.border} ${theme.bg} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className={`flex h-8 w-8 items-center justify-center border ${theme.border}`}>
             {icon}
           </div>
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-              {title}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                {title}
+              </span>
+              <span
+                title={`${snapshot.sourceSummary.mode} · ${snapshot.sourceSummary.label}`}
+                aria-label={`${title} data state: ${snapshot.sourceSummary.mode}`}
+                className={`h-1.5 w-1.5 rounded-full ${modeDotClass(snapshot.sourceSummary.mode)}`}
+              />
             </div>
-            <div className={`text-[15px] font-bold tracking-tight ${theme.text}`}>
+            <div className={`truncate text-[15px] font-bold tracking-tight ${theme.text}`}>
               {snapshot.label}
             </div>
           </div>
@@ -152,17 +170,24 @@ function ConstraintCard({
   const label = "metrics" in constraint ? constraint.label : constraint.condition;
 
   return (
-    <section className={`border ${theme.border} px-3 py-3`}>
+    <section className={`overflow-hidden border ${theme.border} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className={`flex h-8 w-8 items-center justify-center border ${theme.border}`}>
             {icon}
           </div>
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-              {title}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                {title}
+              </span>
+              <span
+                title={`${constraint.sourceSummary.mode} · ${constraint.sourceSummary.label}`}
+                aria-label={`${title} data state: ${constraint.sourceSummary.mode}`}
+                className={`h-1.5 w-1.5 rounded-full ${modeDotClass(constraint.sourceSummary.mode)}`}
+              />
             </div>
-            <div className={`text-[15px] font-bold tracking-tight ${theme.text}`}>
+            <div className={`truncate text-[15px] font-bold tracking-tight ${theme.text}`}>
               {label}
             </div>
           </div>
@@ -196,13 +221,13 @@ function TouchpointCard({ touchpoint }: { touchpoint: InterchangeTouchpoint }) {
   const theme = statusTheme(touchpoint.status);
 
   return (
-    <section className={`border ${theme.border} bg-[var(--bg)] px-3 py-3`}>
+    <section className={`overflow-hidden border ${theme.border} bg-[var(--bg)] px-3 py-3`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
             {touchpoint.area}
           </div>
-          <div className={`mt-0.5 text-[15px] font-bold tracking-tight ${theme.text}`}>
+          <div className={`mt-0.5 truncate text-[15px] font-bold tracking-tight ${theme.text}`}>
             {touchpoint.label}
           </div>
         </div>
@@ -249,16 +274,16 @@ function TouchpointCard({ touchpoint }: { touchpoint: InterchangeTouchpoint }) {
         {touchpoint.vehicles.map((vehicle) => (
           <div
             key={vehicle.id}
-            className={`border px-2 py-1 text-[9px] ${
+            className={`max-w-full border px-2 py-1 text-[9px] ${
               vehicle.kind === "ferry"
                 ? "border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.06)]"
                 : "border-[var(--line)] bg-[var(--bg-raised)]"
             }`}
           >
-            <div className="font-bold uppercase tracking-[0.12em] text-[var(--ink)]">
+            <div className="truncate font-bold uppercase tracking-[0.12em] text-[var(--ink)]">
               {vehicle.kind === "ferry" ? "Ferry" : "Bus"} {vehicle.label}
             </div>
-            <div className="mt-0.5 font-mono text-[var(--dim)]">
+            <div className="mt-0.5 truncate font-mono text-[var(--dim)]">
               {vehicle.etaMinutes !== null ? `ETA ${vehicle.etaMinutes}m` : "On stand"}
               {vehicle.routeLabel ? ` | ${vehicle.routeLabel}` : ""}
             </div>
@@ -269,7 +294,7 @@ function TouchpointCard({ touchpoint }: { touchpoint: InterchangeTouchpoint }) {
   );
 }
 
-export default function OperationsPanel({ data }: OperationsPanelProps) {
+export default function OperationsPanel({ data, brief = null }: OperationsPanelProps) {
   const is4K = useWarRoomScale();
 
   if (!data) {
@@ -277,15 +302,15 @@ export default function OperationsPanel({ data }: OperationsPanelProps) {
   }
 
   return (
-    <aside className="flex h-full flex-col border-l border-[var(--line)] bg-[var(--bg-raised)]">
+    <aside className="flex h-full flex-col border-[var(--line)] bg-[var(--bg-raised)] xl:border-l">
       <div className="border-b border-[var(--line)] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
-              Operations desk
+              Governor&apos;s desk
             </div>
             <div className="mt-0.5 text-[18px] font-bold tracking-tight text-[var(--ink)]">
-              Airport to city to pier
+              Daily brief
             </div>
           </div>
           <div className="text-right">
@@ -297,12 +322,11 @@ export default function OperationsPanel({ data }: OperationsPanelProps) {
             </div>
           </div>
         </div>
-        <p className="mt-2 text-[10px] leading-4 text-[var(--muted)]">
-          The operator wall is following one chain: arrival banks, transfer lift, road friction, and pier handoff timing.
-        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        <GovernorDailyBrief brief={brief} operations={data} />
+
         <div className={`grid gap-3 p-4 ${is4K ? "grid-cols-2" : "grid-cols-1"}`}>
           <SnapshotCard
             title="Demand"

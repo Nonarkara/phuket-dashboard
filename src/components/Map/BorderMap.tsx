@@ -66,7 +66,8 @@ import {
   GISTDA_OCEAN_LAYERS,
 } from "../../services/satellite-layers";
 import type { SatelliteSource } from "../../services/satellite-layers";
-import { createWmsTileLayer, createTambonLayer } from "../../services/map-engine";
+import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers } from "../../services/map-engine";
+import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
 import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
 import { PHUKET_WATERWAYS } from "../../data/phuket-waterways";
 import {
@@ -308,6 +309,7 @@ type OverlayState = {
   sstAndaman: boolean;
   chlAndaman: boolean;
   tambonBoundaries: boolean;
+  aqiColumns: boolean;
 };
 
 function interpolateMotionFrame<
@@ -614,6 +616,8 @@ export default function BorderMap({
 
   // ─── 3D view mode ───────────────────────────────────────────────────────────
   const [is3D, setIs3D] = useState(false);
+  const [floodLevelM, setFloodLevelM] = useState(0);
+  const floodLevelRef = useRef(0);
   // Stable ref so the building-layer helper can always read the current value
   // without needing to be recreated on every state change.
   const is3DRef = useRef(false);
@@ -623,6 +627,7 @@ export default function BorderMap({
   // Camera follows view mode (matching Chula dashboard transition cadence).
   useEffect(() => {
     is3DRef.current = is3D;
+    floodLevelRef.current = floodLevelM;
     setViewState((prev) => ({
       ...prev,
       pitch: is3D ? 65 : 45,
@@ -676,6 +681,7 @@ export default function BorderMap({
     sstAndaman: false,
     chlAndaman: false,
     tambonBoundaries: false,
+    aqiColumns: false,
     gridScale: "off",
   }));
 
@@ -723,21 +729,63 @@ export default function BorderMap({
         exaggeration: 2.0,
       });
 
-      // ── 2. Sky atmosphere — dramatic look for 3D ──
-      // maplibre v5 removed BackgroundPaint/AnyLayer exports — cast via unknown
+      // ── 2. Atmospheric fog — hazes the valleys & horizon ──
+      (mlMap as maplibregl.Map & { setFog?: (opt: unknown) => void }).setFog?.({
+        range: [0.8, 8],
+        color: "rgba(200, 230, 255, 0.8)",
+        "horizon-blend": 0.08,
+        "high-color": "#8cb5d6",
+        "space-color": "#1a1a2e",
+        "star-intensity": 0.15,
+      });
+
+      // ── 3. Warm directional lighting — amber morning sun from east ──
+      (mlMap as maplibregl.Map & { setLight?: (opt: unknown) => void }).setLight?.({
+        anchor: "viewport",
+        color: "#ffd280",
+        intensity: 0.6,
+        position: [1.5, 90, 80],
+      });
+
+      // ── 4. Sky atmosphere ──
       if (!mlMap.getLayer(SKY_LAYER)) {
         mlMap.addLayer({
           id: SKY_LAYER,
           type: "sky" as unknown as "background",
           paint: {
             "sky-type": "atmosphere",
-            "sky-atmosphere-sun": [0.0, 90.0],
-            "sky-atmosphere-sun-intensity": 15,
+            "sky-atmosphere-sun": [90.0, 80.0],
+            "sky-atmosphere-sun-intensity": 12,
           },
         } as unknown as Parameters<typeof mlMap.addLayer>[0]);
       }
 
-      // ── 3. Building extrusions ──
+      // ── 5. Flood water plane — translucent blue, height = floodLevelRef ──
+      const FLOOD_SRC = "phuket-flood-plane-src";
+      const FLOOD_LAYER = "phuket-flood-plane";
+      if (!mlMap.getSource(FLOOD_SRC)) {
+        mlMap.addSource(FLOOD_SRC, {
+          type: "geojson",
+          data: PHUKET_FLOOD_ZONES as Parameters<typeof mlMap.addSource>[1] extends { type: "geojson"; data: infer T } ? T : never,
+        });
+      }
+      if (!mlMap.getLayer(FLOOD_LAYER)) {
+        mlMap.addLayer({
+          id: FLOOD_LAYER,
+          type: "fill-extrusion",
+          source: FLOOD_SRC,
+          paint: {
+            "fill-extrusion-color": "#0ea5e9",
+            "fill-extrusion-height": floodLevelRef.current > 0 ? floodLevelRef.current : 0,
+            "fill-extrusion-opacity": floodLevelRef.current > 0 ? 0.45 : 0,
+          },
+        });
+      } else {
+        mlMap.setPaintProperty(FLOOD_LAYER, "fill-extrusion-height", floodLevelRef.current > 0 ? floodLevelRef.current : 0);
+        mlMap.setPaintProperty(FLOOD_LAYER, "fill-extrusion-opacity", floodLevelRef.current > 0 ? 0.45 : 0);
+      }
+
+      // ── 6. Building extrusions ──
       if (!mlMap.getSource(BLDG_SRC)) {
         mlMap.addSource(BLDG_SRC, {
           type: "vector",
@@ -800,6 +848,15 @@ export default function BorderMap({
   useEffect(() => {
     if (mlMapRef.current) applyBuilding3DLayer(mlMapRef.current);
   }, [is3D, applyBuilding3DLayer]);
+
+  // Re-sync flood plane height whenever slider changes
+  useEffect(() => {
+    floodLevelRef.current = floodLevelM;
+    const mlMap = mlMapRef.current;
+    if (!mlMap?.isStyleLoaded?.() || !mlMap.getLayer("phuket-flood-plane")) return;
+    mlMap.setPaintProperty("phuket-flood-plane", "fill-extrusion-height", floodLevelM > 0 ? floodLevelM : 0);
+    mlMap.setPaintProperty("phuket-flood-plane", "fill-extrusion-opacity", floodLevelM > 0 ? 0.45 : 0);
+  }, [floodLevelM]);
 
   // On every map load (fires for fresh mount and on basemap key change)
   const handleMapLoad = useCallback(
@@ -1203,6 +1260,7 @@ export default function BorderMap({
       : []),
     // ── User-toggleable overlays (above basemap, below operational layers) ──
     ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
+    ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
     ...(enabledOverlays.waterways ? createWaterwaysLayer(PHUKET_WATERWAYS) : []),
     ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
@@ -1599,11 +1657,19 @@ export default function BorderMap({
                 data-control-classification="changes view"
                 onClick={() => {
                   setIs3D((v) => !v);
-                  setViewState((prev) =>
-                    !is3D && prev.zoom < 13
-                      ? { ...prev, zoom: 13, pitch: 65, bearing: -20 }
-                      : prev,
-                  );
+                  if (!is3D) {
+                    // Fly to Patong at zoom 14.5 — the hotel canyon / valley bowl
+                    // becomes dramatically visible with terrain at this zoom + pitch
+                    setViewState({
+                      longitude: 98.295,
+                      latitude: 7.896,
+                      zoom: 14.5,
+                      pitch: 70,
+                      bearing: -25,
+                      minZoom: PHUKET_MIN_ZOOM,
+                      maxZoom: PHUKET_MAX_ZOOM,
+                    });
+                  }
                 }}
                 title={is3D ? "Switch to 2D flat view" : "Switch to 3D — buildings extrude (auto-zooms to a useful level)"}
                 className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
@@ -1616,6 +1682,66 @@ export default function BorderMap({
               </button>
             </div>
           </div>
+
+          {/* ── 3D Cinema Controls — only visible in 3D mode ── */}
+          {is3D && (
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[rgba(15,23,42,0.18)] pt-2">
+                <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                  Fly to
+                </span>
+                {([
+                  { label: "Patong", lng: 98.295, lat: 7.896, zoom: 14.5, pitch: 72, bearing: -25, duration: 3000 },
+                  { label: "Old Town", lng: 98.388, lat: 7.886, zoom: 15, pitch: 65, bearing: 30, duration: 2500 },
+                  { label: "Overview", lng: 98.334, lat: 7.886, zoom: 10.5, pitch: 50, bearing: -10, duration: 2000 },
+                ] as const).map((tour) => (
+                  <button
+                    key={tour.label}
+                    type="button"
+                    onClick={() => {
+                      mlMapRef.current?.flyTo({
+                        center: [tour.lng, tour.lat],
+                        zoom: tour.zoom,
+                        pitch: tour.pitch,
+                        bearing: tour.bearing,
+                        duration: tour.duration,
+                        essential: true,
+                      });
+                    }}
+                    className="border border-[var(--cool)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--cool)] transition-colors hover:bg-[var(--cool)] hover:text-white"
+                  >
+                    {tour.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2 border-t border-[rgba(15,23,42,0.18)] pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+                    Flood
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={6}
+                    step={0.5}
+                    value={floodLevelM}
+                    onChange={(e) => setFloodLevelM(parseFloat(e.target.value))}
+                    className="h-1 w-28 cursor-pointer accent-[#0ea5e9]"
+                    title="Flood water level (metres above sea level)"
+                  />
+                  <span className="font-mono text-[9px] font-bold tabular-nums text-[var(--ink)]">
+                    {floodLevelM === 0 ? "Off" : `${floodLevelM.toFixed(1)}m`}
+                  </span>
+                  {floodLevelM > 0 && (
+                    <span className="text-[8px] text-[#0ea5e9]">
+                      {floodLevelM <= 1.5 ? "Flash flood" : floodLevelM <= 3.5 ? "Major flood" : "Extreme event"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
             <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
@@ -1633,6 +1759,7 @@ export default function BorderMap({
               { id: "sstAndaman" as const, label: "Sea Temp" },
               { id: "chlAndaman" as const, label: "Chl-a" },
               { id: "tambonBoundaries" as const, label: "Districts" },
+              { id: "aqiColumns" as const, label: "PM2.5 ↑" },
             ].map((toggle) => (
               <button
                 key={toggle.id}

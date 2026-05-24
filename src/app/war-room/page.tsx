@@ -1,26 +1,9 @@
-import type { Metadata } from "next";
-import WarRoomApp from "../../components/WarRoom/WarRoomApp";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "War Room",
-  description:
-    "Live operational wall for Phuket Dashboard. Monitor corridor pressure, modeled scenarios, maritime posture, weather, tourism lift, and resilience signals in one instrument panel.",
-  alternates: {
-    canonical: "/war-room",
-  },
-  openGraph: {
-    title: "Phuket Dashboard War Room",
-    description:
-      "Live operational wall for Phuket Dashboard, built for corridor visibility, resilience, and scenario-driven decision making.",
-    url: "/war-room",
-  },
-  twitter: {
-    title: "Phuket Dashboard War Room",
-    description:
-      "Live operational wall for Phuket Dashboard, built for corridor visibility, resilience, and scenario-driven decision making.",
-  },
-};
-
-export default function WarRoomPage() {
-  return <WarRoomApp />;
+/**
+ * /war-room now lives at / — redirect all traffic there permanently.
+ * Bookmarks and deep-links continue to work.
+ */
+export default function WarRoomRedirectPage() {
+  redirect("/");
 }

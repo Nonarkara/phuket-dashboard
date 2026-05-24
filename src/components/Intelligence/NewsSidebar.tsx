@@ -165,12 +165,14 @@ function NewsItemCard({ item, is4K, rank }: { item: NewsItem; is4K: boolean; ran
 export default function NewsSidebar() {
   const [data, setData] = useState<MultilingualNewsResponse | null>(null);
   const [langFilter, setLangFilter] = useState<LangFilter>("all");
+  const [tick, setTick] = useState(0);
   const is4K = useWarRoomScale();
 
   useEffect(() => {
-    const load = async () => {
+    const load = async (force: boolean) => {
       try {
-        const res = await fetch(apiUrl(`/api/news/multilingual?t=${Date.now()}`));
+        const url = `/api/news/multilingual?t=${Date.now()}${force ? "&fresh=1" : ""}`;
+        const res = await fetch(apiUrl(url));
         if (res.ok) {
           setData(await res.json());
         }
@@ -179,10 +181,19 @@ export default function NewsSidebar() {
       }
     };
 
-    void load();
-    const interval = setInterval(() => { void load(); }, 3 * 60 * 1000);
+    void load(true);
+    const interval = setInterval(() => { void load(false); }, 3 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // re-render the relative-time label every 30s so "Xm ago" stays accurate
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+  void tick;
+
+  const freshnessLabel = data?.generatedAt ? formatNewsTime(data.generatedAt) : "";
 
   const alertCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "alert").length : 0;
   const watchCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "watch").length : 0;
@@ -219,7 +230,14 @@ export default function NewsSidebar() {
                 </div>
               </div>
             </div>
-            <span className="live-badge text-[10px]">LIVE</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="live-badge text-[10px]">LIVE</span>
+              {freshnessLabel && (
+                <span className="text-[9px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
+                  updated {freshnessLabel}
+                </span>
+              )}
+            </div>
           </div>
           {(alertCount > 0 || watchCount > 0) && (
             <div className="mt-2 flex items-center gap-3 text-[10px] font-mono uppercase tracking-wider">
@@ -299,7 +317,14 @@ export default function NewsSidebar() {
               </div>
             </div>
           </div>
-          <span className="live-badge">LIVE</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="live-badge">LIVE</span>
+            {freshnessLabel && (
+              <span className="text-[7px] font-mono uppercase tracking-[0.16em] text-[var(--dim)]">
+                updated {freshnessLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         {(alertCount > 0 || watchCount > 0) && (

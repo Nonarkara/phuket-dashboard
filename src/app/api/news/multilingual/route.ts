@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { cached } from "../../../../lib/cache";
+import { cached, invalidateCache } from "../../../../lib/cache";
 import { toIsoOrNull } from "../../../../lib/dates";
+
+export const dynamic = "force-dynamic";
+
+const NEWS_CACHE_KEY = "news-multilingual";
+const NEWS_CACHE_TTL_SECONDS = 30;
 
 /**
  * Multilingual News Feed for Governor War Room
@@ -341,19 +346,28 @@ function buildChineseSignals(enItems: MultilingualNewsItem[]): MultilingualNewsI
 
 // ─── Main handler ───────────────────────────────────────────────
 
-export async function GET() {
-  const response = await cached<MultilingualNewsResponse>("news-multilingual", 120, async () => {
-    const { th, en } = await fetchRealPhuketNews();
-    const zh = buildChineseSignals(en);
-    const activeSources = [...new Set([...en, ...th].map((item) => item.source))];
-    return {
-      generatedAt: new Date().toISOString(),
-      th,
-      en,
-      zh,
-      sources: activeSources,
-    };
-  });
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("fresh") === "1") {
+    invalidateCache(NEWS_CACHE_KEY);
+  }
+
+  const response = await cached<MultilingualNewsResponse>(
+    NEWS_CACHE_KEY,
+    NEWS_CACHE_TTL_SECONDS,
+    async () => {
+      const { th, en } = await fetchRealPhuketNews();
+      const zh = buildChineseSignals(en);
+      const activeSources = [...new Set([...en, ...th].map((item) => item.source))];
+      return {
+        generatedAt: new Date().toISOString(),
+        th,
+        en,
+        zh,
+        sources: activeSources,
+      };
+    },
+  );
 
   return NextResponse.json(response);
 }

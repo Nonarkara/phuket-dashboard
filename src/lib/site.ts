@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = "https://phuket-dashboard.vercel.app";
+const DEFAULT_SITE_URL = "https://phuket-dashboard.nonarkara.org";
 
 export function getSiteUrl() {
   if (process.env.NEXT_OUTPUT === "export") {

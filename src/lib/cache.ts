@@ -27,6 +27,11 @@ export function setCache<T>(key: string, data: T, ttlSeconds: number): void {
   store.set(key, { data, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 
+/** Force-evict a cache key so the next read recomputes. */
+export function invalidateCache(key: string): void {
+  store.delete(key);
+}
+
 /** Get cached value or compute it. Prevents thundering herd with a pending promise. */
 const pending = new Map<string, Promise<unknown>>();
 
