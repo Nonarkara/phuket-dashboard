@@ -252,7 +252,7 @@ function WarRoomShell({
       <section className="relative flex min-h-0 flex-none overflow-hidden border-t border-[var(--line)] xl:flex-1">
         <aside
           aria-label="Regional intelligence stream"
-          className="hidden w-[260px] shrink-0 xl:block min-[3000px]:w-[520px]"
+          className="hidden w-[260px] shrink-0 xl:block 2xl:w-[300px] min-[3000px]:w-[520px]"
         >
           <NewsSidebar />
         </aside>
@@ -275,7 +275,7 @@ function WarRoomShell({
 
         <aside
           aria-label="Operations desk"
-          className="hidden w-[360px] shrink-0 xl:block min-[3000px]:w-[520px]"
+          className="hidden w-[360px] shrink-0 xl:block 2xl:w-[420px] min-[3000px]:w-[520px]"
         >
           <OperationsPanel data={operations} brief={brief} />
         </aside>

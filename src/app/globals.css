@@ -262,6 +262,23 @@ main[data-surface="phuket-dashboard"] [class*="shadow-"] {
   outline-offset: 3px;
 }
 
+/* ── Large-display zoom ──────────────────────────────────────────────────────
+   CSS zoom on <html> scales the entire UI proportionally — viewport units,
+   fixed px values, and all Tailwind classes scale together, unlike JS transforms
+   which break viewport-relative sizing.
+
+   Breakpoints (CSS px after OS HiDPI scaling):
+     2560 = 27" QHD / some external monitors on MacBook
+     3840 = 4K UHD / 70-inch+ projected wall screens
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 2560px) {
+  html { zoom: 1.4; }
+}
+
+@media (min-width: 3840px) {
+  html { zoom: 2; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:focus-within {
     scroll-behavior: auto;
