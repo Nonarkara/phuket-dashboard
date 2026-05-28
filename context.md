@@ -59,6 +59,17 @@ File: `shared/.secrets-backup/dashboards_phuket-dashboard_.env`
 
 ## Notes
 - Cloned from dashboards/geopolitics — shares architecture and component patterns.
-- Static export uses basePath `/phuket-dashboard` (GitHub Pages requirement).
+- Static export uses NO basePath. `phuket.nonarkara.org` is a custom-domain Pages site served at root; `NEXT_PUBLIC_BASE_PATH=""`. (basePath `/phuket-dashboard` was WRONG and caused a CSS-404 outage — fixed 2026-05-28.)
+- `scripts/static-export.mjs` runs a preflight: fails the build if any non-route file imports from `src/app/api/*/route`. Shared types go in `src/types/`.
 - WATCHPACK_POLLING=true is required in dev for file system watch.
 - next.config.mjs: Deck.gl/luma.gl all explicitly transpiled.
+
+## 3D map + ML capacities (added 2026-05-28)
+- **3D terrain** (`BorderMap.tsx` `applyBuilding3DLayer`): AWS Terrarium DEM + MapLibre `setTerrain` (exaggeration 1.4) + hillshade + sky/fog/light + OpenFreeMap building extrusion. All gated on the 2D/3D `View` toggle. deck.gl layers do NOT drape on MapLibre terrain — terrain-coupled features (hillshade, blackspots) are MapLibre layers.
+- **Accident blackspots** (`src/data/phuket-blackspots.ts`): curated THAIRSC-corridor points (Patong Hill / Route 4029 "death descent", etc.), drawn as MapLibre circles so they sit on the slope. Click → governor info panel.
+- **AlphaEarth urban fabric** (overlay "Urban fabric"): precompute offline →
+  `uv run --python 3.11 ... ` not needed — runs on system py3.9 GEE:
+  `python3 scripts/alphaearth-urban-fabric.py` → `public/data/phuket-urban-fabric.geojson` (812 polygons, 2025 embedding). GEE already authenticated. Refresh annually for new embedding year. Attribution: Google / Google DeepMind (CC-BY 4.0).
+- **TimesFM crash-risk forecast** (panel in Governor's Daily Brief): precompute on M5 (needs Python 3.10+):
+  `uv run --python 3.11 --with "timesfm[torch]" --with requests --with numpy python scripts/timesfm-forecast.py`
+  → `public/data/phuket-accident-forecast.json` (48h). Model: TimesFM 2.0 500m. Source = THAIRSC time-of-day rhythm × Open-Meteo rain. Re-run on a schedule (cron) to refresh; Open-Meteo forecast API rate-limits (429) — script falls back to archive ERA5 + climatology. Live BigQuery `AI.FORECAST` is the documented future upgrade path.
