@@ -68,6 +68,7 @@ import {
 import type { SatelliteSource } from "../../services/satellite-layers";
 import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers } from "../../services/map-engine";
 import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
+import { blackspotsGeoJSON } from "../../data/phuket-blackspots";
 import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
 import { PHUKET_WATERWAYS } from "../../data/phuket-waterways";
 import {
@@ -638,6 +639,12 @@ export default function BorderMap({
 
   // ─── Basemap: exactly one active at a time (radio) ───
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("street");
+  // Stable ref so the 3D-layer helper can read the active basemap without
+  // being recreated (used to skip hillshade on the topography basemap).
+  const activeBasemapRef = useRef<BasemapId>("street");
+  useEffect(() => {
+    activeBasemapRef.current = activeBasemap;
+  }, [activeBasemap]);
 
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
@@ -695,6 +702,10 @@ export default function BorderMap({
     const BLDG_LAYER = "phuket-bldg-3d";
     const DEM_SRC   = "phuket-terrain-dem";
     const SKY_LAYER = "phuket-sky";
+    const HILLSHADE_LAYER = "phuket-hillshade";
+    const BLACKSPOT_SRC = "phuket-blackspot-src";
+    const BLACKSPOT_HALO = "phuket-blackspot-halo";
+    const BLACKSPOT_CORE = "phuket-blackspot-core";
     const show = is3DRef.current;
 
     // ── Height expression ───────────────────────────────────────
@@ -723,11 +734,40 @@ export default function BorderMap({
           attribution: "Terrain Tiles · Mapzen / AWS",
         });
       }
-      // Exaggeration 2.0 — Phuket's ridgeline (max 529m) will tower visually
+      // Exaggeration 1.4 — Phuket's ridgeline (max 529m) reads in relief
+      // without the over-verticalized "clay model" look.
       (mlMap as maplibregl.Map & { setTerrain?: (opt: unknown) => void }).setTerrain?.({
         source: DEM_SRC,
-        exaggeration: 2.0,
+        exaggeration: 1.4,
       });
+
+      // ── 1b. Hillshade — shades steep faces so 45° descents read instantly ──
+      // Reuses the DEM source (zero extra download). Sits below labels/buildings
+      // so the slope shading lands on the ground, not on extrusions. Skipped on
+      // the topography basemap, which already bakes in relief shading.
+      if (activeBasemapRef.current !== "topography") {
+        if (!mlMap.getLayer(HILLSHADE_LAYER)) {
+          const firstSymbolForShade = (mlMap.getStyle()?.layers ?? []).find(
+            (l: { type: string }) => l.type === "symbol",
+          )?.id;
+          mlMap.addLayer(
+            {
+              id: HILLSHADE_LAYER,
+              type: "hillshade",
+              source: DEM_SRC,
+              paint: {
+                "hillshade-shadow-color": "#1c2b3a",
+                "hillshade-highlight-color": "#f5e6c8",
+                "hillshade-exaggeration": 0.6,
+                "hillshade-illumination-direction": 315,
+              },
+            } as unknown as Parameters<typeof mlMap.addLayer>[0],
+            firstSymbolForShade,
+          );
+        } else {
+          mlMap.setLayoutProperty(HILLSHADE_LAYER, "visibility", "visible");
+        }
+      }
 
       // ── 2. Atmospheric fog — hazes the valleys & horizon ──
       (mlMap as maplibregl.Map & { setFog?: (opt: unknown) => void }).setFog?.({
@@ -835,11 +875,54 @@ export default function BorderMap({
       } else {
         mlMap.setLayoutProperty(BLDG_LAYER, "visibility", "visible");
       }
+
+      // ── 7. Accident blackspots — draped on terrain (MapLibre circles follow the slope) ──
+      // Motorcycle-fatality corridors (THAIRSC). Patong Hill / Route 4029 is the steep
+      // "death descent" — on the 3D terrain the dots sit ON the slope that explains the crashes.
+      if (!mlMap.getSource(BLACKSPOT_SRC)) {
+        mlMap.addSource(BLACKSPOT_SRC, {
+          type: "geojson",
+          data: blackspotsGeoJSON() as Parameters<typeof mlMap.addSource>[1] extends { type: "geojson"; data: infer T } ? T : never,
+        });
+      }
+      if (!mlMap.getLayer(BLACKSPOT_HALO)) {
+        mlMap.addLayer({
+          id: BLACKSPOT_HALO,
+          type: "circle",
+          source: BLACKSPOT_SRC,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 15, 22],
+            "circle-color": ["match", ["get", "severity"], "high", "#ff4444", "#f5a623"],
+            "circle-opacity": 0.16,
+            "circle-blur": 0.7,
+          },
+        });
+      } else {
+        mlMap.setLayoutProperty(BLACKSPOT_HALO, "visibility", "visible");
+      }
+      if (!mlMap.getLayer(BLACKSPOT_CORE)) {
+        mlMap.addLayer({
+          id: BLACKSPOT_CORE,
+          type: "circle",
+          source: BLACKSPOT_SRC,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 15, 8],
+            "circle-color": ["match", ["get", "severity"], "high", "#ff4444", "#f5a623"],
+            "circle-stroke-color": "#0d1117",
+            "circle-stroke-width": 1.2,
+          },
+        });
+      } else {
+        mlMap.setLayoutProperty(BLACKSPOT_CORE, "visibility", "visible");
+      }
     } else {
-      // ── Disable terrain, sky, buildings ──
+      // ── Disable terrain, sky, buildings, hillshade, blackspots ──
       (mlMap as maplibregl.Map & { setTerrain?: (opt: null) => void }).setTerrain?.(null);
       if (mlMap.getLayer(BLDG_LAYER)) mlMap.setLayoutProperty(BLDG_LAYER, "visibility", "none");
       if (mlMap.getLayer(SKY_LAYER)) mlMap.setLayoutProperty(SKY_LAYER, "visibility", "none");
+      if (mlMap.getLayer(HILLSHADE_LAYER)) mlMap.setLayoutProperty(HILLSHADE_LAYER, "visibility", "none");
+      if (mlMap.getLayer(BLACKSPOT_HALO)) mlMap.setLayoutProperty(BLACKSPOT_HALO, "visibility", "none");
+      if (mlMap.getLayer(BLACKSPOT_CORE)) mlMap.setLayoutProperty(BLACKSPOT_CORE, "visibility", "none");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // stable — reads is3DRef, not is3D directly
@@ -861,10 +944,36 @@ export default function BorderMap({
   // On every map load (fires for fresh mount and on basemap key change)
   const handleMapLoad = useCallback(
     (event: { target: maplibregl.Map }) => {
-      mlMapRef.current = event.target;
-      applyBuilding3DLayer(event.target);
+      const mlMap = event.target;
+      mlMapRef.current = mlMap;
+      applyBuilding3DLayer(mlMap);
+      // Accident blackspot click → governor info panel. One handler per map
+      // instance (onLoad fires once per mount / basemap remount).
+      mlMap.on("click", "phuket-blackspot-core", (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const p = feature.properties as {
+          name?: string;
+          corridor?: string;
+          district?: string;
+          note?: string;
+        };
+        onProvinceSelect?.({
+          name: p.name ?? "Accident blackspot",
+          type: "Accident blackspot",
+          location: p.corridor ? `${p.corridor} corridor · ${p.district ?? ""}`.trim() : p.district,
+          notes: p.note,
+          source: "THAIRSC · road-safety corridors",
+        });
+      });
+      mlMap.on("mouseenter", "phuket-blackspot-core", () => {
+        mlMap.getCanvas().style.cursor = "pointer";
+      });
+      mlMap.on("mouseleave", "phuket-blackspot-core", () => {
+        mlMap.getCanvas().style.cursor = "";
+      });
     },
-    [applyBuilding3DLayer],
+    [applyBuilding3DLayer, onProvinceSelect],
   );
 
   // ── Lazy-loaded GeoJSON / data caches for new overlays ──
