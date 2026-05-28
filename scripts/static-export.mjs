@@ -41,6 +41,30 @@ try {
     }
   }
 
+  // 1b. Preflight: reject any non-route file importing from a route file.
+  //     Route stubs export no types, so such imports cause TS errors at build time.
+  //     Rule: shared types must live in src/types/, never in src/app/api/*/route.ts.
+  {
+    const srcFiles = execSync(`find src -name "*.ts" -o -name "*.tsx"`, { encoding: "utf-8" })
+      .trim().split("\n").filter(Boolean);
+    const offenders = [];
+    for (const f of srcFiles) {
+      if (f.includes("/api/")) continue; // inter-route imports are fine
+      const content = readFileSync(join(process.cwd(), f), "utf-8");
+      const matches = content.match(/from ["'][^"']*app\/api\/[^"']*\/route["']/g) ?? [];
+      for (const m of matches) offenders.push(`  ${f}: ${m}`);
+    }
+    if (offenders.length > 0) {
+      console.error("\n❌ Static export preflight failed:");
+      console.error("   Non-route files import from route files (stubs have no type exports).");
+      console.error("   Move shared types to src/types/ before building:\n");
+      offenders.forEach((o) => console.error(o));
+      console.error();
+      process.exit(1);
+    }
+    console.log("✓ Preflight: no component→route type imports found");
+  }
+
   // 2. Re-scan and stub static routes
   const staticRoutes = execSync(`find "${API_DIR}" -name "route.ts"`, { encoding: "utf-8" })
     .trim()

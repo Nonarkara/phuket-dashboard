@@ -5,8 +5,7 @@ import type { ReactNode } from "react";
 import { AlertCircle, CloudLightning, Scale, Sparkles } from "lucide-react";
 import { apiUrl } from "../../lib/asset-path";
 import { phuketSlugLine } from "../../data/phuket-sciti-metrics";
-import type { CoralWatchData } from "../../app/api/coral-watch/route";
-import type { MarineConditions } from "../../app/api/marine-conditions/route";
+import type { CoralWatchData, MarineConditions } from "../../types/feeds";
 import {
   PHUKET_TOTALS,
   BANGKOK_TOTALS,
