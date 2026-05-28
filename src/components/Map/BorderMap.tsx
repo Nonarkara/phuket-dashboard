@@ -66,7 +66,7 @@ import {
   GISTDA_OCEAN_LAYERS,
 } from "../../services/satellite-layers";
 import type { SatelliteSource } from "../../services/satellite-layers";
-import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers } from "../../services/map-engine";
+import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers, createUrbanFabricLayer } from "../../services/map-engine";
 import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
 import { blackspotsGeoJSON } from "../../data/phuket-blackspots";
 import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
@@ -311,6 +311,7 @@ type OverlayState = {
   chlAndaman: boolean;
   tambonBoundaries: boolean;
   aqiColumns: boolean;
+  urbanFabric: boolean;
 };
 
 function interpolateMotionFrame<
@@ -689,6 +690,7 @@ export default function BorderMap({
     chlAndaman: false,
     tambonBoundaries: false,
     aqiColumns: false,
+    urbanFabric: false,
     gridScale: "off",
   }));
 
@@ -983,6 +985,7 @@ export default function BorderMap({
   const [floodStations, setFloodStations] = useState<FloodStationPoint[]>([]);
   const [marineStations, setMarineStations] = useState<MarinePoint[]>([]);
   const [tambonGeoJson, setTambonGeoJson] = useState<object | null>(null);
+  const [urbanFabricGeoJson, setUrbanFabricGeoJson] = useState<object | null>(null);
 
   useEffect(() => {
     if (enabledOverlays.publicInfrastructure && !poiData) {
@@ -1042,6 +1045,16 @@ export default function BorderMap({
         .catch(() => undefined);
     }
   }, [enabledOverlays.tambonBoundaries, tambonGeoJson]);
+
+  // AlphaEarth urban-fabric — lazy fetch on first toggle (precomputed static GeoJSON)
+  useEffect(() => {
+    if (enabledOverlays.urbanFabric && !urbanFabricGeoJson) {
+      fetch("/data/phuket-urban-fabric.geojson")
+        .then((r) => r.json())
+        .then((d: object) => setUrbanFabricGeoJson(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.urbanFabric, urbanFabricGeoJson]);
 
   const disasterAlerts = disasterFeed?.alerts ?? [];
   const publicCameras = [
@@ -1368,6 +1381,7 @@ export default function BorderMap({
       ? [createWmsTileLayer({ id: "gistda-chl", baseUrl: GISTDA_OCEAN_WMS_BASE, layers: GISTDA_OCEAN_LAYERS.chl, maxZoom: 10, opacity: 0.68 })]
       : []),
     // ── User-toggleable overlays (above basemap, below operational layers) ──
+    ...(enabledOverlays.urbanFabric && urbanFabricGeoJson ? [createUrbanFabricLayer(urbanFabricGeoJson)] : []),
     ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
@@ -1868,6 +1882,7 @@ export default function BorderMap({
               { id: "sstAndaman" as const, label: "Sea Temp" },
               { id: "chlAndaman" as const, label: "Chl-a" },
               { id: "tambonBoundaries" as const, label: "Districts" },
+              { id: "urbanFabric" as const, label: "Urban fabric" },
               { id: "aqiColumns" as const, label: "PM2.5 ↑" },
             ].map((toggle) => (
               <button

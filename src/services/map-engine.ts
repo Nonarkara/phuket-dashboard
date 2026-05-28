@@ -1685,3 +1685,35 @@ export function createTambonLayer(geojson: unknown) {
     lineWidthUnits: "pixels" as const,
   });
 }
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+/**
+ * AlphaEarth urban-fabric / land-cover choropleth.
+ * Polygons are unsupervised k-means classes over the AlphaEarth 64-band
+ * satellite-embedding (Google / Google DeepMind), precomputed offline.
+ * Each feature carries a `color` (hex) from its class.
+ */
+export function createUrbanFabricLayer(geojson: unknown) {
+  return new GeoJsonLayer({
+    id: "alphaearth-urban-fabric",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: geojson as any,
+    stroked: false,
+    filled: true,
+    pickable: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getFillColor: (f: any) => {
+      const c = (f?.properties?.color as string) || "#1e7896";
+      const [r, g, b] = hexToRgb(c);
+      return [r, g, b, 150];
+    },
+  });
+}
