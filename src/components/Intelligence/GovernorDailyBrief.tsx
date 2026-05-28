@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { AlertCircle, CloudLightning, Scale, Sparkles } from "lucide-react";
 import { apiUrl } from "../../lib/asset-path";
 import { phuketSlugLine } from "../../data/phuket-sciti-metrics";
-import type { CoralWatchData, MarineConditions } from "../../types/feeds";
+import { Skeleton } from "../Skeleton";
+import type { CoralWatchData, MarineConditions, AccidentForecast } from "../../types/feeds";
 import {
   PHUKET_TOTALS,
   BANGKOK_TOTALS,
@@ -282,6 +283,8 @@ export default function GovernorDailyBrief({ brief, operations }: Props) {
 
       <RoadSafetyBenchmark />
 
+      <AccidentRiskForecast />
+
       <div className="mt-3 border-t border-[var(--line)] pt-2">
         <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
           Province baseline
@@ -413,6 +416,100 @@ function RoadSafetyBenchmark() {
           THAIRSC · thairsc.com
         </a>
       </div>
+    </div>
+  );
+}
+
+const RISK_BAND_COLOR: Record<string, string> = {
+  high: "#ef4444",
+  elevated: "#f59e0b",
+  low: "#22c55e",
+};
+
+/**
+ * 48h crash-risk forecast (next 24h shown) from TimesFM, precomputed offline.
+ * Risk = THAIRSC time-of-day rhythm projected by TimesFM, modulated by rain —
+ * ties the 3D slope view to "tonight + rain = elevated crash risk".
+ */
+function AccidentRiskForecast() {
+  const [forecast, setForecast] = useState<AccidentForecast | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/data/phuket-accident-forecast.json")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("no forecast"))))
+      .then((d: AccidentForecast) => {
+        if (!cancelled) setForecast(d);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (failed) return null;
+
+  const next24 = forecast?.points.slice(0, 24) ?? [];
+  const maxRisk = Math.max(1, ...next24.map((p) => p.risk));
+  const peak = forecast?.peakWindow;
+  const modelShort = forecast?.model.startsWith("TimesFM") ? "TimesFM" : "modeled";
+
+  return (
+    <div className="mt-3 border-t border-[var(--line)] pt-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <CloudLightning size={11} className="text-[var(--cool)]" />
+          <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
+            Crash-risk forecast · 48h
+          </span>
+        </div>
+        <span className="text-[7px] font-bold uppercase tracking-[0.14em] text-[var(--dim)] [font-family:var(--font-mono)]">
+          {modelShort}
+        </span>
+      </div>
+
+      {!forecast ? (
+        <div className="mt-2">
+          <Skeleton width="100%" height="34px" />
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 flex h-9 items-end gap-[2px]" aria-hidden="true">
+            {next24.map((p) => (
+              <div
+                key={p.ts}
+                title={`${String(p.hour).padStart(2, "0")}:00 · risk ${p.risk} · rain ${p.rainMm}mm`}
+                className="flex-1"
+                style={{
+                  height: `${Math.max(6, (p.risk / maxRisk) * 100)}%`,
+                  backgroundColor: RISK_BAND_COLOR[p.band] ?? "#22c55e",
+                  opacity: p.rainMm > 0.2 ? 1 : 0.62,
+                }}
+              />
+            ))}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[7px] uppercase tracking-[0.14em] text-[var(--dim)]">
+            <span>next 24h</span>
+            <span>rain-hours solid · dry faded</span>
+          </div>
+          {peak && (
+            <p className="mt-1.5 text-[10px] leading-4 text-[var(--muted)]">
+              Peak risk{" "}
+              <span className="font-mono font-bold text-[#ef4444]">
+                {String(peak.hour).padStart(2, "0")}:00
+              </span>{" "}
+              ({peak.risk}/100{peak.rainMm > 0.2 ? `, ${peak.rainMm}mm rain` : ""}). Pre-position
+              patrols on the Patong Hill descent.
+            </p>
+          )}
+          <div className="mt-0.5 text-[7px] uppercase tracking-[0.14em] text-[var(--dim)]">
+            {forecast.source}
+          </div>
+        </>
+      )}
     </div>
   );
 }
