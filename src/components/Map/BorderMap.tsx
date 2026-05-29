@@ -893,10 +893,10 @@ export default function BorderMap({
           type: "circle",
           source: BLACKSPOT_SRC,
           paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 15, 22],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 15, 11],
             "circle-color": ["match", ["get", "severity"], "high", "#ff4444", "#f5a623"],
-            "circle-opacity": 0.16,
-            "circle-blur": 0.7,
+            "circle-opacity": 0.2,
+            "circle-blur": 0.35,
           },
         });
       } else {
