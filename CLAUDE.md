@@ -201,5 +201,7 @@ See `/Users/nonarkara/Projects/CLAUDE.md` §11 (The Codex Incident — Anti-Regr
 - **Tactical palette, hairline borders, ZERO border-radius, ZERO gradients.** House style is law.
 - **Skeleton shimmer system** — no `"Loading..."` text.
 - **Corridor buttons as inline pills** inside the top-left info panel. Never a full-width bar.
+- **The Slope Story** (`src/components/Map/CorridorRiskReveal.tsx`) — the signature analytical moment. Click a blackspot → 3D fly-to + the corridor-risk card (slope → toll → tonight → why → act). This is the keystone that connects terrain + THAIRSC + TimesFM. Do not remove, merge into a generic info panel, or strip its real SRTM slope numbers. Full record: `docs/SLOPE-STORY.md`.
+- **Real slope numbers** in `src/data/phuket-blackspots.ts` (`slopeDeg/slopePct/elevationM` from SRTM via `scripts/blackspot-slopes.mjs`). Do not replace with invented values; re-derive with the script.
 
 If you are about to remove, replace, or "simplify" any item above: stop, show the diff, wait for explicit approval.

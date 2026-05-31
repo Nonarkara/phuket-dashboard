@@ -1,5 +1,22 @@
 # Phuket Dashboard — Task Tracker
 
+## Session 2026-05-29 · The Slope Story (signature analytical keystone)
+
+**Goal:** fuse the layers built across sessions (3D terrain, hillshade, blackspots, TimesFM)
+into ONE self-explaining moment. Click a blackspot → camera flies to it on the 3D slope →
+one card states the chain (Four Noble Truths): the slope → the toll → tonight's rain-risk → why → action.
+
+- [x] 1. Compute REAL slope/elevation per blackspot (offline) via opentopodata SRTM (`scripts/blackspot-slopes.mjs`).
+- [x] 2. Bake `elevationM`, `slopePct`, `slopeDeg` into `src/data/phuket-blackspots.ts` (sourced; honest — Patong summit 28.9°, no faked "45°").
+- [x] 3. `src/components/Map/CorridorRiskReveal.tsx` — keystone card (mono micro labels, hairline, ZERO radius, amber/red/teal, 3 sizes).
+- [x] 4. Wire `BorderMap.tsx`: `selectedBlackspot` state; click → set + force 3D + flyTo(zoom 15.5, pitch 68); lazy forecast peak; render after `<MapLegend />`.
+- [x] 5. Build clean (tsc -b + next build).
+- [ ] 6. Live verify (deploy, clean browser, click Patong Hill, screenshot reveal).
+- [x] 7. Document: `docs/SLOPE-STORY.md`, `context.md`, project `CLAUDE.md` Anti-Regression.
+- [ ] 8. Commit + push + watch deploy + verify live.
+
+---
+
 ## Session 2026-05-25 · Recovery & commit
 
 - [x] Audit uncommitted changes from interrupted session

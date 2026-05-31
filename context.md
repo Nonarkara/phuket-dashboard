@@ -66,7 +66,8 @@ File: `shared/.secrets-backup/dashboards_phuket-dashboard_.env`
 
 ## 3D map + ML capacities (added 2026-05-28)
 - **3D terrain** (`BorderMap.tsx` `applyBuilding3DLayer`): AWS Terrarium DEM + MapLibre `setTerrain` (exaggeration 1.4) + hillshade + sky/fog/light + OpenFreeMap building extrusion. All gated on the 2D/3D `View` toggle. deck.gl layers do NOT drape on MapLibre terrain — terrain-coupled features (hillshade, blackspots) are MapLibre layers.
-- **Accident blackspots** (`src/data/phuket-blackspots.ts`): curated THAIRSC-corridor points (Patong Hill / Route 4029 "death descent", etc.), drawn as MapLibre circles so they sit on the slope. Click → governor info panel.
+- **Accident blackspots** (`src/data/phuket-blackspots.ts`): curated THAIRSC-corridor points (Patong Hill / Route 4029 "death descent", etc.), drawn as MapLibre circles so they sit on the slope. Each carries REAL `slopeDeg/slopePct/elevationM` from SRTM 30 m (`scripts/blackspot-slopes.mjs`). Click → **The Slope Story** (see below).
+- **The Slope Story** (`src/components/Map/CorridorRiskReveal.tsx`) — THE signature analytical moment. Click a blackspot → camera flies to it in 3D + a card states the chain (Four Noble Truths): THE SLOPE (SRTM grade) → THE TOLL (THAIRSC corridor deaths) → TONIGHT (TimesFM peak) → WHY → ACT. Fuses terrain + crash data + forecast into one insight. Full design record: `docs/SLOPE-STORY.md`. **Do not remove or flatten** — it is the keystone.
 - **AlphaEarth urban fabric** (overlay "Urban fabric"): precompute offline →
   `uv run --python 3.11 ... ` not needed — runs on system py3.9 GEE:
   `python3 scripts/alphaearth-urban-fabric.py` → `public/data/phuket-urban-fabric.geojson` (812 polygons, 2025 embedding). GEE already authenticated. Refresh annually for new embedding year. Attribution: Google / Google DeepMind (CC-BY 4.0).

@@ -68,7 +68,9 @@ import {
 import type { SatelliteSource } from "../../services/satellite-layers";
 import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers, createUrbanFabricLayer } from "../../services/map-engine";
 import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
-import { blackspotsGeoJSON } from "../../data/phuket-blackspots";
+import { blackspotsGeoJSON, PHUKET_BLACKSPOTS } from "../../data/phuket-blackspots";
+import type { Blackspot } from "../../data/phuket-blackspots";
+import CorridorRiskReveal from "./CorridorRiskReveal";
 import { PHUKET_SEA_ROUTES } from "../../data/phuket-sea-routes";
 import { PHUKET_WATERWAYS } from "../../data/phuket-waterways";
 import {
@@ -647,6 +649,28 @@ export default function BorderMap({
     activeBasemapRef.current = activeBasemap;
   }, [activeBasemap]);
 
+  // ─── The Slope Story — selected accident blackspot + tonight's forecast peak ───
+  const [selectedBlackspot, setSelectedBlackspot] = useState<Blackspot | null>(null);
+  const [blackspotPeak, setBlackspotPeak] = useState<{
+    hour: number;
+    risk: number;
+    rainMm: number;
+  } | null>(null);
+  useEffect(() => {
+    fetch("/data/phuket-accident-forecast.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { peakWindow?: { hour: number; risk: number; rainMm: number } } | null) => {
+        if (d?.peakWindow) {
+          setBlackspotPeak({
+            hour: d.peakWindow.hour,
+            risk: d.peakWindow.risk,
+            rainMm: d.peakWindow.rainMm,
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
   const [fires, setFires] = useState<FireEvent[]>([]);
@@ -949,23 +973,23 @@ export default function BorderMap({
       const mlMap = event.target;
       mlMapRef.current = mlMap;
       applyBuilding3DLayer(mlMap);
-      // Accident blackspot click → governor info panel. One handler per map
-      // instance (onLoad fires once per mount / basemap remount).
+      // Accident blackspot click → The Slope Story: fly to the spot in 3D and
+      // open the corridor-risk reveal. One handler per map instance.
       mlMap.on("click", "phuket-blackspot-core", (e) => {
-        const feature = e.features?.[0];
-        if (!feature) return;
-        const p = feature.properties as {
-          name?: string;
-          corridor?: string;
-          district?: string;
-          note?: string;
-        };
-        onProvinceSelect?.({
-          name: p.name ?? "Accident blackspot",
-          type: "Accident blackspot",
-          location: p.corridor ? `${p.corridor} corridor · ${p.district ?? ""}`.trim() : p.district,
-          notes: p.note,
-          source: "THAIRSC · road-safety corridors",
+        const id = e.features?.[0]?.properties?.id as string | undefined;
+        const spot = PHUKET_BLACKSPOTS.find((b) => b.id === id) ?? null;
+        if (!spot) return;
+        setSelectedBlackspot(spot);
+        setIs3D(true);
+        setViewState({
+          longitude: spot.lng,
+          latitude: spot.lat,
+          zoom: 15.5,
+          pitch: 68,
+          bearing: -20,
+          minZoom: PHUKET_MIN_ZOOM,
+          maxZoom: PHUKET_MAX_ZOOM,
+          transitionDuration: 1200,
         });
       });
       mlMap.on("mouseenter", "phuket-blackspot-core", () => {
@@ -975,7 +999,7 @@ export default function BorderMap({
         mlMap.getCanvas().style.cursor = "";
       });
     },
-    [applyBuilding3DLayer, onProvinceSelect],
+    [applyBuilding3DLayer],
   );
 
   // ── Lazy-loaded GeoJSON / data caches for new overlays ──
@@ -1542,6 +1566,11 @@ export default function BorderMap({
               )}
             </DeckGL>
             <MapLegend />
+            <CorridorRiskReveal
+              blackspot={selectedBlackspot}
+              peak={blackspotPeak}
+              onClose={() => setSelectedBlackspot(null)}
+            />
           </div>
 
           {/* Wireframe street map (4K split-view only) */}

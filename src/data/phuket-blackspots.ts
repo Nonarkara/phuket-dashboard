@@ -13,8 +13,13 @@
  * THAIRSC publishes district aggregates, not per-spot crash coordinates — these
  * mark the corridors, not individual official crash records.
  *
- * Source: Thai Road Safety Center (THAIRSC) district breakdown +
- * documented Phuket blackspot reporting. Last reviewed: 2026-05-28.
+ * elevationM / slopePct / slopeDeg are REAL, derived from NASA SRTM 30 m elevation
+ * (steepest of a ~122 m N/S/E/W cross) via scripts/blackspot-slopes.mjs. SRTM smooths
+ * terrain, so the grade is a conservative floor for the on-road descent. The numbers
+ * confirm the story: Patong Hill summit ~29° (55% grade) vs flat Old Town junctions ~2°.
+ *
+ * Source: Thai Road Safety Center (THAIRSC) district breakdown + NASA SRTM 30 m
+ * (opentopodata.org) + documented Phuket blackspot reporting. Last reviewed: 2026-05-29.
  */
 
 export type BlackspotSeverity = "high" | "medium";
@@ -35,6 +40,12 @@ export interface Blackspot {
   severity: BlackspotSeverity;
   kind: BlackspotKind;
   note: string;
+  /** Center elevation, metres (SRTM 30 m). */
+  elevationM: number;
+  /** Steepest local grade, percent (rise/run × 100). */
+  slopePct: number;
+  /** Steepest local grade, degrees. */
+  slopeDeg: number;
 }
 
 export const PHUKET_BLACKSPOTS: Blackspot[] = [
@@ -49,6 +60,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "high",
     kind: "steep-descent",
     note: "Route 4029 viewpoint hairpin. Steep grade into tight bends; wet-season runoff and brake fade on the descent. Frequent motorcycle and truck runaways.",
+    elevationM: 59,
+    slopePct: 55.2,
+    slopeDeg: 28.9,
   },
   {
     id: "patong-hill-west",
@@ -59,7 +73,10 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     district: "Kathu",
     severity: "high",
     kind: "steep-descent",
-    note: "Steepest section dropping toward Patong. ~12% grade; loss-of-control crashes spike in rain.",
+    note: "Steepest section dropping toward Patong. Loss-of-control crashes spike in rain.",
+    elevationM: 102,
+    slopePct: 31,
+    slopeDeg: 17.2,
   },
   {
     id: "kathu-hill-base",
@@ -71,6 +88,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "curve",
     note: "Eastern foot of Route 4029 where the descent meets Kathu traffic. Speed carried off the hill into a populated junction.",
+    elevationM: 43,
+    slopePct: 9.1,
+    slopeDeg: 5.2,
   },
   {
     id: "kalim-curve",
@@ -82,6 +102,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "curve",
     note: "North Patong beach-road bend before the hill approach. Wet surface and pedestrian traffic.",
+    elevationM: 0,
+    slopePct: 11.5,
+    slopeDeg: 6.6,
   },
 
   // ── Mueang Phuket / Old Town — highest district death toll (106) ──
@@ -95,6 +118,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "high",
     kind: "junction",
     note: "Major Old Town junction mixing motorcycles with heavy vehicles on Thepkasattri Rd. High-volume conflict point.",
+    elevationM: 34,
+    slopePct: 39.2,
+    slopeDeg: 21.4,
   },
   {
     id: "thepkasattri-bypass",
@@ -106,6 +132,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "junction",
     note: "Arterial junction into Old Town. Speed-camera and signage audit candidate (ROAD_SAFETY_ACTIONS).",
+    elevationM: 8,
+    slopePct: 3.3,
+    slopeDeg: 1.9,
   },
   {
     id: "chaofa-junction",
@@ -117,6 +146,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "junction",
     note: "Chao Fa East/West split south of Old Town. Mixed-use lanes, motorcycle-heavy.",
+    elevationM: 16,
+    slopePct: 3.3,
+    slopeDeg: 1.9,
   },
   {
     id: "chalong-circle",
@@ -128,6 +160,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "high",
     kind: "roundabout",
     note: "Phuket's busiest roundabout — five arterials feed it. Motorcycle entry/exit conflicts; chronic crash cluster.",
+    elevationM: 10,
+    slopePct: 5.8,
+    slopeDeg: 3.3,
   },
 
   // ── Thalang / Airport north — Route 402 (47 deaths) ──
@@ -141,6 +176,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "high",
     kind: "roundabout",
     note: "Anusawari roundabout on Route 402 — high-speed approaches converge. Major north-corridor crash point.",
+    elevationM: 34,
+    slopePct: 8.2,
+    slopeDeg: 4.7,
   },
   {
     id: "thalang-402-straight",
@@ -152,6 +190,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "straight",
     note: "Open straight where speeds climb; overtaking crashes and roadside access conflicts.",
+    elevationM: 12,
+    slopePct: 5.7,
+    slopeDeg: 3.3,
   },
   {
     id: "airport-junction",
@@ -163,6 +204,9 @@ export const PHUKET_BLACKSPOTS: Blackspot[] = [
     severity: "medium",
     kind: "junction",
     note: "Route 4031/402 airport approach. Tourist riders unfamiliar with the road; peak-hour congestion.",
+    elevationM: 37,
+    slopePct: 6.5,
+    slopeDeg: 3.7,
   },
 ];
 
