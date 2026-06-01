@@ -5,6 +5,18 @@ Per §13: the same mistake never happens twice.
 
 ---
 
+## 2026-05-29 · Run static export via `npm run build:static`, not `node scripts/static-export.mjs`
+
+- **What went wrong:** Invoking the script directly failed with `/bin/sh: next: command not found`. The script `execSync("next build")` relies on `node_modules/.bin` being on PATH, which only npm scripts add.
+- **Correct behaviour:** Verify static export with `npm run build:static` (matches CI). Direct `node` invocation lacks the npm PATH and false-fails.
+- **How to recognise:** Preflight passes, routes get stubbed, then `next: command not found` / exit 127.
+
+## 2026-05-29 · TimesFM 2.0 quantile output works (no synthetic band needed)
+
+- **Note (not a mistake):** `tfm.forecast()` returns `(point, quantiles)`; `quantiles[0]` is `[horizon, nq>=9]`. Deriving p10/p90 spread per hour works — real uncertainty bands. Keep the rain-widened synthetic envelope only as the documented fallback.
+
+---
+
 ## 2026-05-26 · Bootstrap: §13 adopted
 
 - **What went wrong:** n/a — first entry

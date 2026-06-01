@@ -5,11 +5,14 @@ interface ForecastPeak {
   hour: number;
   risk: number;
   rainMm: number;
+  riskLow?: number;
+  riskHigh?: number;
 }
 
 interface Props {
   blackspot: Blackspot | null;
   peak: ForecastPeak | null;
+  twinCount?: number;
   onClose: () => void;
 }
 
@@ -33,7 +36,7 @@ function pad2(n: number): string {
  * the toll → tonight's rain-risk → why → the action. It fuses terrain (SRTM),
  * crash data (THAIRSC) and the forecast (TimesFM) into one legible insight.
  */
-export default function CorridorRiskReveal({ blackspot, peak, onClose }: Props) {
+export default function CorridorRiskReveal({ blackspot, peak, twinCount, onClose }: Props) {
   if (!blackspot) return null;
 
   const accent = blackspot.severity === "high" ? "#ef4444" : "#f59e0b";
@@ -126,16 +129,36 @@ export default function CorridorRiskReveal({ blackspot, peak, onClose }: Props) 
                 </span>{" "}
                 · {peak.rainMm}mm rain · risk{" "}
                 <span className="font-mono font-bold">{peak.risk}/100</span>
+                {peak.riskLow != null && peak.riskHigh != null && (
+                  <span className="text-[var(--dim)]">
+                    {" "}
+                    · range {peak.riskLow}–{peak.riskHigh}
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-[var(--dim)]">forecast loading…</span>
             )}
           </Row>
+          {twinCount != null && (
+            <Row label="Risk twins">
+              {twinCount > 0 ? (
+                <>
+                  <span className="font-mono font-bold" style={{ color: accent }}>
+                    {twinCount}
+                  </span>{" "}
+                  zones share this fabric signature — watch before they turn.
+                </>
+              ) : (
+                <span className="text-[var(--dim)]">no fabric twins detected.</span>
+              )}
+            </Row>
+          )}
           <Row label="Why">{why}</Row>
           <Row label="Act">{action}</Row>
 
           <div className="mt-2 text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
-            SRTM 30 m · THAIRSC · TimesFM
+            SRTM 30 m · THAIRSC · TimesFM{twinCount ? " · AlphaEarth" : ""}
           </div>
         </div>
       </section>

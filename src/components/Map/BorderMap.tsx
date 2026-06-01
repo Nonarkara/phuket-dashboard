@@ -66,7 +66,8 @@ import {
   GISTDA_OCEAN_LAYERS,
 } from "../../services/satellite-layers";
 import type { SatelliteSource } from "../../services/satellite-layers";
-import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers, createUrbanFabricLayer } from "../../services/map-engine";
+import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers, createUrbanFabricLayer, createRiskTwinsLayer } from "../../services/map-engine";
+import type { AccidentForecast } from "../../types/feeds";
 import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
 import { blackspotsGeoJSON, PHUKET_BLACKSPOTS } from "../../data/phuket-blackspots";
 import type { Blackspot } from "../../data/phuket-blackspots";
@@ -314,6 +315,7 @@ type OverlayState = {
   tambonBoundaries: boolean;
   aqiColumns: boolean;
   urbanFabric: boolean;
+  riskTwins: boolean;
 };
 
 function interpolateMotionFrame<
@@ -651,25 +653,22 @@ export default function BorderMap({
 
   // ─── The Slope Story — selected accident blackspot + tonight's forecast peak ───
   const [selectedBlackspot, setSelectedBlackspot] = useState<Blackspot | null>(null);
-  const [blackspotPeak, setBlackspotPeak] = useState<{
-    hour: number;
-    risk: number;
-    rainMm: number;
-  } | null>(null);
+  // Full forecast (island + per-corridor curves with uncertainty bands). Eager —
+  // the Slope Story card needs the corridor-specific peak on first blackspot click.
+  const [forecast, setForecast] = useState<AccidentForecast | null>(null);
   useEffect(() => {
     fetch("/data/phuket-accident-forecast.json")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { peakWindow?: { hour: number; risk: number; rainMm: number } } | null) => {
-        if (d?.peakWindow) {
-          setBlackspotPeak({
-            hour: d.peakWindow.hour,
-            risk: d.peakWindow.risk,
-            rainMm: d.peakWindow.rainMm,
-          });
-        }
+      .then((d: AccidentForecast | null) => {
+        if (d) setForecast(d);
       })
       .catch(() => undefined);
   }, []);
+  // AlphaEarth Risk Twins (lazy) — fetched when the overlay is toggled OR a
+  // blackspot is opened (so the card can show the twin count).
+  const [riskTwinsGeoJson, setRiskTwinsGeoJson] = useState<{
+    features?: Array<{ properties?: { blackspotId?: string } }>;
+  } | null>(null);
 
 
   const [incidents, setIncidents] = useState<IncidentFeature[]>([]);
@@ -715,6 +714,7 @@ export default function BorderMap({
     tambonBoundaries: false,
     aqiColumns: false,
     urbanFabric: false,
+    riskTwins: false,
     gridScale: "off",
   }));
 
@@ -1080,6 +1080,33 @@ export default function BorderMap({
     }
   }, [enabledOverlays.urbanFabric, urbanFabricGeoJson]);
 
+  // AlphaEarth Risk Twins — lazy fetch when the overlay is toggled OR a blackspot
+  // is opened (the Slope Story card shows the twin count).
+  useEffect(() => {
+    if ((enabledOverlays.riskTwins || selectedBlackspot) && !riskTwinsGeoJson) {
+      fetch("/data/phuket-risk-twins.geojson")
+        .then((r) => r.json())
+        .then((d) => setRiskTwinsGeoJson(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.riskTwins, selectedBlackspot, riskTwinsGeoJson]);
+
+  // Twin-zone count per blackspot id (for the Slope Story card).
+  const twinCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const f of riskTwinsGeoJson?.features ?? []) {
+      const id = f?.properties?.blackspotId;
+      if (id) m[id] = (m[id] ?? 0) + 1;
+    }
+    return m;
+  }, [riskTwinsGeoJson]);
+
+  // Corridor-specific forecast peak for the selected blackspot (falls back to island).
+  const corridorPeak =
+    (selectedBlackspot && forecast?.corridors?.[selectedBlackspot.corridor]?.peak) ||
+    forecast?.peakWindow ||
+    null;
+
   const disasterAlerts = disasterFeed?.alerts ?? [];
   const publicCameras = [
     ...(cameraFeed?.cameras ?? []),
@@ -1406,6 +1433,7 @@ export default function BorderMap({
       : []),
     // ── User-toggleable overlays (above basemap, below operational layers) ──
     ...(enabledOverlays.urbanFabric && urbanFabricGeoJson ? [createUrbanFabricLayer(urbanFabricGeoJson)] : []),
+    ...(enabledOverlays.riskTwins && riskTwinsGeoJson ? [createRiskTwinsLayer(riskTwinsGeoJson)] : []),
     ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
@@ -1568,7 +1596,8 @@ export default function BorderMap({
             <MapLegend />
             <CorridorRiskReveal
               blackspot={selectedBlackspot}
-              peak={blackspotPeak}
+              peak={corridorPeak}
+              twinCount={selectedBlackspot ? (twinCounts[selectedBlackspot.id] ?? 0) : 0}
               onClose={() => setSelectedBlackspot(null)}
             />
           </div>
@@ -1912,6 +1941,7 @@ export default function BorderMap({
               { id: "chlAndaman" as const, label: "Chl-a" },
               { id: "tambonBoundaries" as const, label: "Districts" },
               { id: "urbanFabric" as const, label: "Urban fabric" },
+              { id: "riskTwins" as const, label: "Risk twins" },
               { id: "aqiColumns" as const, label: "PM2.5 ↑" },
             ].map((toggle) => (
               <button

@@ -1717,3 +1717,28 @@ export function createUrbanFabricLayer(geojson: unknown) {
     },
   });
 }
+
+/**
+ * AlphaEarth "Risk Twins" — zones whose 64-d embedding signature matches a known
+ * high-severity accident blackspot (cosine similarity ≥ 0.85). Precomputed offline.
+ * Opacity encodes similarity (stronger match = more opaque). Tactical red, hairline.
+ */
+export function createRiskTwinsLayer(geojson: unknown) {
+  return new GeoJsonLayer({
+    id: "alphaearth-risk-twins",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: geojson as any,
+    stroked: true,
+    filled: true,
+    pickable: true,
+    lineWidthMinPixels: 0.5,
+    getLineColor: [239, 68, 68, 180],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getFillColor: (f: any) => {
+      const [r, g, b] = hexToRgb((f?.properties?.color as string) || "#ef4444");
+      const sim = Number(f?.properties?.similarity ?? 0.85);
+      const alpha = Math.round(90 + Math.min(Math.max((sim - 0.85) / 0.15, 0), 1) * 120);
+      return [r, g, b, alpha];
+    },
+  });
+}

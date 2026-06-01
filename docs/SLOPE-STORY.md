@@ -114,3 +114,32 @@ This feature is the keystone of a multi-session build:
 
 If this project is ever told as a history, the through-line is simple: we kept asking
 *why* until the map answered.
+
+---
+
+## Upgrade (2026-05-29) — the models go deeper
+
+The two Google models were being used shallowly; this upgrade brings their real superpowers
+into the keystone.
+
+**TimesFM → per-corridor probabilistic forecast.** The forecast is no longer one island curve.
+`scripts/timesfm-forecast.py` now emits a `corridors` map ("Patong" / "Old Town" / "Airport north")
+where each corridor's rain sensitivity `k = 0.18·(meanSlopeDeg/8)` is scaled by its REAL mean SRTM
+slope — so the steep Patong descent amplifies rain far more than the flat Old Town junctions. The
+SRTM slope now flows *into* the forecast. It also captures TimesFM 2.0's **quantile spread** for
+honest uncertainty bands (`riskLow`/`riskHigh`; falls back to a rain-widened modeled envelope).
+On a wet night the contrast is stark and true: 22:00 peak risk **Patong 100 · Old Town 68.6 ·
+Airport north 50.7**. The Slope Story TONIGHT row now shows the *corridor's* peak + range; the
+Governor's brief sparkline gained a faint p10–p90 band (Stoic "show the worst case", §12.5).
+
+**AlphaEarth → "Risk Twins" (embedding similarity).** AlphaEarth's 64-d embedding is L2-normalized,
+so a dot product *is* cosine similarity. `scripts/alphaearth-risk-twins.py` samples each high-severity
+blackspot's signature and finds every place on Phuket whose fabric matches (≥0.85), excluding the
+source's own neighborhood → `public/data/phuket-risk-twins.geojson` (890 zones). The story:
+*"where else looks like a known death-corridor — find it before it becomes one."* Surfaced as a
+"Risk twins" map overlay (opacity = similarity) and a count in the Slope Story card. The death-hill
+fabric is widespread (Patong-summit: 305 zones); Samkong's is rare (18) — the spread is itself signal.
+
+Both stay precomputed-offline → static, free, no live cloud. Schema is backward-compatible (island
+top-level unchanged; new fields optional). Live BigQuery `AI.FORECAST` + on-the-fly GEE similarity
+remain the documented future upgrade path.

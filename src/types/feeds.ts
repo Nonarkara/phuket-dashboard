@@ -36,15 +36,34 @@ export interface AccidentRiskPoint {
   ts: string;
   hour: number;
   risk: number; // 0-100 index
+  riskLow?: number; // p10 / lower uncertainty bound
+  riskHigh?: number; // p90 / upper uncertainty bound
   rainMm: number;
   band: RiskBand;
+}
+
+/** Per-corridor forecast — rain sensitivity scaled by the corridor's real SRTM slope. */
+export interface CorridorForecast {
+  slopeDeg: number;
+  rainSensitivity: number; // the rain-coupling k actually used
+  peak: AccidentRiskPoint;
+  points: AccidentRiskPoint[];
 }
 
 export interface AccidentForecast {
   generatedAt: string;
   horizonHours: number;
-  model: string; // e.g. "TimesFM 2.0 (...)"
+  model: string; // e.g. "TimesFM 2.0 (...) · TimesFM quantile band"
   source: string;
-  peakWindow: { ts: string; hour: number; risk: number; rainMm: number };
+  peakWindow: {
+    ts: string;
+    hour: number;
+    risk: number;
+    riskLow?: number;
+    riskHigh?: number;
+    rainMm: number;
+  };
   points: AccidentRiskPoint[];
+  /** Keyed by corridor label: "Patong" | "Old Town" | "Airport north". */
+  corridors?: Record<string, CorridorForecast>;
 }

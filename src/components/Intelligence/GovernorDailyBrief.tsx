@@ -453,7 +453,7 @@ function AccidentRiskForecast() {
   if (failed) return null;
 
   const next24 = forecast?.points.slice(0, 24) ?? [];
-  const maxRisk = Math.max(1, ...next24.map((p) => p.risk));
+  const maxRisk = Math.max(1, ...next24.map((p) => p.riskHigh ?? p.risk));
   const peak = forecast?.peakWindow;
   const modelShort = forecast?.model.startsWith("TimesFM") ? "TimesFM" : "modeled";
 
@@ -478,22 +478,41 @@ function AccidentRiskForecast() {
       ) : (
         <>
           <div className="mt-2 flex h-9 items-end gap-[2px]" aria-hidden="true">
-            {next24.map((p) => (
-              <div
-                key={p.ts}
-                title={`${String(p.hour).padStart(2, "0")}:00 · risk ${p.risk} · rain ${p.rainMm}mm`}
-                className="flex-1"
-                style={{
-                  height: `${Math.max(6, (p.risk / maxRisk) * 100)}%`,
-                  backgroundColor: RISK_BAND_COLOR[p.band] ?? "#22c55e",
-                  opacity: p.rainMm > 0.2 ? 1 : 0.62,
-                }}
-              />
-            ))}
+            {next24.map((p) => {
+              const color = RISK_BAND_COLOR[p.band] ?? "#22c55e";
+              const hasBand = p.riskLow != null && p.riskHigh != null;
+              return (
+                <div
+                  key={p.ts}
+                  title={`${String(p.hour).padStart(2, "0")}:00 · risk ${p.risk} · rain ${p.rainMm}mm`}
+                  className="relative flex h-full flex-1 items-end"
+                >
+                  {hasBand && (
+                    <div
+                      className="absolute inset-x-0"
+                      style={{
+                        bottom: `${Math.min(100, ((p.riskLow as number) / maxRisk) * 100)}%`,
+                        height: `${Math.min(100, (((p.riskHigh as number) - (p.riskLow as number)) / maxRisk) * 100)}%`,
+                        backgroundColor: color,
+                        opacity: 0.22,
+                      }}
+                    />
+                  )}
+                  <div
+                    className="relative w-full"
+                    style={{
+                      height: `${Math.max(6, (p.risk / maxRisk) * 100)}%`,
+                      backgroundColor: color,
+                      opacity: p.rainMm > 0.2 ? 1 : 0.62,
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
           <div className="mt-1 flex items-center justify-between text-[7px] uppercase tracking-[0.14em] text-[var(--dim)]">
             <span>next 24h</span>
-            <span>rain-hours solid · dry faded</span>
+            <span>band = p10–p90 · rain solid</span>
           </div>
           {peak && (
             <p className="mt-1.5 text-[10px] leading-4 text-[var(--muted)]">
