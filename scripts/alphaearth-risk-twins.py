@@ -28,8 +28,8 @@ OUT_PATH = os.path.join(
 )
 
 PHUKET_BBOX = [98.255, 7.735, 98.435, 8.205]
-THRESHOLD = 0.85       # cosine-similarity floor for a "twin"
-VECTOR_SCALE = 150     # m — coarse vectorize keeps the GeoJSON small
+THRESHOLD = 0.90       # cosine-similarity floor — tightened for fewer, sharper twins
+VECTOR_SCALE = 200     # m — coarse vectorize merges adjacent pixels
 EXCLUDE_BUFFER_M = 800  # don't let a blackspot match its own neighborhood
 TWIN_COLOR = "#ef4444"  # all sources are high-severity → tactical red
 
@@ -54,7 +54,9 @@ def load_embedding(region):
 
 
 def twin_features(img, band_names, region, bid, lng, lat):
-    """Return GeoJSON features: zones whose embedding ~ this blackspot's signature."""
+    """Return GeoJSON features: dissolved zones whose embedding ~ this blackspot's
+    signature. Adjacent qualifying polygons are merged into clean connected shapes,
+    so the count is distinct twin AREAS, not pixel fragments."""
     pt = ee.Geometry.Point([lng, lat])
     # Reference signature: the 64-d embedding at the blackspot, as a band-aligned image.
     ref_dict = img.reduceRegion(reducer=ee.Reducer.first(), geometry=pt, scale=10, bestEffort=True)
@@ -65,29 +67,30 @@ def twin_features(img, band_names, region, bid, lng, lat):
     # Threshold and exclude the source's own neighborhood.
     keep = dot.gte(THRESHOLD)
     inside = ee.Image.constant(1).clip(pt.buffer(EXCLUDE_BUFFER_M)).mask()
-    masked = dot.updateMask(keep).updateMask(inside.Not())
+    masked = keep.updateMask(keep).updateMask(inside.Not())
 
-    vectors = masked.gte(THRESHOLD).selfMask().reduceToVectors(
+    vectors = masked.selfMask().reduceToVectors(
         geometry=region, scale=VECTOR_SCALE, geometryType="polygon",
         maxPixels=1e9, bestEffort=True,
     )
-    # Attach mean similarity per polygon.
-    vectors = dot.reduceRegions(collection=vectors, reducer=ee.Reducer.mean(), scale=VECTOR_SCALE)
+    # Dissolve touching polygons into clean connected shapes.
+    dissolved = vectors.geometry().dissolve(maxError=30)
+    gj = dissolved.getInfo()
+    if not gj:
+        return []
+    if gj["type"] == "Polygon":
+        polys = [gj["coordinates"]]
+    elif gj["type"] == "MultiPolygon":
+        polys = gj["coordinates"]
+    else:
+        polys = []
 
-    feats = vectors.getInfo().get("features", [])
     out = []
-    for f in feats:
-        sim = f["properties"].get("mean")
-        if sim is None:
-            continue
+    for poly in polys:
         out.append({
             "type": "Feature",
-            "geometry": f["geometry"],
-            "properties": {
-                "blackspotId": bid,
-                "similarity": round(float(sim), 3),
-                "color": TWIN_COLOR,
-            },
+            "geometry": {"type": "Polygon", "coordinates": poly},
+            "properties": {"blackspotId": bid, "color": TWIN_COLOR},
         })
     return out
 

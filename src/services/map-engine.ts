@@ -1731,14 +1731,10 @@ export function createRiskTwinsLayer(geojson: unknown) {
     stroked: true,
     filled: true,
     pickable: true,
-    lineWidthMinPixels: 0.5,
-    getLineColor: [239, 68, 68, 180],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getFillColor: (f: any) => {
-      const [r, g, b] = hexToRgb((f?.properties?.color as string) || "#ef4444");
-      const sim = Number(f?.properties?.similarity ?? 0.85);
-      const alpha = Math.round(90 + Math.min(Math.max((sim - 0.85) / 0.15, 0), 1) * 120);
-      return [r, g, b, alpha];
-    },
+    lineWidthMinPixels: 1,
+    // Hairline outline reads the shape; fill is a restrained tint (dissolved
+    // zones don't overlap, so the tint stays clean — no saturated blob).
+    getLineColor: [239, 68, 68, 200],
+    getFillColor: [239, 68, 68, 70],
   });
 }
