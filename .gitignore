@@ -49,3 +49,5 @@ next-env.d.ts
 
 # OpenNext build output
 .open-next
+
+.wrangler/
