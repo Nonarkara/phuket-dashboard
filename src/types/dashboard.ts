@@ -113,6 +113,25 @@ export interface FlightData {
   heading: number;
   origin_country: string;
   on_ground: boolean;
+  // Airlabs-enriched optional fields
+  flight_iata?: string;
+  airline_iata?: string;
+  aircraft_icao?: string;
+  dep_iata?: string;
+  arr_iata?: string;
+  flight_status?: string;
+}
+
+export interface AisShip {
+  mmsi: number;
+  name: string;
+  lat: number;
+  lng: number;
+  sog: number;
+  cog: number;
+  heading: number;
+  navStatus: number;
+  lastSeen: string;
 }
 
 export interface FlightArrival {

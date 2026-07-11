@@ -1,0 +1,10 @@
+[
+  {
+    "id": "forecast-tide-phuket",
+    "file": "forecast-tide-phuket.json",
+    "label": "tide",
+    "aoi": "phuket",
+    "horizon": 48,
+    "model": "google/timesfm-2.5-200m-pytorch"
+  }
+]

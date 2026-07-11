@@ -46,6 +46,7 @@ import {
   createCanalsLayer,
   createFloodStationLayer,
   createMarineLayer,
+  createAisShipLayers,
   POI_AMENITY_LABEL,
   type PoiCollection,
   type PoiFeature,
@@ -97,6 +98,7 @@ import type {
   FireEvent,
   FlightArrivalsResponse,
   IncidentFeature,
+  AisShip,
   MaritimeSecurityResponse,
   MaritimeVessel,
   ProvinceSelection,
@@ -499,6 +501,25 @@ function isFloodStation(o: unknown): o is FloodStationPoint {
 function isMarinePoint(o: unknown): o is MarinePoint {
   return !!o && typeof o === "object" && "waveHeight" in o && "sst" in o && "fishingAdvice" in o;
 }
+function isAisShip(value: unknown): value is AisShip {
+  return isRecord(value) && typeof value.mmsi === "number" && typeof value.sog === "number";
+}
+function isFlightData(value: unknown): value is FlightData {
+  return isRecord(value) && typeof value.icao24 === "string" && typeof value.heading === "number" && !("strategicNote" in value);
+}
+
+const NAV_STATUS: Record<number, string> = {
+  0: "underway",
+  1: "at anchor",
+  2: "not under command",
+  3: "restricted manoeuvrability",
+  4: "constrained by draught",
+  5: "moored",
+  6: "aground",
+  7: "fishing",
+  8: "sailing",
+  15: "not defined",
+};
 
 function getTooltipText(object: unknown): string | null {
   if (isPoiFeature(object)) {
@@ -571,6 +592,20 @@ function getTooltipText(object: unknown): string | null {
 
   if (isTrafficEvent(object)) {
     return `${object.type}: ${object.title}`;
+  }
+
+  if (isAisShip(object)) {
+    const status = NAV_STATUS[object.navStatus] ?? `status ${object.navStatus}`;
+    return `${object.name} · MMSI ${object.mmsi} · ${object.sog.toFixed(1)} kn · COG ${Math.round(object.cog)}° · ${status}`;
+  }
+
+  if (isFlightData(object)) {
+    const parts: string[] = [object.callsign || object.icao24];
+    if (object.airline_iata) parts.push(object.airline_iata);
+    if (object.dep_iata && object.arr_iata) parts.push(`${object.dep_iata}→${object.arr_iata}`);
+    if (object.aircraft_icao) parts.push(object.aircraft_icao);
+    parts.push(`${Math.round(object.altitude)}m · ${Math.round(object.velocity)}km/h`);
+    return parts.join(" · ");
   }
 
   if (hasLabel(object)) {
@@ -677,6 +712,7 @@ export default function BorderMap({
   const [rainfall, setRainfall] = useState<RainfallPoint[]>([]);
   const [airQuality, setAirQuality] = useState<AirQualityPoint[]>([]);
   const [flights, setFlights] = useState<FlightData[]>([]);
+  const [ships, setShips] = useState<AisShip[]>([]);
   const [arrivalsResp, setArrivalsResp] = useState<FlightArrivalsResponse | null>(null);
   const [rainViewerSource, setRainViewerSource] = useState<SatelliteSource | null>(null);
   const [pksbBusesMode, setPksbBusesMode] = useState<FeedMode | null>(null);
@@ -1147,6 +1183,8 @@ export default function BorderMap({
   const busRequestIdRef = useRef(0);
   const maritimeControllerRef = useRef<AbortController | null>(null);
   const maritimeRequestIdRef = useRef(0);
+  const shipControllerRef = useRef<AbortController | null>(null);
+  const shipRequestIdRef = useRef(0);
 
   const loadSlowMapData = useEffectEvent(async () => {
     const requestId = ++slowMapRequestIdRef.current;
@@ -1232,6 +1270,24 @@ export default function BorderMap({
 
       setFlights(Array.isArray(flightData) ? flightData : []);
       if (arrivalsData) setArrivalsResp(arrivalsData);
+    } catch (error) {
+      if (isAbortError(error)) return;
+    }
+  });
+
+  const loadShips = useEffectEvent(async () => {
+    const requestId = ++shipRequestIdRef.current;
+    shipControllerRef.current?.abort();
+    const controller = new AbortController();
+    shipControllerRef.current = controller;
+    try {
+      const data = await fetchJsonOrFallback<AisShip[]>(
+        buildScenarioUrl("/api/ships", scenarioId),
+        [],
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== shipRequestIdRef.current) return;
+      setShips(Array.isArray(data) ? data : []);
     } catch (error) {
       if (isAbortError(error)) return;
     }
@@ -1372,6 +1428,18 @@ export default function BorderMap({
   }, [scenarioId]);
 
   useEffect(() => {
+    void loadShips();
+    const interval = window.setInterval(() => void loadShips(), 30000);
+
+    return () => {
+      shipRequestIdRef.current += 1;
+      shipControllerRef.current?.abort();
+      shipControllerRef.current = null;
+      window.clearInterval(interval);
+    };
+  }, [scenarioId]);
+
+  useEffect(() => {
     void loadPksbBuses();
     const interval = window.setInterval(() => void loadPksbBuses(), 15000);
 
@@ -1459,6 +1527,7 @@ export default function BorderMap({
     ...createTourismHotspotLayer(tourismHotspots),
     ...createTrafficEventLayers(trafficEvents),
     ...(createFlightPathsLayer(flights) ?? []),
+    ...createAisShipLayers(ships),
   ].filter(Boolean);
 
   const focusPresets = GOVERNOR_CORRIDORS;

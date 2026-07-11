@@ -16,6 +16,7 @@ import type { Waterway } from "../data/phuket-waterways";
 import { getProvinceLabels } from "../lib/thai-provinces";
 import type {
   AirQualityPoint,
+  AisShip,
   ConflictZoneCollection,
   ConflictZoneProperties,
   DisasterAlert,
@@ -1737,4 +1738,44 @@ export function createRiskTwinsLayer(geojson: unknown) {
     getLineColor: [239, 68, 68, 200],
     getFillColor: [239, 68, 68, 70],
   });
+}
+
+// ── AIS live ship layer — cyan dots + name labels ─────────────────────────────
+export function createAisShipLayers(ships: AisShip[]) {
+  if (!ships.length) return [];
+
+  return [
+    new ScatterplotLayer<AisShip>({
+      id: "ais-ships",
+      data: ships,
+      getPosition: (d) => [d.lng, d.lat],
+      getFillColor: [56, 189, 248, 220],  // sky-400 cyan — distinct from amber maritime & white flights
+      getRadius: 1200,
+      radiusUnits: "meters",
+      radiusMinPixels: 3,
+      radiusMaxPixels: 9,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [226, 232, 240, 180],
+      pickable: true,
+      opacity: 0.9,
+    }),
+    new TextLayer<AisShip>({
+      id: "ais-ship-labels",
+      data: ships.filter((d) => !d.name.startsWith("MMSI")),
+      getPosition: (d) => [d.lng, d.lat],
+      getText: (d) => d.name,
+      getColor: [56, 189, 248, 190],
+      getSize: 10,
+      getTextAnchor: "start" as const,
+      getAlignmentBaseline: "center" as const,
+      getPixelOffset: [8, 0],
+      fontFamily: "SF Mono, JetBrains Mono, monospace",
+      outlineColor: [10, 15, 26, 220],
+      outlineWidth: 2,
+      sizeUnits: "pixels" as const,
+      billboard: false,
+      pickable: false,
+    }),
+  ];
 }

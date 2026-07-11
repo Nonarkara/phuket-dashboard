@@ -1,0 +1,23 @@
+{
+  "image": "change-patong-2023-2024.png",
+  "bounds": {
+    "west": 98.26994286485728,
+    "south": 7.879842009239618,
+    "east": 98.32006885771115,
+    "north": 7.9301476651503116
+  },
+  "years": {
+    "a": 2023,
+    "b": 2024
+  },
+  "stats": {
+    "p_low": 0.19802173972129822,
+    "p_high": 0.43146851658821106,
+    "ramp_low_pctile": 50.0,
+    "ramp_high_pctile": 99.0,
+    "pixel_count": 78120,
+    "max_l2": 0.8922566771507263,
+    "median_l2": 0.19802173972129822
+  },
+  "dataset": "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
+}
