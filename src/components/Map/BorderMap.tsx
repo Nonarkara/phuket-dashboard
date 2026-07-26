@@ -1,6 +1,14 @@
 "use client";
 import { apiUrl } from "../../lib/asset-path";
 import MapLegend from "./MapLegend";
+import ScopeSelector from "./ScopeSelector";
+import { useScope } from "../../hooks/useScope";
+import {
+  createDistrictLayer,
+  createLocalGovLayer,
+  createScopeHighlightLayer,
+  zoomForBounds,
+} from "../../services/boundary-layers";
 
 import {
   useCallback,
@@ -315,6 +323,7 @@ type OverlayState = {
   sstAndaman: boolean;
   chlAndaman: boolean;
   tambonBoundaries: boolean;
+  adminBoundaries: boolean;
   aqiColumns: boolean;
   urbanFabric: boolean;
   riskTwins: boolean;
@@ -748,6 +757,7 @@ export default function BorderMap({
     sstAndaman: false,
     chlAndaman: false,
     tambonBoundaries: false,
+    adminBoundaries: true,
     aqiColumns: false,
     urbanFabric: false,
     riskTwins: false,
@@ -1046,6 +1056,33 @@ export default function BorderMap({
   const [marineStations, setMarineStations] = useState<MarinePoint[]>([]);
   const [tambonGeoJson, setTambonGeoJson] = useState<object | null>(null);
   const [urbanFabricGeoJson, setUrbanFabricGeoJson] = useState<object | null>(null);
+
+  // Administrative scope. Reads/writes ?scope=, loads the two baked boundary files.
+  const { scope, units, activeGeometry, districts, localGovs, setScope, loaded: scopeLoaded } =
+    useScope();
+  // The primary map pane, measured to fit a scope's bbox. Not the window: the news
+  // and operations rails take ~620px of it on desktop.
+  const mapShellRef = useRef<HTMLDivElement | null>(null);
+
+  // Frame the selected unit. Keyed on scope.id, not the object, so this fires once
+  // per selection rather than on every boundary-data re-render.
+  const framedScopeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scopeLoaded || framedScopeRef.current === scope.id) return;
+    framedScopeRef.current = scope.id;
+    const el = mapShellRef.current;
+    const width = el?.clientWidth ?? 1200;
+    const height = el?.clientHeight ?? 800;
+    setViewState((prev) =>
+      clampViewToPhuket({
+        ...prev,
+        longitude: scope.centroid[0],
+        latitude: scope.centroid[1],
+        zoom: zoomForBounds(scope.bbox, width, height, PHUKET_MIN_ZOOM, PHUKET_MAX_ZOOM),
+        transitionDuration: 700,
+      } as MapViewState),
+    );
+  }, [scope, scopeLoaded]);
 
   useEffect(() => {
     if (enabledOverlays.publicInfrastructure && !poiData) {
@@ -1503,6 +1540,10 @@ export default function BorderMap({
     ...(enabledOverlays.urbanFabric && urbanFabricGeoJson ? [createUrbanFabricLayer(urbanFabricGeoJson)] : []),
     ...(enabledOverlays.riskTwins && riskTwinsGeoJson ? [createRiskTwinsLayer(riskTwinsGeoJson)] : []),
     ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
+    // ── Administrative boundaries + active scope ──
+    createDistrictLayer(districts, enabledOverlays.adminBoundaries),
+    createLocalGovLayer(localGovs, enabledOverlays.adminBoundaries, setScope),
+    createScopeHighlightLayer(activeGeometry),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
     ...(enabledOverlays.waterways ? createWaterwaysLayer(PHUKET_WATERWAYS) : []),
@@ -1640,7 +1681,7 @@ export default function BorderMap({
       {webglSupported ? (
         <div className="absolute inset-0 flex">
           {/* Primary map */}
-          <div className={`relative ${is4K ? "flex-[2]" : "flex-1"}`}>
+          <div ref={mapShellRef} className={`relative ${is4K ? "flex-[2]" : "flex-1"}`}>
             <DeckGL
               id="phuket-deck"
               viewState={viewState}
@@ -1651,18 +1692,24 @@ export default function BorderMap({
               getTooltip={({ object }: PickingInfo<unknown>) => getTooltipText(object)}
             >
               {hasMapboxBaseMap ? (
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 <MapboxMap
                   key={activeBasemap}
                   mapStyle={mapStyle}
                   attributionControl={false}
                   renderWorldCopies={false}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onLoad={handleMapLoad as any}
                 />
               ) : (
                 <div className="absolute inset-0 bg-[#0c121e]/20 pointer-events-none" />
               )}
             </DeckGL>
+            <ScopeSelector
+              scope={scope}
+              units={units}
+              onSelect={setScope}
+              loaded={scopeLoaded}
+            />
             <MapLegend />
             <CorridorRiskReveal
               blackspot={selectedBlackspot}
@@ -2010,6 +2057,7 @@ export default function BorderMap({
               { id: "sstAndaman" as const, label: "Sea Temp" },
               { id: "chlAndaman" as const, label: "Chl-a" },
               { id: "tambonBoundaries" as const, label: "Districts" },
+              { id: "adminBoundaries" as const, label: "Admin lines" },
               { id: "urbanFabric" as const, label: "Urban fabric" },
               { id: "riskTwins" as const, label: "Risk twins" },
               { id: "aqiColumns" as const, label: "PM2.5 ↑" },

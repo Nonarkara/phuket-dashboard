@@ -116,3 +116,21 @@ Per §13: the same mistake never happens twice.
 - **What went wrong:** Pushed, CI deployed GitHub Pages, verified the new bundle was live — but the static site calls the Cloudflare **Worker** for every `/api/*`, and that worker still ran the old code serving the old response shape.
 - **Correct behaviour:** Any change touching an API route needs BOTH: `git push` (→ Pages, the shell) and `npx @opennextjs/cloudflare build && npx wrangler deploy` (→ Worker, the data plane). Neither alone is a deploy.
 - **How to recognise:** The live HTML/JS is new but `curl` on the workers.dev API returns the old shape.
+
+## 2026-07-26 · A 0x0 browser viewport looks exactly like a broken app
+
+- **What went wrong:** The Browser pane went hidden, so `window.innerWidth/innerHeight` were 0. The page served fine (43 KB of SSR HTML, 200s in the dev log) but rendered 242 elements, an empty `innerText` and zero canvases, because every sized layout collapsed and deck.gl never initialised. Spent a long detour bisecting, stashing Phase 3, wiping `.next` and restarting the dev server — the code was never at fault.
+- **Correct behaviour:** When a page looks dead, check the viewport FIRST: `window.innerWidth`, and `document.querySelector('[data-surface]').getBoundingClientRect()`. Zero width means the pane is hidden, not that the app is broken. A screenshot wakes it. Also compare `document.body.textContent.length` (large = content present) against `innerText.length` (small = nothing is being laid out) — that gap is the tell.
+- **How to recognise:** `els` in the low hundreds, `canvases: 0`, `bodyLen` ~20, no client `/api/*` calls in the dev log, and no JS errors anywhere. No error + no render = environment, not code.
+
+## 2026-07-26 · An area-weighted centroid can fall outside a concave polygon
+
+- **What went wrong:** Used a shoelace centroid as each administrative unit's map label and fly-to target. Rawai wraps the southern cape, so its centroid landed in the sea; the map would have framed open water for that municipality.
+- **Correct behaviour:** Keep the area centroid when it tests inside the polygon, otherwise fall back to a representative point (scanline the bbox, take the midpoint of the widest interior span — the PostGIS `ST_PointOnSurface` idea). `scripts/build-boundaries.mjs` does both.
+- **How to recognise:** The self-check `scripts/test-boundaries.mjs` asserts every unit's centroid falls inside its own polygon. It caught this on its first run; keep that assertion.
+
+## 2026-07-26 · GISTDA's tambon English names and LAO types are both unreliable
+
+- **What went wrong:** GISTDA's tambon layer labels 830105 (Wichit) as "RATSADA" — the same English name it gives 830104. Its LAO layer still calls Phuket City a เทศบาลเมือง (upgraded to เทศบาลนคร in 2004) and lists Ratsada/Wichit/Chalong/Rawai as อบต. after their promotion to เทศบาลตำบล.
+- **Correct behaviour:** Take *geometry* and *codes* from GISTDA, *names* from the DOPA subdistrict register, and *current unit type* from an up-to-date list. `scripts/build-boundaries.mjs` carries a `TAMBON_NAMES_EN` override table and a commented registry saying which field came from where.
+- **How to recognise:** Two features sharing an English name, or a municipality type that contradicts the province's own published list.
