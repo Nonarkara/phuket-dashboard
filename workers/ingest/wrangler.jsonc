@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "phuket-ingest",
+  "main": "src/index.js",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "kv_namespaces": [
+    { "binding": "PHUKET_KV", "id": "d0a7529534a84514a1575896fb3b0514" }
+  ],
+  "ai": { "binding": "AI" },
+  "triggers": {
+    // News every 15 min. Air/rain hourly and gov stats daily land here in later phases.
+    "crons": ["*/15 * * * *"]
+  },
+  "observability": { "enabled": true }
+}

@@ -24,22 +24,10 @@ import type {
   OperationsDashboardResponse,
 } from "../../types/dashboard";
 
-interface NewsItem {
-  id: string;
-  title: string;
-  summary?: string;
-  source: string;
-  zone: string;
-  severity: "alert" | "watch" | "stable";
-  url?: string;
-  publishedAt?: string;
-}
-
-interface MultilingualNewsResponse {
-  th: NewsItem[];
-  en: NewsItem[];
-  zh: NewsItem[];
-}
+// These were duplicated locally as { th, en, zh } buckets, which is why the compiler
+// stayed quiet when the feed moved to a flat 11-language items[] and this file blew
+// up at runtime with "news.th is not iterable". One definition now, in src/types.
+import type { MultilingualNewsResponse } from "../../types/news";
 
 type ActionType =
   | "brief_press"
@@ -654,12 +642,14 @@ function computeFires(
   }
 
   if (news) {
-    const allNews = [...news.th, ...news.en, ...news.zh];
+    const allNews = news.items;
     const alerts = allNews.filter((n) => n.severity === "alert");
     const seen = new Set(items.map((i) => i.headline.toLowerCase()));
     for (const alert of alerts) {
       if (items.length >= 6) break;
-      const headline = truncate(alert.title, 78);
+      // Lead with the English rendering: the brief is read at a desk, and a raw
+      // Cyrillic or Korean headline is not actionable there.
+      const headline = truncate(alert.titleEn ?? alert.title, 78);
       const key = headline.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -671,7 +661,9 @@ function computeFires(
         href: alert.url,
         action: "Brief press",
         actionType: "brief_press",
-        publishedAt: alert.publishedAt,
+        // publishedAt is null when a feed gave no parseable date; BriefItem treats
+        // absent as unknown, and formatRelativeAge already handles undefined.
+        publishedAt: alert.publishedAt ?? undefined,
       });
     }
   }
@@ -870,13 +862,13 @@ function computeRealityChecks(
   operations: OperationsDashboardResponse | null,
 ): RealityCheck[] {
   if (!operations) return [];
-  const allNews = news ? [...news.th, ...news.en, ...news.zh] : [];
+  const allNews = news?.items ?? [];
 
   return REALITY_TOPICS.flatMap((topic) => {
     const measured = topic.measured(operations);
     if (!measured) return [];
     const matched = allNews.filter((n) =>
-      topic.pattern.test(`${n.title ?? ""} ${n.summary ?? ""}`),
+      topic.pattern.test(`${n.title} ${n.titleEn ?? ""}`),
     );
     const negativeCount = matched.filter(
       (n) => n.severity === "alert" || n.severity === "watch",
@@ -903,7 +895,7 @@ function computeRealityChecks(
       {
         topic: topic.name,
         narrativeCount: matched.length,
-        topHeadline: top?.title,
+        topHeadline: top ? (top.titleEn ?? top.title) : undefined,
         measuredLabel: measured.label,
         measuredStatus: measured.status,
         verdict,
@@ -917,7 +909,7 @@ function computeHottestZone(
   news: MultilingualNewsResponse | null,
 ): { zone: string; count: number } | null {
   if (!news) return null;
-  const all = [...news.th, ...news.en, ...news.zh];
+  const all = news.items;
   if (all.length === 0) return null;
   const counts = new Map<string, number>();
   for (const item of all) {

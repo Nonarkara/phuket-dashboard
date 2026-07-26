@@ -4,43 +4,21 @@ import { apiUrl } from "../../lib/asset-path";
 import { useEffect, useState } from "react";
 import { AlertTriangle, ExternalLink, Globe, Newspaper } from "lucide-react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
+import { SkeletonRow } from "../Skeleton";
+import {
+  LANG_META, NEWS_LANGS,
+  type NewsItem, type NewsLang, type NewsSeverity, type MultilingualNewsResponse,
+} from "../../types/news";
 
-interface NewsItem {
-  id: string;
-  lang: "th" | "en" | "zh";
-  title: string;
-  titleTh?: string;
-  summary: string;
-  source: string;
-  zone: string;
-  severity: "alert" | "watch" | "stable";
-  publishedAt: string;
-  url?: string;
-}
+type LangFilter = "all" | NewsLang;
 
-interface MultilingualNewsResponse {
-  generatedAt: string;
-  th: NewsItem[];
-  en: NewsItem[];
-  zh: NewsItem[];
-  sources: string[];
-}
-
-type LangFilter = "all" | "th" | "en" | "zh";
-
-const LANG_FLAGS: Record<string, { label: string; flag: string }> = {
-  th: { label: "ไทย", flag: "🇹🇭" },
-  en: { label: "ENG", flag: "🇬🇧" },
-  zh: { label: "中文", flag: "🇨🇳" },
-};
-
-function severityDot(sev: "alert" | "watch" | "stable") {
+function severityDot(sev: NewsSeverity) {
   if (sev === "alert") return "bg-[#ef4444]";
   if (sev === "watch") return "bg-[#f59e0b]";
   return "bg-[var(--cool)]";
 }
 
-function severityBorder(sev: "alert" | "watch" | "stable") {
+function severityBorder(sev: NewsSeverity) {
   if (sev === "alert") return "border-l-[#ef4444]";
   if (sev === "watch") return "border-l-[#f59e0b]";
   return "border-l-[var(--line)]";
@@ -87,7 +65,16 @@ function formatNewsTime(iso: string): string {
 }
 
 function NewsItemCard({ item, is4K, rank }: { item: NewsItem; is4K: boolean; rank?: number }) {
-  const cat = categorize(item.title);
+  // Classify on the English rendering when we have one: the keyword table is
+  // English+Thai only, so a Russian or Korean headline would otherwise always
+  // fall through to the generic "NEWS" label.
+  const cat = categorize(item.titleEn ?? item.title);
+
+  // What the operator reads first. Thai stays Thai; everything else leads with the
+  // English rendering when a translator has produced one.
+  const lead = item.lang === "th" ? item.title : (item.titleEn ?? item.title);
+  const showOriginal = lead !== item.title;
+  const meta = LANG_META[item.lang];
   // Recency gradient: newer articles (rank 0-2) get a warm tint, fading to neutral
   const recencyBg = (() => {
     if (item.severity === "alert") return "rgba(239,68,68,0.06)";
@@ -105,8 +92,8 @@ function NewsItemCard({ item, is4K, rank }: { item: NewsItem; is4K: boolean; ran
       <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`shrink-0 ${is4K ? "text-[13px]" : "text-[10px]"}`}>
-              {LANG_FLAGS[item.lang]?.flag}
+            <span className={`shrink-0 ${is4K ? "text-[13px]" : "text-[10px]"}`} title={meta?.name}>
+              {meta?.flag}
             </span>
             <span className={`shrink-0 rounded-full ${severityDot(item.severity)} ${is4K ? "h-2.5 w-2.5" : "h-1.5 w-1.5"}`} />
             <span
@@ -120,30 +107,44 @@ function NewsItemCard({ item, is4K, rank }: { item: NewsItem; is4K: boolean; ran
             </span>
           </div>
           <div className="mt-1">
-            {item.titleTh && item.lang !== "th" && (
-              <div className={`${is4K ? "text-[14px]" : "text-[10px]"} font-semibold leading-4 text-[var(--ink)]`}>
-                {item.url ? (
-                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--cool)] hover:underline underline-offset-2">
-                    {item.titleTh}
-                  </a>
-                ) : item.titleTh}
-              </div>
-            )}
-            <div className={`${is4K ? "text-[13px] leading-5" : "text-[10px] leading-4"} ${item.titleTh && item.lang !== "th" ? "text-[var(--muted)]" : "font-semibold text-[var(--ink)]"}`}>
+            <div className={`${is4K ? "text-[14px]" : "text-[10px]"} font-semibold leading-4 text-[var(--ink)]`}>
               {item.url ? (
                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--cool)] hover:underline underline-offset-2">
-                  {item.title}
+                  {lead}
                 </a>
-              ) : item.title}
+              ) : lead}
             </div>
+            {/* The headline as published. Kept visible so the operator can always see
+                what was actually written, not only what a model made of it. */}
+            {showOriginal && (
+              <div
+                className={`mt-0.5 ${is4K ? "text-[12px] leading-4" : "text-[9px] leading-[14px]"} text-[var(--muted)]`}
+                lang={item.lang}
+                dir={item.lang === "he" ? "rtl" : undefined}
+              >
+                {item.title}
+              </div>
+            )}
+            {/* Thai is produced only for items an official has to act on. */}
+            {item.titleTh && item.lang !== "th" && (
+              <div className={`mt-0.5 ${is4K ? "text-[12px] leading-4" : "text-[9px] leading-[14px]"} text-[var(--muted)]`} lang="th">
+                {item.titleTh}
+              </div>
+            )}
           </div>
-          <p className={`mt-0.5 ${is4K ? "text-[12px] leading-4" : "text-[9px] leading-[14px]"} text-[var(--muted)]`}>
-            {item.summary}
-          </p>
-          <div className={`mt-1 flex items-center gap-2 ${is4K ? "text-[10px]" : "text-[7px]"} uppercase tracking-[0.16em] text-[var(--dim)]`}>
+          <div className={`mt-1 flex flex-wrap items-center gap-2 ${is4K ? "text-[10px]" : "text-[7px]"} uppercase tracking-[0.16em] text-[var(--dim)]`}>
             <span>{item.source}</span>
             {item.publishedAt && (
               <span className="font-mono">{formatNewsTime(item.publishedAt)}</span>
+            )}
+            {/* Provenance: never let a machine translation pass as the source text. */}
+            {showOriginal && (
+              <span
+                className="font-mono"
+                title={item.translation ? `Translated by ${item.translation.provider}` : "Not yet translated"}
+              >
+                {item.translation && item.translation.provider !== "source" ? "MT" : "RAW"}
+              </span>
             )}
           </div>
         </div>
@@ -194,25 +195,32 @@ export default function NewsSidebar() {
   void tick;
 
   const freshnessLabel = data?.generatedAt ? formatNewsTime(data.generatedAt) : "";
+  const items = data?.items ?? [];
 
-  const alertCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "alert").length : 0;
-  const watchCount = data ? [...data.th, ...data.en, ...data.zh].filter((i) => i.severity === "watch").length : 0;
+  const alertCount = items.filter((i) => i.severity === "alert").length;
+  const watchCount = items.filter((i) => i.severity === "watch").length;
+  // Languages actually present in this payload, in canonical order. Chips for feeds
+  // that returned nothing would just be dead buttons.
+  const presentLangs = NEWS_LANGS.filter((l) => items.some((i) => i.lang === l));
 
   // Sort by recency first (newest on top), alerts bumped to very top
-  const sortItems = (items: NewsItem[]) =>
-    [...items].sort((a, b) => {
+  const sortItems = (list: NewsItem[]) =>
+    [...list].sort((a, b) => {
       // Alerts always float to top
       if (a.severity === "alert" && b.severity !== "alert") return -1;
       if (b.severity === "alert" && a.severity !== "alert") return 1;
-      // Then by publication date (newest first)
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      // Then by publication date (newest first). Undated items sort last rather
+      // than to 1970 — Date.parse(null) is NaN and NaN comparisons poison a sort.
+      const ta = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+      const tb = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
     });
 
   // At 4K: show dual columns (Thai left, International right)
   // At desktop: show combined filtered list
   if (is4K && data) {
-    const thItems = sortItems(data.th);
-    const intlItems = sortItems([...data.en, ...data.zh]);
+    const thItems = sortItems(items.filter((i) => i.lang === "th"));
+    const intlItems = sortItems(items.filter((i) => i.lang !== "th"));
 
     return (
       <aside className="flex h-full w-full flex-col border-r border-[var(--line)] bg-[var(--bg-surface)] text-[var(--ink)] select-none">
@@ -271,7 +279,9 @@ export default function NewsSidebar() {
           {/* International column */}
           <div className="flex-1">
             <div className="px-3 py-2 border-b border-[var(--line)] bg-[rgba(15,111,136,0.03)]">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--dim)]">🇬🇧 International</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--dim)]">
+                🌐 International — {presentLangs.filter((l) => l !== "th").length} languages
+              </span>
             </div>
             <div className="divide-y divide-[var(--line)]">
               {intlItems.map((item, idx) => (
@@ -284,7 +294,8 @@ export default function NewsSidebar() {
         {/* Footer */}
         <div className="shrink-0 border-t border-[var(--line)] px-4 py-2">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--dim)]">
-            {data.th.length} TH / {data.en.length} EN / {data.zh.length} ZH signals
+            {items.length} signals / {presentLangs.length} languages
+            {data.awaitingTranslation > 0 && ` / ${data.awaitingTranslation} awaiting translation`}
           </div>
         </div>
       </aside>
@@ -292,14 +303,9 @@ export default function NewsSidebar() {
   }
 
   // ─── Standard desktop layout ───────────────────────────────────
-  const allItems: NewsItem[] = data
-    ? [
-        ...(langFilter === "all" || langFilter === "th" ? data.th : []),
-        ...(langFilter === "all" || langFilter === "en" ? data.en : []),
-        ...(langFilter === "all" || langFilter === "zh" ? data.zh : []),
-      ]
-    : [];
-  const sorted = sortItems(allItems);
+  const sorted = sortItems(
+    langFilter === "all" ? items : items.filter((i) => i.lang === langFilter),
+  );
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-[var(--line)] bg-[var(--bg-surface)] text-[var(--ink)] select-none">
@@ -342,34 +348,37 @@ export default function NewsSidebar() {
           </div>
         )}
 
-        {/* Language filter */}
-        <div className="mt-2 flex gap-1">
-          {(["all", "th", "en", "zh"] as LangFilter[]).map((lang) => (
-            <button
-              key={lang}
-              type="button"
-              onClick={() => setLangFilter(lang)}
-              className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
-                langFilter === lang
-                  ? "border-[var(--ink)] bg-[rgba(17,17,17,0.05)] text-[var(--ink)]"
-                  : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
-              }`}
-            >
-              {lang === "all"
-                ? "ALL"
-                : `${LANG_FLAGS[lang].flag} ${LANG_FLAGS[lang].label}`}
-            </button>
-          ))}
+        {/* Language filter — wraps, because 11 origin markets do not fit one row. */}
+        <div className="mt-2 flex flex-wrap gap-1">
+          {(["all", ...presentLangs] as LangFilter[]).map((lang) => {
+            const active = langFilter === lang;
+            const n = lang === "all" ? items.length : (data?.counts?.[lang] ?? 0);
+            return (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setLangFilter(lang)}
+                aria-pressed={active}
+                title={lang === "all" ? "All languages" : LANG_META[lang].name}
+                className={`flex min-h-[28px] items-center gap-1 border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors duration-150 ease-out ${
+                  active
+                    ? "border-[var(--ink)] bg-[rgba(17,17,17,0.05)] text-[var(--ink)]"
+                    : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {lang === "all" ? "ALL" : `${LANG_META[lang].flag} ${LANG_META[lang].label}`}
+                <span className="font-mono opacity-60">{n}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* News items */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {!data && (
-          <div className="flex h-full items-center justify-center">
-            <span className="text-[10px] text-[var(--muted)]">
-              Loading multilingual signals...
-            </span>
+          <div className="px-3 py-3">
+            <SkeletonRow count={7} gap="14px" />
           </div>
         )}
 
@@ -392,7 +401,8 @@ export default function NewsSidebar() {
       {data && (
         <div className="shrink-0 border-t border-[var(--line)] px-3 py-1.5">
           <div className="text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
-            {data.th.length} TH / {data.en.length} EN / {data.zh.length} ZH signals
+            {items.length} signals / {presentLangs.length} languages
+            {data.awaitingTranslation > 0 && ` / ${data.awaitingTranslation} awaiting translation`}
           </div>
         </div>
       )}
