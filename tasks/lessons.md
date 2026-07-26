@@ -78,3 +78,41 @@ Per §13: the same mistake never happens twice.
 - **Correct behaviour:** ...
 - **How to recognise this pattern:** ...
 -->
+
+---
+
+## 2026-07-26 · Google News RSS returns 503 to every Cloudflare Worker egress IP
+
+- **What went wrong:** Built the multilingual news ingest on Google News RSS. It worked perfectly from the laptop (100 items per language) and returned 503 for all 11 feeds from the deployed Worker.
+- **Correct behaviour:** Use Bing News RSS (`https://www.bing.com/news/search?q=…&format=RSS&mkt=xx-XX`) for anything fetched from Cloudflare. Verify every upstream from the *runtime that will actually call it*, not from the laptop.
+- **How to recognise:** A feed that works in a local script and 503s in a Worker. Also note Bing has no `zh-CN` market (returns zero items — use `zh-HK`) and no working `kk-KZ` (narrow the `ru-RU` market with "Казахстан" instead).
+
+## 2026-07-26 · Worker-to-Worker fetch on the same zone fails with error 1042
+
+- **What went wrong:** The app worker's `/api/news/multilingual` fetched `https://phuket-ingest.drnon.workers.dev/news`. Cloudflare rejects same-zone Worker→Worker requests; the route silently fell through to its empty payload and the live API served `{ok:false, items:0}` while the ingest worker's own endpoint returned 111 items.
+- **Correct behaviour:** Share state through a KV namespace bound to both workers, not an HTTP call between them. Bind the namespace in both `wrangler.jsonc` files.
+- **How to recognise:** Error 1042, or an inter-worker fetch that times out / returns nothing while the target URL works fine from curl.
+
+## 2026-07-26 · getCloudflareContext() must use the async form in a route handler
+
+- **What went wrong:** `getCloudflareContext().env.PHUKET_KV` threw inside an API route, so the KV read always returned null and fell back to the (broken) URL path.
+- **Correct behaviour:** `await getCloudflareContext({ async: true })`. Keep a `source` field in the response naming which path served it — the silent fallback is what made this take three deploys to spot.
+- **How to recognise:** KV has the key (`wrangler kv key get` proves it) but the route behaves as if the binding is missing.
+
+## 2026-07-26 · Duplicate local type definitions hide breaking API changes from tsc
+
+- **What went wrong:** Changed the news feed from `{th, en, zh}` buckets to a flat `items[]`. `tsc -b` passed clean. The page then crashed at runtime with "news.th is not iterable" because `GovernorDailyBrief.tsx` declared its own private copy of `MultilingualNewsResponse` instead of importing the shared one.
+- **Correct behaviour:** One type per contract, in `src/types/`. When changing a response shape, `grep` for the type *name* across the repo, not just for its import.
+- **How to recognise:** A response-shape change that produces zero compiler errors. That is the warning sign, not the all-clear.
+
+## 2026-07-26 · This dashboard needs ~60s before the browser check means anything
+
+- **What went wrong:** Checked the live site repeatedly and read "0 articles", then went hunting for CORS, API-base and hydration bugs that did not exist. The page simply had not finished mounting — deck.gl plus ~40 polled endpoints.
+- **Correct behaviour:** Before concluding a live page is broken, confirm it has finished coming up: `document.querySelectorAll('*').length` in the thousands, and fetches actually issued. Re-read before diagnosing.
+- **How to recognise:** Element count in the low hundreds and zero outbound API calls means "still booting", not "broken".
+
+## 2026-07-26 · Deploying the Pages site is only half a deploy
+
+- **What went wrong:** Pushed, CI deployed GitHub Pages, verified the new bundle was live — but the static site calls the Cloudflare **Worker** for every `/api/*`, and that worker still ran the old code serving the old response shape.
+- **Correct behaviour:** Any change touching an API route needs BOTH: `git push` (→ Pages, the shell) and `npx @opennextjs/cloudflare build && npx wrangler deploy` (→ Worker, the data plane). Neither alone is a deploy.
+- **How to recognise:** The live HTML/JS is new but `curl` on the workers.dev API returns the old shape.

@@ -51,6 +51,8 @@ export interface MultilingualNewsResponse {
   failedFeeds: { url: string; lang: string; error: string }[];
   /** Seconds since the ingest worker last published. Null when unknown. */
   ageSeconds: number | null;
+  /** Which read path served this payload: "kv", "url", or a diagnostic string. */
+  source?: string;
   ok: boolean;
 }
 

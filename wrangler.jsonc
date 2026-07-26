@@ -8,6 +8,11 @@
   },
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Written by workers/ingest on a cron; read here. A same-zone Worker-to-Worker
+  // fetch is rejected with error 1042, so the shared namespace is the way across.
+  "kv_namespaces": [
+    { "binding": "PHUKET_KV", "id": "d0a7529534a84514a1575896fb3b0514" }
+  ],
   "workers_dev": true,
   "preview_urls": true,
   "routes": [
