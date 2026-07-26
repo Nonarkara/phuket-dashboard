@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import maplibregl, { Map as MaplibreMap, Marker, LngLatBoundsLike } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { apiUrl } from "../../lib/asset-path";
 
 interface IsoBand {
   minutes: number;
@@ -152,7 +153,7 @@ export default function ReachabilityClient() {
     setDest(null);
     if (destMarker.current) { destMarker.current.remove(); destMarker.current = null; }
     try {
-      const r = await fetch("/api/unl/isochrone", {
+      const r = await fetch(apiUrl("/api/unl/isochrone"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat, lng, minutes: [15, 30, 60], mode }),
@@ -196,7 +197,7 @@ export default function ReachabilityClient() {
   const fetchRoute = useCallback(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
     setLoading("route");
     try {
-      const r = await fetch("/api/unl/route", {
+      const r = await fetch(apiUrl("/api/unl/route"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ waypoints: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }] }),

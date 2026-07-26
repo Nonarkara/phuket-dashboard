@@ -1076,7 +1076,7 @@ export default function BorderMap({
 
   useEffect(() => {
     if (enabledOverlays.floodStations && floodStations.length === 0) {
-      fetch("/api/modules/thai-flood-stations")
+      fetch(apiUrl("/api/modules/thai-flood-stations"))
         .then(r => r.json())
         .then((d: { data?: FloodStationPoint[] }) => {
           if (Array.isArray(d?.data)) setFloodStations(d.data);
@@ -1087,7 +1087,7 @@ export default function BorderMap({
 
   useEffect(() => {
     if (enabledOverlays.marineConditions && marineStations.length === 0) {
-      fetch("/api/modules/open-meteo-marine")
+      fetch(apiUrl("/api/modules/open-meteo-marine"))
         .then(r => r.json())
         .then((d: { data?: MarinePoint[] }) => {
           if (Array.isArray(d?.data)) setMarineStations(d.data);
@@ -1099,7 +1099,7 @@ export default function BorderMap({
   // GISTDA tambon boundaries — lazy fetch on first toggle
   useEffect(() => {
     if (enabledOverlays.tambonBoundaries && !tambonGeoJson) {
-      fetch("/api/gistda/tambons")
+      fetch(apiUrl("/api/gistda/tambons"))
         .then((r) => r.json())
         .then((d: object) => setTambonGeoJson(d))
         .catch(() => undefined);
@@ -1656,6 +1656,7 @@ export default function BorderMap({
                   key={activeBasemap}
                   mapStyle={mapStyle}
                   attributionControl={false}
+                  renderWorldCopies={false}
                   onLoad={handleMapLoad as any}
                 />
               ) : (
