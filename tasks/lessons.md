@@ -134,3 +134,21 @@ Per §13: the same mistake never happens twice.
 - **What went wrong:** GISTDA's tambon layer labels 830105 (Wichit) as "RATSADA" — the same English name it gives 830104. Its LAO layer still calls Phuket City a เทศบาลเมือง (upgraded to เทศบาลนคร in 2004) and lists Ratsada/Wichit/Chalong/Rawai as อบต. after their promotion to เทศบาลตำบล.
 - **Correct behaviour:** Take *geometry* and *codes* from GISTDA, *names* from the DOPA subdistrict register, and *current unit type* from an up-to-date list. `scripts/build-boundaries.mjs` carries a `TAMBON_NAMES_EN` override table and a commented registry saying which field came from where.
 - **How to recognise:** Two features sharing an English name, or a municipality type that contradicts the province's own published list.
+
+---
+
+## 2026-07-28 · A tile provider can lie about its zoom range — probe it, then clamp maxZoom
+
+- **What went wrong:** RainViewer radar was declared `maxZoom: 12`. Their tiles are native to z7 only; from z8 the server returns a grey "Zoom Level Not Supported" IMAGE (HTTP 200), so deck dutifully painted error tiles across the whole map in production.
+- **Correct behaviour:** Before wiring any tile source, fetch tiles at several zooms and compare bytes/hashes — the identical 1370-byte tile at every over-zoom (Phuket z8-10 AND Miami z10-12, md5 2cc6649e…) was the proof. Set the layer's maxZoom to the provider's REAL ceiling; deck then overzooms real pixels.
+- **How to recognise:** Error text rendered as map tiles = the server returns 200 + an image for bad requests, and your declared maxZoom exceeds reality.
+
+## 2026-07-28 · Worker-thread tile fetches are invisible to main-thread performance timing
+
+- **What went wrong:** Verified the new Longdo MVT traffic layer by counting `performance.getEntriesByType("resource")` for pbf requests — always 0, looked broken. loaders.gl fetches MVT tiles inside a web worker; those requests never appear in the main thread's resource timing.
+- **Correct behaviour:** Verify vector-tile layers visually (colored segments on the map) or via browser-level network capture, not via main-thread perf entries.
+
+## 2026-07-28 · Deck.gl canvas stuck at 300x150 = the pane was hidden at init
+
+- **What went wrong:** In the embedded Browser pane, a page booted while hidden leaves the deck canvas at the HTML default 300x150 (MapLibre's canvas resizes fine) and deck's loop dead — no tiles requested, no layers drawn. Looks exactly like broken layer code.
+- **Correct behaviour:** Check `document.querySelector('#phuket-deck canvas').width` first. If 300x150, reload while keeping the pane visible (screenshot immediately after navigate, then wait/screenshot again). Sibling of the earlier 0x0-viewport lesson.
