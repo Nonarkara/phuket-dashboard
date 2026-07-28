@@ -1,8 +1,10 @@
 "use client";
 import { apiUrl } from "../../lib/asset-path";
 import MapLegend from "./MapLegend";
+import MapScaleBar from "./MapScaleBar";
 import ScopeSelector from "./ScopeSelector";
 import { useScope } from "../../hooks/useScope";
+import { createTrafficLayers } from "../../services/traffic-layers";
 import {
   createDistrictLayer,
   createLocalGovLayer,
@@ -324,6 +326,7 @@ type OverlayState = {
   chlAndaman: boolean;
   tambonBoundaries: boolean;
   adminBoundaries: boolean;
+  traffic: boolean;
   aqiColumns: boolean;
   urbanFabric: boolean;
   riskTwins: boolean;
@@ -664,8 +667,17 @@ export default function BorderMap({
   );
   const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 
-  // ─── 3D view mode ───────────────────────────────────────────────────────────
-  const [is3D, setIs3D] = useState(false);
+  // ─── View mode ──────────────────────────────────────────────────────────────
+  // Three honest modes. The old toggle labelled the 45°-pitched default "2D",
+  // which it never was — there was no way to get a true top-down chart at all.
+  //   flat     → pitch 0, top-down. Distances read in kilometres.
+  //   nautical → the perspectival operator view (45°). Distances in nautical miles.
+  //   3d       → 65° with extruded buildings (Slope Story / hotel canyon).
+  type ViewMode = "flat" | "nautical" | "3d";
+  const [viewMode, setViewMode] = useState<ViewMode>("nautical");
+  // Everything downstream (building layer, AQI columns, refs) keys off is3D as
+  // before — derived, so none of that plumbing changes.
+  const is3D = viewMode === "3d";
   const [floodLevelM, setFloodLevelM] = useState(0);
   const floodLevelRef = useRef(0);
   // Stable ref so the building-layer helper can always read the current value
@@ -680,11 +692,12 @@ export default function BorderMap({
     floodLevelRef.current = floodLevelM;
     setViewState((prev) => ({
       ...prev,
-      pitch: is3D ? 65 : 45,
-      bearing: is3D ? -20 : -5,
+      pitch: viewMode === "3d" ? 65 : viewMode === "nautical" ? 45 : 0,
+      bearing: viewMode === "3d" ? -20 : viewMode === "nautical" ? -5 : 0,
       transitionDuration: 700,
     }));
-  }, [is3D]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   // ─── Basemap: exactly one active at a time (radio) ───
   const [activeBasemap, setActiveBasemap] = useState<BasemapId>("street");
@@ -758,6 +771,7 @@ export default function BorderMap({
     chlAndaman: false,
     tambonBoundaries: false,
     adminBoundaries: true,
+    traffic: false,
     aqiColumns: false,
     urbanFabric: false,
     riskTwins: false,
@@ -1026,7 +1040,7 @@ export default function BorderMap({
         const spot = PHUKET_BLACKSPOTS.find((b) => b.id === id) ?? null;
         if (!spot) return;
         setSelectedBlackspot(spot);
-        setIs3D(true);
+        setViewMode("3d");
         setViewState({
           longitude: spot.lng,
           latitude: spot.lat,
@@ -1540,6 +1554,7 @@ export default function BorderMap({
     ...(enabledOverlays.urbanFabric && urbanFabricGeoJson ? [createUrbanFabricLayer(urbanFabricGeoJson)] : []),
     ...(enabledOverlays.riskTwins && riskTwinsGeoJson ? [createRiskTwinsLayer(riskTwinsGeoJson)] : []),
     ...(enabledOverlays.tambonBoundaries && tambonGeoJson ? [createTambonLayer(tambonGeoJson)] : []),
+    ...createTrafficLayers(enabledOverlays.traffic),
     // ── Administrative boundaries + active scope ──
     createDistrictLayer(districts, enabledOverlays.adminBoundaries),
     createLocalGovLayer(localGovs, enabledOverlays.adminBoundaries, setScope),
@@ -1709,6 +1724,12 @@ export default function BorderMap({
               units={units}
               onSelect={setScope}
               loaded={scopeLoaded}
+            />
+            <MapScaleBar
+              zoom={viewState.zoom}
+              latitude={viewState.latitude}
+              pitch={viewState.pitch ?? 0}
+              unit={viewMode === "nautical" ? "nm" : "km"}
             />
             <MapLegend />
             <CorridorRiskReveal
@@ -1946,38 +1967,45 @@ export default function BorderMap({
               </button>
             ))}
 
-            {/* ── 3D toggle — sits inline with basemap row ── */}
+            {/* ── View mode — sits inline with basemap row ── */}
             <div className="ml-auto flex items-center gap-1.5">
               <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">View</span>
-              <button
-                type="button"
-                aria-pressed={is3D}
-                data-control-classification="changes view"
-                onClick={() => {
-                  setIs3D((v) => !v);
-                  if (!is3D) {
-                    // Fly to Patong at zoom 14.5 — the hotel canyon / valley bowl
-                    // becomes dramatically visible with terrain at this zoom + pitch
-                    setViewState({
-                      longitude: 98.295,
-                      latitude: 7.896,
-                      zoom: 14.5,
-                      pitch: 70,
-                      bearing: -25,
-                      minZoom: PHUKET_MIN_ZOOM,
-                      maxZoom: PHUKET_MAX_ZOOM,
-                    });
-                  }
-                }}
-                title={is3D ? "Switch to 2D flat view" : "Switch to 3D — buildings extrude (auto-zooms to a useful level)"}
-                className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
-                  is3D
-                    ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-[0_0_8px_rgba(15,111,136,0.5)]"
-                    : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--cool)] hover:text-[var(--cool)]"
-                }`}
-              >
-                {is3D ? "3D" : "2D"}
-              </button>
+              {([
+                { id: "flat" as const, label: "2D", title: "Flat chart, top-down — distances in kilometres" },
+                { id: "nautical" as const, label: "NM", title: "Nautical view, perspectival — distances in nautical miles" },
+                { id: "3d" as const, label: "3D", title: "3D — buildings extrude (auto-zooms to a useful level)" },
+              ]).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  aria-pressed={viewMode === m.id}
+                  data-control-classification="changes view"
+                  onClick={() => {
+                    setViewMode(m.id);
+                    if (m.id === "3d" && viewMode !== "3d") {
+                      // Fly to Patong at zoom 14.5 — the hotel canyon / valley bowl
+                      // becomes dramatically visible with terrain at this zoom + pitch
+                      setViewState({
+                        longitude: 98.295,
+                        latitude: 7.896,
+                        zoom: 14.5,
+                        pitch: 70,
+                        bearing: -25,
+                        minZoom: PHUKET_MIN_ZOOM,
+                        maxZoom: PHUKET_MAX_ZOOM,
+                      });
+                    }
+                  }}
+                  title={m.title}
+                  className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
+                    viewMode === m.id
+                      ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-[0_0_8px_rgba(15,111,136,0.5)]"
+                      : "border-[var(--line)] text-[var(--ink)] hover:border-[var(--cool)] hover:text-[var(--cool)]"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -2058,6 +2086,7 @@ export default function BorderMap({
               { id: "chlAndaman" as const, label: "Chl-a" },
               { id: "tambonBoundaries" as const, label: "Districts" },
               { id: "adminBoundaries" as const, label: "Admin lines" },
+              { id: "traffic" as const, label: "Traffic" },
               { id: "urbanFabric" as const, label: "Urban fabric" },
               { id: "riskTwins" as const, label: "Risk twins" },
               { id: "aqiColumns" as const, label: "PM2.5 ↑" },
@@ -2106,6 +2135,23 @@ export default function BorderMap({
             ))}
           </div>
 
+          {enabledOverlays.traffic && (
+            <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
+              <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Traffic</span>
+              {/* Colour buckets only — the tiles carry no speeds. Never label these km/h. */}
+              <span className="h-1.5 w-1.5 rounded-full bg-[#2ea043]" /><span className="text-[8px] text-[var(--dim)]">flow</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /><span className="text-[8px] text-[var(--dim)]">slow</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ef4444]" /><span className="text-[8px] text-[var(--dim)]">jam</span>
+              <a
+                href="https://traffic.longdo.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[var(--dim)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+              >
+                Longdo Traffic · ~3 min
+              </a>
+            </div>
+          )}
           {precipitationSource && (
             <div className="mt-2 hidden space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:block">
               {[precipitationSource]

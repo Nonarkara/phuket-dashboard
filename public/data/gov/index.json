@@ -1,0 +1,187 @@
+{
+  "generatedAt": "2026-07-28T04:58:58.210Z",
+  "source": "phuket.gdcatalog.go.th (data.go.th provincial node)",
+  "datasets": [
+    {
+      "key": "visitors",
+      "domain": "tourism",
+      "label": "Visitors, tourists & excursionists",
+      "titleTh": "ผู้มาเยี่ยมเยือน นักท่องเที่ยว และนักทัศนาจร",
+      "org": "สำนักงานท่องเที่ยวและกีฬาจังหวัดภูเก็ต",
+      "updated": "2026-03-30",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_34",
+      "rowCount": 99
+    },
+    {
+      "key": "avg-spend",
+      "domain": "tourism",
+      "label": "Average spend per visitor",
+      "titleTh": "ค่าใช้จ่ายเฉลี่ยต่อคนของผู้มาเยี่ยมเยือน นักท่องเที่ยวและนักทัศนาจร",
+      "org": "สำนักงานท่องเที่ยวและกีฬาจังหวัดภูเก็ต",
+      "updated": "2026-02-10",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_09",
+      "rowCount": 99
+    },
+    {
+      "key": "stay-length",
+      "domain": "tourism",
+      "label": "Average length of stay",
+      "titleTh": "ระยะเวลาพำนักเฉลี่ยของนักท่องเที่ยว",
+      "org": "สำนักงานท่องเที่ยวและกีฬาจังหวัดภูเก็ต",
+      "updated": "2026-01-23",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_12",
+      "rowCount": 30
+    },
+    {
+      "key": "occupancy",
+      "domain": "tourism",
+      "label": "Hotel occupancy rate",
+      "titleTh": "อัตราการเข้าพักของนักท่องเที่ยว",
+      "org": "สำนักงานท่องเที่ยวและกีฬาจังหวัดภูเก็ต",
+      "updated": "2026-03-02",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_68",
+      "rowCount": 5
+    },
+    {
+      "key": "hotels",
+      "domain": "tourism",
+      "label": "Registered hotels & lodgings",
+      "titleTh": "จำนวนที่พัก โรงแรม ที่จดทะเบียนในจังหวัด",
+      "org": "ที่ทำการปกครองจังหวัดภูเก็ต",
+      "updated": "2026-02-09",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_11",
+      "rowCount": 10
+    },
+    {
+      "key": "airport-pax",
+      "domain": "tourism",
+      "label": "Airport passengers in/out",
+      "titleTh": "จำนวนผู้โดยสาร ชาวไทยและชาวต่างชาติ เดินทาง เข้า-ออก สนามบิน ภาพรวม",
+      "org": "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน) สาขาท่าอากาศยานภูเก็ต",
+      "updated": "2026-07-02",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_02",
+      "rowCount": 72
+    },
+    {
+      "key": "water-localgov",
+      "domain": "water",
+      "label": "Water systems by local government",
+      "titleTh": "ปริมาณน้ำในสังกัดองค์กรปกครองส่วนท้องถิ่น",
+      "org": "สำนักงานส่งเสริมการปกครองท้องถิ่นจังหวัดภูเก็ต",
+      "updated": "2026-02-10",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_20_24",
+      "rowCount": 24
+    },
+    {
+      "key": "water-pwa",
+      "domain": "water",
+      "label": "PWA water volume",
+      "titleTh": "ปริมาณน้ำของการประปาส่วนภูมิภาค",
+      "org": "การประปาส่วนภูมิภาค สาขาภูเก็ต",
+      "updated": "2026-03-31",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_25",
+      "rowCount": 21
+    },
+    {
+      "key": "waste-generated",
+      "domain": "water",
+      "label": "Solid waste generated",
+      "titleTh": "ขยะที่เกิดขึ้น",
+      "org": "เทศบาลนครภูเก็ต",
+      "updated": "2026-02-11",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/20_06",
+      "rowCount": 132
+    },
+    {
+      "key": "waste-households",
+      "domain": "water",
+      "label": "Households with waste collection",
+      "titleTh": "ครัวเรือนที่ได้รับการเก็บขนขยะมูลฝอย",
+      "org": "สำนักงานส่งเสริมการปกครองท้องถิ่นจังหวัดภูเก็ต",
+      "updated": "2026-02-10",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/20_04",
+      "rowCount": 108
+    },
+    {
+      "key": "waste-disposed",
+      "domain": "water",
+      "label": "Waste correctly disposed",
+      "titleTh": "ขยะที่กำจัดถูกต้อง",
+      "org": "เทศบาลนครภูเก็ต",
+      "updated": "2026-01-30",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/20_14",
+      "rowCount": 132
+    },
+    {
+      "key": "road-deaths",
+      "domain": "safety",
+      "label": "Road accident deaths",
+      "titleTh": "ผู้เสียชีวิตจากอุบัติเหตุทางถนน",
+      "org": "ตำรวจภูธรจังหวัดภูเก็ต",
+      "updated": "2026-01-28",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_48",
+      "rowCount": 52
+    },
+    {
+      "key": "road-injuries",
+      "domain": "safety",
+      "label": "Road accident injuries",
+      "titleTh": "ผู้ได้รับบาดเจ็บจากอุบัติเหตุทางถนน",
+      "org": "ตำรวจภูธรจังหวัดภูเก็ต",
+      "updated": "2026-01-28",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_47",
+      "rowCount": 52
+    },
+    {
+      "key": "marine-accidents",
+      "domain": "safety",
+      "label": "Marine accidents",
+      "titleTh": "จำนวนอุบัติเหตุทางทะเล",
+      "org": "สำนักงานป้องกันและบรรเทาสาธารณภัยจังหวัดภูเก็ต",
+      "updated": "2026-06-10",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_50",
+      "rowCount": 28
+    },
+    {
+      "key": "tourist-hotline",
+      "domain": "safety",
+      "label": "Tourist hotline 1155 reports",
+      "titleTh": "รับแจ้งเหตุการณ์ที่เกี่ยวข้องกับนักท่องเที่ยวผ่าน สายด่วน 1155",
+      "org": "สถานีตำรวจท่องเที่ยว 1 (ภูเก็ต)",
+      "updated": "2026-02-27",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_10_67",
+      "rowCount": 4
+    },
+    {
+      "key": "hospital-load",
+      "domain": "health",
+      "label": "Public hospital OPD/IPD utilisation",
+      "titleTh": "จำนวนการใช้บริการผู้ป่วยนอกและผู้ป่วยใน ในโรงพยาบาลรัฐ",
+      "org": "สำนักงานสาธารณสุขจังหวัดภูเก็ต",
+      "updated": "2026-03-30",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_30b_39",
+      "rowCount": 8
+    },
+    {
+      "key": "over-60",
+      "domain": "health",
+      "label": "Population aged 60+",
+      "titleTh": "ประชากรสูงอายุ 60 ปี ขึ้นไป",
+      "org": "ที่ทำการปกครองจังหวัดภูเก็ต",
+      "updated": "2026-01-30",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/dataset_30a_01",
+      "rowCount": 9
+    },
+    {
+      "key": "population",
+      "domain": "health",
+      "label": "Registered population",
+      "titleTh": "ประชากรจากการทะเบียน",
+      "org": "กรมการปกครอง",
+      "updated": "2026-04-17",
+      "landing": "https://phuket.gdcatalog.go.th/dataset/phuket001",
+      "rowCount": 12
+    }
+  ],
+  "failed": []
+}

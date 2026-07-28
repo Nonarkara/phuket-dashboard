@@ -134,7 +134,12 @@ export async function fetchRainViewerLatest(
         "Real-time global rainfall radar from RainViewer (10-minute cadence).",
       capturedAt: new Date(latest.time * 1000).toISOString(),
       tileTemplate,
-      maxZoom: 12,
+      // RainViewer's radar composite is native up to z7 ONLY. From z8 the server
+      // returns a grey "Zoom Level Not Supported" image tile (verified 2026-07-28:
+      // z8/z9/z10 over Phuket AND z10/z12 over Miami all return the identical
+      // 1370-byte error tile, md5 2cc6649e...). With maxZoom 7, deck.gl overzooms
+      // real z7 pixels instead of painting the error tiles across the map.
+      maxZoom: 7,
       attribution: "RainViewer",
       cadence: "minute",
     };

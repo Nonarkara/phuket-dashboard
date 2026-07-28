@@ -12,6 +12,7 @@ import {
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import { SkeletonOpsPanel } from "../Skeleton";
 import GovernorDailyBrief from "./GovernorDailyBrief";
+import CityFacts from "./CityFacts";
 import type {
   DemandSupplySnapshot,
   ExecutiveStatus,
@@ -388,6 +389,8 @@ export default function OperationsPanel({ data, brief = null }: OperationsPanelP
             ))}
           </div>
         </div>
+
+        <CityFacts />
       </div>
     </aside>
   );
