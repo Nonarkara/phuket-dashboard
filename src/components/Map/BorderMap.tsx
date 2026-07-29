@@ -558,8 +558,12 @@ function getTooltipText(object: unknown): string | null {
   }
 
   if (isFloodStation(object)) {
-    const pct = Math.round((object.waterLevel / object.criticalLevel) * 100);
-    return `${object.name} (${object.district}) • ${object.waterLevel}m / ${object.criticalLevel}m crit • ${pct}% • ${object.status.toUpperCase()} • ${object.advice}`;
+    const wlText = object.waterLevel > 0 ? `WL MSL ${object.waterLevel}m` : `24h Rain ${object.rainfall24h}mm`;
+    const dis = (object as unknown as { discharge?: number }).discharge;
+    const disText = dis ? ` • Discharge ${dis} m³/s` : "";
+    const diff = (object as unknown as { diffWlBank?: number }).diffWlBank;
+    const diffText = diff ? ` • Bank clearance ${diff}m` : "";
+    return `🌊 ThaiWater Telemetry: ${object.name} (${object.district}) • ${wlText}${disText}${diffText} • Capacity ${object.capacity}% • ${object.status.toUpperCase()} • ${object.advice}`;
   }
 
   if (isMarinePoint(object)) {
@@ -595,7 +599,9 @@ function getTooltipText(object: unknown): string | null {
   }
 
   if (isMaritimeVessel(object)) {
-    return `${object.name} • ${object.type} • ${object.status}`;
+    const dest = object.destination ? ` → ${object.destination}` : "";
+    const flag = object.flag ? ` [Flag: ${object.flag}]` : "";
+    return `🚢 Maritime Contact: ${object.name}${flag} (${object.type.toUpperCase()})${dest} • Speed: ${object.speedKnots} kn • ${object.strategicNote}`;
   }
 
   if (isTourismHotspot(object)) {
@@ -612,12 +618,9 @@ function getTooltipText(object: unknown): string | null {
   }
 
   if (isFlightData(object)) {
-    const parts: string[] = [object.callsign || object.icao24];
-    if (object.airline_iata) parts.push(object.airline_iata);
-    if (object.dep_iata && object.arr_iata) parts.push(`${object.dep_iata}→${object.arr_iata}`);
-    if (object.aircraft_icao) parts.push(object.aircraft_icao);
-    parts.push(`${Math.round(object.altitude)}m · ${Math.round(object.velocity)}km/h`);
-    return parts.join(" · ");
+    const route = object.dep_iata && object.arr_iata ? `${object.dep_iata} ✈ ${object.arr_iata}` : "In Flight";
+    const ac = object.aircraft_icao ? ` (${object.aircraft_icao})` : "";
+    return `✈ Flight Watch: ${object.callsign || object.icao24}${ac} • Route: ${route} • Alt: ${Math.round(object.altitude)}m • Speed: ${Math.round(object.velocity)}km/h • Heading: ${object.heading}°`;
   }
 
   if (hasLabel(object)) {
@@ -760,18 +763,18 @@ export default function BorderMap({
   const [animationNow, setAnimationNow] = useState(() => Date.now());
   const [enabledOverlays, setEnabledOverlays] = useState<OverlayState>(() => ({
     precipitationRadar: false,
-    waterways: false,
+    waterways: true,
     aqiFlag: false,
     publicInfrastructure: false,
     roadNetwork: false,
     canalsDrainage: false,
-    floodStations: false,
+    floodStations: true,
     marineConditions: false,
     sstAndaman: false,
     chlAndaman: false,
     tambonBoundaries: false,
     adminBoundaries: true,
-    traffic: false,
+    traffic: true,
     aqiColumns: false,
     urbanFabric: false,
     riskTwins: false,
@@ -1066,6 +1069,7 @@ export default function BorderMap({
   const [poiData, setPoiData] = useState<PoiCollection | null>(null);
   const [roadsData, setRoadsData] = useState<RoadCollection | null>(null);
   const [canalsData, setCanalsData] = useState<CanalCollection | null>(null);
+  const [realWaterwaysGeoJson, setRealWaterwaysGeoJson] = useState<object | null>(null);
   const [floodStations, setFloodStations] = useState<FloodStationPoint[]>([]);
   const [marineStations, setMarineStations] = useState<MarinePoint[]>([]);
   const [tambonGeoJson, setTambonGeoJson] = useState<object | null>(null);
@@ -1126,15 +1130,25 @@ export default function BorderMap({
   }, [enabledOverlays.canalsDrainage, canalsData]);
 
   useEffect(() => {
-    if (enabledOverlays.floodStations && floodStations.length === 0) {
-      fetch(apiUrl("/api/modules/thai-flood-stations"))
+    if ((enabledOverlays.waterways || enabledOverlays.canalsDrainage) && !realWaterwaysGeoJson) {
+      fetch("/data/phuket-waterways.geojson")
         .then(r => r.json())
-        .then((d: { data?: FloodStationPoint[] }) => {
-          if (Array.isArray(d?.data)) setFloodStations(d.data);
+        .then((d: object) => setRealWaterwaysGeoJson(d))
+        .catch(() => undefined);
+    }
+  }, [enabledOverlays.waterways, enabledOverlays.canalsDrainage, realWaterwaysGeoJson]);
+
+  useEffect(() => {
+    if ((enabledOverlays.floodStations || enabledOverlays.waterways) && floodStations.length === 0) {
+      fetch(apiUrl("/api/waterways"))
+        .then(r => r.json())
+        .then((d: { stations?: FloodStationPoint[]; data?: FloodStationPoint[] }) => {
+          const list = d.stations ?? d.data;
+          if (Array.isArray(list)) setFloodStations(list);
         })
         .catch(() => undefined);
     }
-  }, [enabledOverlays.floodStations, floodStations.length]);
+  }, [enabledOverlays.floodStations, enabledOverlays.waterways, floodStations.length]);
 
   useEffect(() => {
     if (enabledOverlays.marineConditions && marineStations.length === 0) {
@@ -1561,7 +1575,7 @@ export default function BorderMap({
     createScopeHighlightLayer(activeGeometry),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
-    ...(enabledOverlays.waterways ? createWaterwaysLayer(PHUKET_WATERWAYS) : []),
+    ...(enabledOverlays.waterways ? createWaterwaysLayer(realWaterwaysGeoJson ?? PHUKET_WATERWAYS) : []),
     ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
     ...(enabledOverlays.roadNetwork && roadsData ? createRoadNetworkLayer(roadsData) : []),
     ...(enabledOverlays.canalsDrainage && canalsData ? createCanalsLayer(canalsData) : []),

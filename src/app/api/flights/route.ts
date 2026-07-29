@@ -27,11 +27,13 @@ interface AirlabsFlight {
 }
 
 const FALLBACK: FlightData[] = [
-  { icao24: "883100", callsign: "THA601", longitude: 100.747, latitude: 13.690, altitude: 10668, velocity: 882, heading: 340, origin_country: "TH", on_ground: false, airline_iata: "TG", dep_iata: "BKK", arr_iata: "PEK" },
-  { icao24: "883101", callsign: "THA215", longitude: 98.930, latitude: 18.770, altitude: 8525, velocity: 756, heading: 180, origin_country: "TH", on_ground: false, airline_iata: "TG", dep_iata: "CNX", arr_iata: "HKT" },
-  { icao24: "706402", callsign: "MAS372", longitude: 101.680, latitude: 3.130, altitude: 11277, velocity: 900, heading: 45, origin_country: "MY", on_ground: false, airline_iata: "MH", dep_iata: "KUL", arr_iata: "NRT" },
-  { icao24: "706403", callsign: "AXM610", longitude: 100.510, latitude: 6.920, altitude: 9144, velocity: 828, heading: 0, origin_country: "MY", on_ground: false, airline_iata: "D7", dep_iata: "KUL", arr_iata: "HKT" },
-  { icao24: "4BB0EF", callsign: "THY61",  longitude: 98.600, latitude: 8.600, altitude: 10992, velocity: 920, heading: 333, origin_country: "TR", on_ground: false, airline_iata: "TK", dep_iata: "KUL", arr_iata: "IST", aircraft_icao: "A359" },
+  { icao24: "896101", callsign: "EK378", longitude: 98.240, latitude: 8.040, altitude: 2400, velocity: 240, heading: 75, origin_country: "UAE", on_ground: false, airline_iata: "EK", dep_iata: "DXB", arr_iata: "HKT", aircraft_icao: "B773", flight_status: "en-route" },
+  { icao24: "154202", callsign: "SU270", longitude: 98.380, latitude: 8.240, altitude: 4800, velocity: 260, heading: 210, origin_country: "RU", on_ground: false, airline_iata: "SU", dep_iata: "SVO", arr_iata: "HKT", aircraft_icao: "A333", flight_status: "en-route" },
+  { icao24: "883100", callsign: "TG201", longitude: 98.330, latitude: 8.160, altitude: 1200, velocity: 180, heading: 255, origin_country: "TH", on_ground: false, airline_iata: "TG", dep_iata: "BKK", arr_iata: "HKT", aircraft_icao: "A359", flight_status: "en-route" },
+  { icao24: "765304", callsign: "SQ978", longitude: 98.290, latitude: 7.860, altitude: 3600, velocity: 230, heading: 165, origin_country: "SG", on_ground: false, airline_iata: "SQ", dep_iata: "HKT", arr_iata: "SIN", aircraft_icao: "A359", flight_status: "en-route" },
+  { icao24: "883205", callsign: "FD3011", longitude: 98.305, latitude: 8.115, altitude: 450, velocity: 140, heading: 90, origin_country: "TH", on_ground: false, airline_iata: "FD", dep_iata: "DMK", arr_iata: "HKT", aircraft_icao: "A320", flight_status: "en-route" },
+  { icao24: "800406", callsign: "6E1045", longitude: 98.080, latitude: 7.950, altitude: 7200, velocity: 270, heading: 95, origin_country: "IN", on_ground: false, airline_iata: "6E", dep_iata: "BOM", arr_iata: "HKT", aircraft_icao: "A21N", flight_status: "en-route" },
+  { icao24: "3C6707", callsign: "LH772", longitude: 98.150, latitude: 8.350, altitude: 9100, velocity: 290, heading: 140, origin_country: "DE", on_ground: false, airline_iata: "LH", dep_iata: "FRA", arr_iata: "HKT", aircraft_icao: "A359", flight_status: "en-route" },
 ];
 
 async function loadFlights(): Promise<FlightData[]> {

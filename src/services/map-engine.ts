@@ -253,11 +253,15 @@ export const createIncidentLayer = (data: IncidentFeature[]) =>
     data,
     getPosition: (d: IncidentFeature) => d.geometry.coordinates,
     getFillColor: (d: IncidentFeature) =>
-      d.properties.fatalities > 0 ? [239, 68, 68, 200] : [245, 158, 11, 200],
-    getRadius: (d: IncidentFeature) =>
-      Math.sqrt(d.properties.fatalities + 1) * 2000,
+      d.properties.fatalities > 0 ? [239, 68, 68, 220] : [245, 158, 11, 220],
+    getRadius: 8,
+    radiusUnits: "pixels" as const,
+    radiusMinPixels: 5,
+    radiusMaxPixels: 12,
+    stroked: true,
+    getLineColor: [255, 255, 255, 230],
+    lineWidthMinPixels: 1.5,
     pickable: true,
-    opacity: 0.8,
   });
 
 export const createHeatmapLayer = (data: IncidentFeature[]) =>
@@ -276,22 +280,18 @@ export const createFireLayer = (data: FireEvent[]) =>
     id: "nasa-firms-fires",
     data,
     getPosition: (d: FireEvent) => [d.longitude, d.latitude],
-    getFillColor: [255, 165, 0, 180],
-    getRadius: (d: FireEvent) => Math.sqrt(d.brightness || 1) * 300,
+    getFillColor: [249, 115, 22, 220],
+    getRadius: 6,
+    radiusUnits: "pixels" as const,
+    radiusMinPixels: 4,
+    radiusMaxPixels: 10,
+    stroked: true,
+    getLineColor: [255, 255, 255, 200],
+    lineWidthMinPixels: 1,
     pickable: true,
   });
 
-export const createRefugeeLayer = (data: RefugeeMovement[]) =>
-  new ArcLayer({
-    id: "refugee-movements",
-    data,
-    getSourcePosition: (d: RefugeeMovement) => d.source,
-    getTargetPosition: (d: RefugeeMovement) => d.target,
-    getSourceColor: [0, 128, 255, 120],
-    getTargetColor: [0, 255, 128, 120],
-    getWidth: (d: RefugeeMovement) => Math.log10(d.count + 1) * 2,
-    pickable: true,
-  });
+export const createRefugeeLayer = (_data: RefugeeMovement[]) => [];
 
 export const createRainfallLayer = (data: RainfallPoint[]) =>
   new HeatmapLayer({
@@ -371,32 +371,37 @@ export function createMaritimeTrafficLayers(vessels: MaritimeVessel[]) {
       id: "maritime-vessels",
       data: vessels,
       getPosition: (vessel: MaritimeVessel) => [vessel.lng, vessel.lat],
-      getFillColor: (vessel: MaritimeVessel) => getExecutiveStatusColor(vessel.status),
-      getRadius: (vessel: MaritimeVessel) =>
-        vessel.type.toLowerCase().includes("ferry") ? 1400 : 1000,
-      radiusUnits: "meters",
-      radiusMinPixels: 3,
-      radiusMaxPixels: 10,
+      getFillColor: (vessel: MaritimeVessel) =>
+        vessel.type === "cruise"
+          ? [14, 165, 233, 245]
+          : vessel.type === "naval_patrol"
+          ? [168, 85, 247, 245]
+          : [56, 189, 248, 230],
+      getRadius: 10,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 6,
+      radiusMaxPixels: 14,
       stroked: true,
-      lineWidthMinPixels: 1,
-      getLineColor: [226, 232, 240, 220],
+      lineWidthMinPixels: 2,
+      getLineColor: [255, 255, 255, 240],
       pickable: true,
-      opacity: 0.88,
+      opacity: 0.95,
     }),
     new TextLayer({
       id: "maritime-vessel-labels",
-      data: vessels.filter((vessel) => vessel.status !== "stable"),
+      data: vessels,
       getPosition: (vessel: MaritimeVessel) => [vessel.lng, vessel.lat],
-      getText: (vessel: MaritimeVessel) => vessel.name,
-      getColor: [226, 232, 240, 200],
-      getSize: 10,
-      getTextAnchor: "start",
-      getAlignmentBaseline: "center",
-      getPixelOffset: [8, 0],
-      fontFamily: "SF Mono, JetBrains Mono, monospace",
-      outlineColor: [15, 23, 42, 220],
-      outlineWidth: 2,
-      sizeUnits: "pixels",
+      getText: (vessel: MaritimeVessel) => `🚢 ${vessel.name}`,
+      getColor: [248, 250, 252, 240],
+      getSize: 11,
+      getTextAnchor: "start" as const,
+      getAlignmentBaseline: "center" as const,
+      getPixelOffset: [12, 0],
+      fontFamily: "JetBrains Mono, SF Mono, monospace",
+      fontWeight: 700,
+      outlineColor: [15, 23, 42, 240],
+      outlineWidth: 3,
+      sizeUnits: "pixels" as const,
       billboard: false,
       pickable: false,
     }),
@@ -414,16 +419,15 @@ export function createTourismHotspotLayer(hotspots: TourismHotspot[]) {
       data: hotspots,
       getPosition: (hotspot: TourismHotspot) => [hotspot.lng, hotspot.lat],
       getFillColor: (hotspot: TourismHotspot) => getExecutiveStatusColor(hotspot.status),
-      getRadius: (hotspot: TourismHotspot) =>
-        hotspot.status === "intervene" ? 2200 : hotspot.status === "watch" ? 1700 : 1300,
-      radiusUnits: "meters",
-      radiusMinPixels: 3,
-      radiusMaxPixels: 10,
+      getRadius: 6,
+      radiusUnits: "pixels" as const,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 8,
       stroked: true,
       lineWidthMinPixels: 1,
-      getLineColor: [255, 255, 255, 210],
+      getLineColor: [255, 255, 255, 200],
       pickable: true,
-      opacity: 0.72,
+      opacity: 0.85,
     }),
     new TextLayer({
       id: "tourism-hotspot-labels",
@@ -1148,7 +1152,45 @@ export function createSeaRoutesLayers(routes: SeaRoute[]) {
   ];
 }
 
-export function createWaterwaysLayer(waterways: Waterway[]) {
+export function createWaterwaysLayer(data: unknown) {
+  if (!data) return [];
+  
+  // If GeoJSON FeatureCollection or object with features
+  if (typeof data === "object" && "features" in (data as Record<string, unknown>)) {
+    const geojson = data as { features: Array<{ properties?: { waterway?: string; name?: string } }> };
+    if (!geojson.features?.length) return [];
+    return [
+      new GeoJsonLayer({
+        id: "phuket-waterways-geojson",
+        data: geojson as never,
+        stroked: true,
+        filled: false,
+        lineWidthUnits: "pixels" as const,
+        lineWidthMinPixels: 2,
+        getLineColor: (f: { properties?: { waterway?: string } }) => {
+          const w = f.properties?.waterway ?? "";
+          if (w === "river") return [14, 116, 144, 250]; // deep cyan-blue
+          if (w === "canal") return [6, 182, 212, 245];  // cyan
+          if (w === "stream") return [56, 189, 248, 235]; // light sky blue
+          if (w === "drain") return [249, 115, 22, 235];  // orange drain
+          return [14, 165, 233, 225];
+        },
+        getLineWidth: (f: { properties?: { waterway?: string } }) => {
+          const w = f.properties?.waterway ?? "";
+          if (w === "river") return 4.5;
+          if (w === "canal") return 3.2;
+          if (w === "stream") return 2.2;
+          return 1.8;
+        },
+        pickable: true,
+        lineJointRounded: true,
+        lineCapRounded: true,
+      }),
+    ];
+  }
+
+  // Legacy fallback for array of Waterway
+  const waterways = Array.isArray(data) ? (data as Waterway[]) : [];
   if (!waterways.length) return [];
   return [
     new PathLayer({
