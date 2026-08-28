@@ -30,6 +30,7 @@ in the top-left info panel, CSS `zoom` scaling at 2560/3840px.
 | **FloodDash (real-time)** | Right bar (`FloodOpsPanel`) + map layer | ThaiWater / HII API v3 `province_code=16` water levels + 24h rain, Pa Sak Jolasid dam storage from `dam_daily`, 60s poll |
 | **CCTV slots** | Strip under top bar (`CctvStrip`) + map markers | `src/data/lopburi-cctv.ts` — 12 wiring-ready slots; DOH ITS cameras in-province auto-wire matching slots at runtime |
 | **Satellite layers** | Map bottom-left lens selector | NASA GIBS (VIIRS true color daily, MODIS 7-2-1 flood contrast, IMERG rain, night lights) + Esri hi-res, via deck.gl TileLayer |
+| **3D city (every building)** | Map, `3D` toggle in the lens panel (default on) | Arnis-style pipeline (arnismc.com): OSM building footprints + heights via OpenFreeMap planet vector tiles, fill-extrusion on AWS Terrarium DEM terrain with hillshade, fog, sky, warm directional light — `src/lib/lopburi/buildings3d.ts` |
 
 ## Key files
 
@@ -60,8 +61,19 @@ flagged reference model when unreachable.
 
 ## Deploying lopburi.nonarkara.org
 
-Deploy this branch as its own Cloudflare Worker with
-`NEXT_PUBLIC_PROVINCE=lopburi` — `next.config.mjs` then redirects `/` to
-`/lopburi`. Point the `lopburi.nonarkara.org` DNS record at that worker.
+A dedicated worker config ships in `wrangler.lopburi.jsonc`
+(name `lopburi-dashboard`, custom domain `lopburi.nonarkara.org`,
+`NEXT_PUBLIC_PROVINCE=lopburi` baked in so `/` redirects to `/lopburi`).
+
+One command on any machine with Cloudflare access (wrangler login or
+`CLOUDFLARE_API_TOKEN`):
+
+```bash
+npm run deploy:lopburi
+```
+
+That builds the OpenNext worker bundle and deploys it. The
+`custom_domain: true` route auto-creates the `lopburi.nonarkara.org`
+DNS record because `nonarkara.org` is already a zone in the account.
 No other env vars are required; all feeds are free/no-token and degrade
 gracefully.

@@ -5,15 +5,17 @@
 // compact corner overlays only (no full-width bars), corridor pills
 // inline inside the top-left info panel.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import { FlyToInterpolator } from "@deck.gl/core";
 import type { DeckGLProps } from "@deck.gl/react";
 import { TileLayer } from "@deck.gl/geo-layers";
 import { BitmapLayer, ScatterplotLayer } from "@deck.gl/layers";
-import { Cctv, Satellite, X } from "lucide-react";
+import { Box, Cctv, Satellite, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type maplibregl from "maplibre-gl";
+import { applyLopburi3D } from "../../lib/lopburi/buildings3d";
 import { basemapStyle, BASEMAP_OPTIONS, type BasemapId } from "../../services/basemap-styles";
 import {
   buildSatelliteLayerCatalog,
@@ -72,6 +74,11 @@ export default function LopburiMap({
   const [satLayerId, setSatLayerId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [satPanelOpen, setSatPanelOpen] = useState(true);
+  // 3D city: every OSM building extruded on Terrarium terrain (Arnis-style
+  // pipeline). Default on — the province reads as a place, not a plan.
+  const [is3D, setIs3D] = useState(true);
+  const is3DRef = useRef(is3D);
+  const mlMapRef = useRef<maplibregl.Map | null>(null);
 
   const satCatalog = useMemo(() => buildSatelliteLayerCatalog(), []);
 
@@ -117,6 +124,22 @@ export default function LopburiMap({
     },
     [],
   );
+
+  // MapLibre style loaded (fires again on basemap change since the map
+  // remounts) — inject the 3D building/terrain stack.
+  const handleMapLoad = useCallback(
+    (event: { target: maplibregl.Map }) => {
+      mlMapRef.current = event.target;
+      applyLopburi3D(event.target, is3DRef.current, activeBasemap);
+    },
+    [activeBasemap],
+  );
+
+  // Re-sync the 3D stack when the toggle flips.
+  useEffect(() => {
+    is3DRef.current = is3D;
+    if (mlMapRef.current) applyLopburi3D(mlMapRef.current, is3D, activeBasemap);
+  }, [is3D, activeBasemap]);
 
   const activeSatLayer: SatelliteLayerDefinition | null =
     satCatalog.find((l) => l.id === satLayerId) ?? null;
@@ -222,6 +245,8 @@ export default function LopburiMap({
           mapStyle={mapStyle as never}
           attributionControl={false}
           renderWorldCopies={false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onLoad={handleMapLoad as any}
         />
       </DeckGL>
 
@@ -264,16 +289,31 @@ export default function LopburiMap({
 
         {/* Bottom-left: satellite lens selector + basemap + legend */}
         <div className="pointer-events-auto absolute bottom-2 left-2 w-[212px] map-overlay-panel px-2.5 py-2 min-[3000px]:w-[340px]">
-          <button
-            type="button"
-            onClick={() => setSatPanelOpen((v) => !v)}
-            className="flex w-full items-center justify-between text-[7px] font-bold uppercase tracking-[0.2em] text-[var(--dim)] min-[3000px]:text-[11px]"
-          >
-            <span className="flex items-center gap-1.5">
-              <Satellite size={10} className="text-[var(--cool)]" /> Satellite layers
-            </span>
-            <span>{satPanelOpen ? "–" : "+"}</span>
-          </button>
+          <div className="flex items-center justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSatPanelOpen((v) => !v)}
+              className="flex min-w-0 flex-1 items-center justify-between text-[7px] font-bold uppercase tracking-[0.2em] text-[var(--dim)] min-[3000px]:text-[11px]"
+            >
+              <span className="flex items-center gap-1.5">
+                <Satellite size={10} className="text-[var(--cool)]" /> Satellite layers
+              </span>
+              <span>{satPanelOpen ? "–" : "+"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIs3D((v) => !v)}
+              aria-pressed={is3D}
+              title="Every OSM building in the province, extruded on real terrain"
+              className={`flex shrink-0 items-center gap-1 border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.08em] min-[3000px]:text-[11px] ${
+                is3D
+                  ? "border-[var(--cool)] text-[var(--cool)]"
+                  : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+              }`}
+            >
+              <Box size={9} /> 3D
+            </button>
+          </div>
           {satPanelOpen && (
             <>
               <div className="mt-1.5 flex flex-wrap gap-1">

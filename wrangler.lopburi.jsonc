@@ -1,0 +1,23 @@
+// Dedicated worker for the Lopburi dashboard — lopburi.nonarkara.org.
+// Deploy with:  npm run deploy:lopburi
+// (builds with NEXT_PUBLIC_PROVINCE=lopburi so / redirects to /lopburi)
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lopburi-dashboard",
+  "main": ".open-next/worker.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "NEXT_PUBLIC_PROVINCE": "lopburi",
+    "NEXT_PUBLIC_SITE_URL": "https://lopburi.nonarkara.org"
+  },
+  "routes": [
+    { "pattern": "lopburi.nonarkara.org", "custom_domain": true }
+  ]
+}

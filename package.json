@@ -13,6 +13,8 @@
     "lint": "eslint",
     "test:ui": "node scripts/test-ui.mjs",
     "build:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build",
+    "build:lopburi": "rm -rf .open-next && NEXT_PUBLIC_PROVINCE=lopburi NEXT_PUBLIC_SITE_URL=https://lopburi.nonarkara.org npx @opennextjs/cloudflare build",
+    "deploy:lopburi": "npm run build:lopburi && npx wrangler deploy -c wrangler.lopburi.jsonc",
     "deploy:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build && wrangler pages deploy",
     "preview:cf": "rm -rf .open-next && npx @opennextjs/cloudflare build && wrangler pages dev",
     "build:static": "node scripts/static-export.mjs"
