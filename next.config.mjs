@@ -33,6 +33,16 @@ const nextConfig = {
       ? "https://phuket-dashboard.drnon.workers.dev"
       : "",
   },
+  // A deployment dedicated to a single province (e.g. lopburi.nonarkara.org
+  // with NEXT_PUBLIC_PROVINCE=lopburi) serves that dashboard at the root.
+  // Static export does not support redirects, so it is skipped there.
+  ...(!isStaticExport && process.env.NEXT_PUBLIC_PROVINCE === "lopburi"
+    ? {
+        async redirects() {
+          return [{ source: "/", destination: "/lopburi", permanent: false }];
+        },
+      }
+    : {}),
   webpack: (config) => {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
