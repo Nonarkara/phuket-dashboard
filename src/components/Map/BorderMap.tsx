@@ -781,6 +781,19 @@ export default function BorderMap({
     gridScale: "off",
   }));
 
+  // Operator panel is a compact corner card: the identity/corridor/KPI head is
+  // always up, every layer control folds into a drawer. The map is the product —
+  // nothing here may grow into a slab across it.
+  const [mapPanelOpen, setMapPanelOpen] = useState(true);
+  const [mapControlsOpen, setMapControlsOpen] = useState(false);
+  const activeOverlayCount = useMemo(
+    () =>
+      Object.entries(enabledOverlays).filter(
+        ([key, value]) => key !== "gridScale" && value === true,
+      ).length + (enabledOverlays.gridScale !== "off" ? 1 : 0),
+    [enabledOverlays],
+  );
+
   // ─── 3D building layer helpers ────────────────────────────────────────────
   // Injects or toggles a fill-extrusion layer on the underlying MapLibre map.
   // Called on every map load (including basemap changes) and on is3D changes.
@@ -1850,9 +1863,10 @@ export default function BorderMap({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 p-2 sm:p-3 xl:p-4">
+      <div className="pointer-events-none absolute left-0 top-0 z-40 p-2 sm:p-3 xl:p-4">
         <section
-          className="pointer-events-auto max-h-[calc(100%-1rem)] w-full max-w-[620px] overflow-y-auto border border-[rgba(15,23,42,0.16)] bg-[#f1ede2] px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3"
+          data-map-panel="operator"
+          className="pointer-events-auto w-[290px] max-w-[calc(100vw-1.25rem)] border border-[rgba(15,23,42,0.16)] bg-[#f1ede2] px-2.5 py-2 backdrop-blur-md sm:w-[320px] min-[3000px]:w-[380px]"
           style={{
             color: "#0d1117",
             ["--ink" as never]: "#0d1117",
@@ -1863,29 +1877,40 @@ export default function BorderMap({
             ["--line-bright" as never]: "rgba(15,23,42,0.45)",
           }}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+          {/* Header — always visible. Collapses the whole card to this row. */}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 truncate text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
               Phuket operator map
             </div>
-            <div className="border border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.08)] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
+            <div className="shrink-0 border border-[rgba(15,111,136,0.24)] bg-[rgba(15,111,136,0.08)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--cool)]">
               {BASEMAP_OPTIONS.find((b) => b.id === activeBasemap)?.label ?? "Street"}
             </div>
+            <button
+              type="button"
+              onClick={() => setMapPanelOpen((v) => !v)}
+              aria-expanded={mapPanelOpen}
+              aria-label={mapPanelOpen ? "Collapse operator panel" : "Expand operator panel"}
+              className="shrink-0 border border-[var(--line)] px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-[var(--dim)] transition-colors hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
+            >
+              {mapPanelOpen ? "–" : "+"}
+            </button>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-end gap-2 sm:mt-2 sm:gap-3">
-            <h3 className="text-[16px] font-bold tracking-normal text-[var(--ink)] sm:text-[18px]">
+
+          {mapPanelOpen && (
+          <>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <h3 className="text-[13px] font-bold tracking-normal text-[var(--ink)] sm:text-[14px]">
               {activeCorridor?.label ?? "Airport to pier corridor"}
             </h3>
-            <div className="hidden text-[10px] uppercase tracking-[0.14em] text-[var(--dim)] sm:block">
+            <div className="truncate text-[8px] uppercase tracking-[0.14em] text-[var(--dim)]">
               {activeCorridor?.focusAreas.join(" / ") ?? "Phuket transfer watch"}
             </div>
           </div>
-          <p className="mt-2 hidden max-w-[560px] text-[11px] leading-5 text-[var(--muted)] sm:block">
-            Airport arrivals, road friction, bus lift, and ferry handoff stay on one wall so the operator can see where timing breaks first.
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:mt-3 sm:gap-2 md:grid-cols-4">
+          <div className="mt-1.5 grid grid-cols-4 gap-1">
             {[
               {
                 label: "Arrivals 60m",
+                short: "Arr 60m",
                 value: arrivalsNext60Count,
                 mode: arrivalsResp?.mode ?? "unavailable",
                 title: arrivalsResp
@@ -1894,18 +1919,21 @@ export default function BorderMap({
               },
               {
                 label: "Buses moving",
+                short: "Buses",
                 value: movingBusCount,
                 mode: pksbBusesMode ?? "unavailable",
                 title: `PKSB transit · ${pksbBusesMode ?? "no signal"}`,
               },
               {
                 label: "Road events",
+                short: "Roads",
                 value: trafficEvents.length,
                 mode: trafficStatus === "ok" || trafficEvents.length > 0 ? "live" : "unavailable",
                 title: `Traffic feed · ${trafficStatus || "no signal"}`,
               },
               {
                 label: "Boat contacts",
+                short: "Boats",
                 value: maritimeVesselCount,
                 mode: maritimeMode ?? "unavailable",
                 title: `Maritime security · ${maritimeMode ?? "no signal"}`,
@@ -1914,28 +1942,25 @@ export default function BorderMap({
               <div
                 key={item.label}
                 title={item.title}
-                className="min-w-0 border border-[rgba(15,111,136,0.18)] bg-[rgba(255,255,255,0.72)] px-2 py-1.5 sm:bg-[rgba(255,255,255,0.58)] sm:px-3 sm:py-2"
+                className="min-w-0 border border-[rgba(15,111,136,0.18)] bg-[rgba(255,255,255,0.62)] px-1.5 py-1"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-[7px] uppercase tracking-[0.12em] text-[var(--dim)] sm:tracking-[0.16em]">
-                    {item.label}
+                <div className="flex items-center justify-between gap-1">
+                  <div className="truncate text-[6px] uppercase tracking-[0.1em] text-[var(--dim)]">
+                    {item.short}
                   </div>
                   <span
                     aria-label={`${item.label} data state: ${item.mode}`}
-                    className={`h-1.5 w-1.5 rounded-full ${modeDotClass(item.mode as FeedMode | "unavailable")}`}
+                    className={`h-1 w-1 shrink-0 rounded-full ${modeDotClass(item.mode as FeedMode | "unavailable")}`}
                   />
                 </div>
-                <div className="mt-0.5 font-mono text-[16px] font-bold text-[var(--ink)] sm:mt-1 sm:text-[18px]">
+                <div className="font-mono text-[13px] font-bold leading-tight text-[var(--ink)]">
                   {item.value}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-3 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
-            <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-              Corridor
-            </span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {focusPresets.map((preset) => (
               <button
                 key={preset.id}
@@ -1949,7 +1974,7 @@ export default function BorderMap({
                     ...preset.view,
                   }));
                 }}
-                className={`whitespace-nowrap border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                className={`whitespace-nowrap border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] transition-colors ${
                   selectedCorridorId === preset.id
                     ? "border-[var(--ink)] bg-[rgba(17,17,17,0.08)] text-[var(--ink)]"
                     : "border-[var(--line)] text-[var(--dim)] hover:border-[var(--line-bright)] hover:text-[var(--ink)]"
@@ -1960,7 +1985,26 @@ export default function BorderMap({
             ))}
           </div>
 
-          <div className="mt-2 hidden flex-wrap items-center gap-1.5 sm:flex">
+          {/* Layers drawer — everything below stays folded away by default so the
+              map is never covered. Bounded height + own scroll when open. */}
+          <button
+            type="button"
+            onClick={() => setMapControlsOpen((v) => !v)}
+            aria-expanded={mapControlsOpen}
+            className="mt-1.5 flex w-full items-center justify-between border-t border-[rgba(15,111,136,0.18)] pt-1.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] transition-colors hover:text-[var(--ink)]"
+          >
+            <span>Layers &amp; view</span>
+            <span className="flex items-center gap-1.5">
+              {activeOverlayCount > 0 && (
+                <span className="font-mono text-[var(--cool)]">{activeOverlayCount} on</span>
+              )}
+              <span className="font-mono">{mapControlsOpen ? "–" : "+"}</span>
+            </span>
+          </button>
+
+          {mapControlsOpen && (
+          <div className="max-h-[42vh] overflow-y-auto no-scrollbar">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
               Basemap
             </span>
@@ -2083,7 +2127,7 @@ export default function BorderMap({
             </>
           )}
 
-          <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2">
             <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
               Overlays
             </span>
@@ -2126,7 +2170,7 @@ export default function BorderMap({
             ))}
           </div>
 
-          <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,23,42,0.18)] pt-2 sm:flex">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[rgba(15,23,42,0.18)] pt-2">
             <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
               Grid
             </span>
@@ -2150,7 +2194,7 @@ export default function BorderMap({
           </div>
 
           {enabledOverlays.traffic && (
-            <div className="mt-2 hidden flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:flex">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[rgba(15,111,136,0.18)] pt-2">
               <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">Traffic</span>
               {/* Colour buckets only — the tiles carry no speeds. Never label these km/h. */}
               <span className="h-1.5 w-1.5 rounded-full bg-[#2ea043]" /><span className="text-[8px] text-[var(--dim)]">flow</span>
@@ -2167,7 +2211,7 @@ export default function BorderMap({
             </div>
           )}
           {precipitationSource && (
-            <div className="mt-2 hidden space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:block">
+            <div className="mt-2 space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2">
               {[precipitationSource]
                 .filter((s): s is SatelliteSource => Boolean(s))
                 .map((s) => {
@@ -2203,6 +2247,10 @@ export default function BorderMap({
                   );
                 })}
             </div>
+          )}
+          </div>
+          )}
+          </>
           )}
         </section>
       </div>
