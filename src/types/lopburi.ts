@@ -95,31 +95,6 @@ export interface SocialListeningResponse {
   topTopics: { label: string; color: string; count: number }[];
 }
 
-// ─── CCTV slots ─────────────────────────────────────────────────
+// ─── CCTV slots (shared) ────────────────────────────────────────
 
-export type CctvSlotStatus = "live" | "standby";
-
-export interface CctvSlot {
-  id: string;
-  label: string;
-  district: string;
-  corridorId: string;
-  lat: number;
-  lon: number;
-  status: CctvSlotStatus;
-  /** Populated once the physical feed is wired in. */
-  snapshotUrl: string | null;
-  streamUrl: string | null;
-  wiring: {
-    protocol: "rtsp" | "hls" | "mjpeg" | "snapshot";
-    owner: string; // agency that owns the camera
-    note: string; // what needs to happen to bring this slot live
-  };
-}
-
-export interface CctvFeedResponse {
-  generatedAt: string;
-  slots: CctvSlot[];
-  liveCount: number;
-  standbyCount: number;
-}
+export type { CctvFeedResponse, CctvSlot, CctvSlotStatus } from "./cctv";

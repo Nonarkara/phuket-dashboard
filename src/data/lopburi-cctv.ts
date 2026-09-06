@@ -1,4 +1,4 @@
-import type { CctvSlot } from "../types/lopburi";
+import type { CctvSlot } from "../types/cctv";
 
 // ─── Lopburi CCTV Camera Slots ──────────────────────────────────
 // Pre-wired slot registry. Each slot is a physical camera position the

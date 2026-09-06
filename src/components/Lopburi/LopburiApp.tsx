@@ -23,7 +23,7 @@ import type {
 } from "../../types/lopburi";
 import SocialSidebar from "./SocialSidebar";
 import FloodOpsPanel from "./FloodOpsPanel";
-import CctvStrip from "./CctvStrip";
+import CctvStrip from "../Province/CctvStrip";
 import LopburiTopBar from "./LopburiTopBar";
 import LopburiTicker from "./LopburiTicker";
 import LopburiMap from "./LopburiMap";

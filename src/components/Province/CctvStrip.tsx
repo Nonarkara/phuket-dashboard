@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { Cctv } from "lucide-react";
 import { useWarRoomScale } from "../../hooks/useWarRoomScale";
 import { SkeletonStrip } from "../Skeleton";
-import type { CctvFeedResponse, CctvSlot } from "../../types/lopburi";
+import type { CctvFeedResponse, CctvSlot } from "../../types/cctv";
 
 function SlotCard({
   slot,

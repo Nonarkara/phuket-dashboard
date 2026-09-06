@@ -1,0 +1,14 @@
+// Dedicated worker for the NST water dashboard — nst.nonarkara.org.
+// Deploy with:  npm run deploy:nst
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nst-dashboard",
+  "main": ".open-next/worker.js",
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": { "NEXT_PUBLIC_PROVINCE": "nst", "NEXT_PUBLIC_SITE_URL": "https://nst.nonarkara.org" },
+  "routes": [{ "pattern": "nst.nonarkara.org", "custom_domain": true }]
+}

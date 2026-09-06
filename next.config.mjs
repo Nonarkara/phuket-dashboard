@@ -14,6 +14,7 @@ const nextConfig = {
     "@deck.gl/layers",
     "@deck.gl/aggregation-layers",
     "@deck.gl/geo-layers",
+    "@deck.gl/extensions",
     "@deck.gl/mapbox",
     "@deck.gl/react",
     "@luma.gl/core",
@@ -36,10 +37,10 @@ const nextConfig = {
   // A deployment dedicated to a single province (e.g. lopburi.nonarkara.org
   // with NEXT_PUBLIC_PROVINCE=lopburi) serves that dashboard at the root.
   // Static export does not support redirects, so it is skipped there.
-  ...(!isStaticExport && process.env.NEXT_PUBLIC_PROVINCE === "lopburi"
+  ...(!isStaticExport && ["lopburi", "nst"].includes(process.env.NEXT_PUBLIC_PROVINCE ?? "")
     ? {
         async redirects() {
-          return [{ source: "/", destination: "/lopburi", permanent: false }];
+          return [{ source: "/", destination: `/${process.env.NEXT_PUBLIC_PROVINCE}`, permanent: false }];
         },
       }
     : {}),

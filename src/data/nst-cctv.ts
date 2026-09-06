@@ -1,0 +1,21 @@
+import type { CctvSlot } from "../types/cctv";
+
+// ─── NST CCTV Camera Slots — water control points ───────────────
+// Same wiring registry pattern as Lopburi: every slot is a physical
+// camera position on the waterway system. Fill snapshotUrl/streamUrl
+// and the strip card, map marker, and detail panel light up.
+
+export const NST_CCTV_SLOTS: CctvSlot[] = [
+  { id: "cctv-khiriwong-bridge", label: "Khiriwong bridge (Khlong Tha Di)", district: "Lan Saka", corridorId: "khao-luang", lat: 8.436, lon: 99.775, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "hls", owner: "Khiriwong community / DDPM", note: "Upstream visual on the first gauge. Confirms bank state 5 h before the city." } },
+  { id: "cctv-tha-di-weir", label: "Ban Tha Di weir", district: "Lan Saka", corridorId: "tha-di-gorge", lat: 8.418, lon: 99.862, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "rtsp", owner: "Royal Irrigation Department", note: "RID weir camera. Pairs with the Tha Di reference gauge." } },
+  { id: "cctv-tha-ngiu-split", label: "Tha Ngiu split / diversion intake", district: "Mueang", corridorId: "tha-ngiu-split", lat: 8.425, lon: 99.905, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "rtsp", owner: "Royal Irrigation Department", note: "Verifies gate position against SCADA during a release." } },
+  { id: "cctv-diversion-gate", label: "Diversion canal gate 1", district: "Mueang", corridorId: "tha-ngiu-split", lat: 8.408, lon: 99.912, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "hls", owner: "Royal Irrigation Department", note: "Gate 1 of 7 on the 18.6 km diversion canal." } },
+  { id: "cctv-kamphaeng-sao", label: "Kamphaeng Sao low point", district: "Mueang", corridorId: "city-core", lat: 8.432, lon: 99.935, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "hls", owner: "NST Municipality", note: "First urban ponding point. Historical 2017/2020 overflow site." } },
+  { id: "cctv-tha-wang-market", label: "Tha Wang market (Khlong Pak Nakhon)", district: "Mueang (city core)", corridorId: "city-core", lat: 8.443, lon: 99.967, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "hls", owner: "NST Municipality", note: "City-centre channel level and market access." } },
+  { id: "cctv-ratchadamnoen", label: "Ratchadamnoen Rd @ Wat Phra Mahathat", district: "Mueang (city core)", corridorId: "city-core", lat: 8.411, lon: 99.966, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "mjpeg", owner: "NST Municipality / Police", note: "Evacuation spine. Keep this corridor open." } },
+  { id: "cctv-maharaj-hospital", label: "Maharaj Hospital approach", district: "Mueang (city core)", corridorId: "city-core", lat: 8.4325, lon: 99.9625, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "hls", owner: "Maharaj Nakhon Si Thammarat Hospital", note: "Ambulance access during city-core ponding." } },
+  { id: "cctv-pak-nakhon-gate", label: "Pak Nakhon tidal gate", district: "Mueang (coast)", corridorId: "outlets", lat: 8.463, lon: 100.035, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "rtsp", owner: "Royal Irrigation Department", note: "Outlet visual: tide state vs gate opening." } },
+  { id: "cctv-tha-sak-bridge", label: "Tha Sak bridge (Khlong Tha Sak)", district: "Mueang (north)", corridorId: "outlets", lat: 8.505, lon: 99.985, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "snapshot", owner: "DOH ITS", note: "Highway 401 crossing. Auto-wires from its.doh.go.th when reachable." } },
+  { id: "cctv-hwy401-thasala", label: "Highway 401 @ city north approach", district: "Mueang (north)", corridorId: "outlets", lat: 8.48, lon: 99.975, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "snapshot", owner: "DOH ITS", note: "Auto-wires from DOH ITS list." } },
+  { id: "cctv-hwy403-lansaka", label: "Highway 4015 @ Lan Saka", district: "Lan Saka", corridorId: "tha-di-gorge", lat: 8.4, lon: 99.84, status: "standby", snapshotUrl: null, streamUrl: null, wiring: { protocol: "snapshot", owner: "DOH ITS", note: "Road access to the gorge gauges during rain. Auto-wires from DOH ITS list." } },
+];
