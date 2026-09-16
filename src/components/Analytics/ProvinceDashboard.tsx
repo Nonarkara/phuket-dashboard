@@ -1,4 +1,4 @@
-import { ExternalLink, Globe, TrendingUp, X } from "lucide-react";
+import { ExternalLink, Globe, TrendingUp, Video, X } from "lucide-react";
 import type { ProvinceSelection } from "../../types/dashboard";
 
 interface ProvinceDashboardProps {
@@ -93,6 +93,38 @@ export default function ProvinceDashboard({ province, onClose }: ProvinceDashboa
           <X size={14} />
         </button>
       </div>
+
+      {province.embedUrl ? (
+        <div className="border-t border-[var(--line)] bg-black px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#ef4444] animate-pulse" />
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-white flex items-center gap-1.5">
+                <Video size={11} className="text-[#ef4444]" /> Live Webcam Stream
+              </span>
+            </div>
+            {province.externalUrl ? (
+              <a
+                href={province.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[9px] text-[#38bdf8] hover:underline inline-flex items-center gap-1"
+              >
+                External source <ExternalLink size={10} />
+              </a>
+            ) : null}
+          </div>
+          <div className="relative aspect-video w-full overflow-hidden border border-[rgba(255,255,255,0.15)] bg-black">
+            <iframe
+              src={province.embedUrl}
+              title={province.name}
+              className="h-full w-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 border-t border-[var(--line)] px-4 py-3 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="grid gap-2 md:grid-cols-4">

@@ -58,6 +58,7 @@ export interface ProvinceSelection {
   location?: string;
   eventDate?: string;
   externalUrl?: string;
+  embedUrl?: string;
   source?: string;
 }
 
@@ -358,6 +359,7 @@ export interface PublicCamera {
   strategicNote: string;
   notes: string;
   accessUrl?: string | null;
+  embedUrl?: string | null;
   corridorIds?: string[];
   lastValidatedAt?: string;
   lastCheckedAt?: string;

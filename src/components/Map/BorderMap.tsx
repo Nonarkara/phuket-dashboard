@@ -316,6 +316,7 @@ type GridScale = "off" | "1km" | "5km" | "10km";
 type OverlayState = {
   himawariCloud: boolean;
   precipitationRadar: boolean;
+  publicCameras: boolean;
   waterways: boolean;
   aqiFlag: boolean;
   publicInfrastructure: boolean;
@@ -766,6 +767,7 @@ export default function BorderMap({
   const [enabledOverlays, setEnabledOverlays] = useState<OverlayState>(() => ({
     himawariCloud: false,
     precipitationRadar: false,
+    publicCameras: true,
     waterways: true,
     aqiFlag: false,
     publicInfrastructure: false,
@@ -1600,7 +1602,7 @@ export default function BorderMap({
     ...createPksbRouteLayers(pksbRoutes, pksbStops),
     ...createPksbBusLayers(animatedPksbBuses),
     ...createMaritimeTrafficLayers(animatedMaritimeVessels),
-    createPublicCameraLayer(publicCameras),
+    ...(enabledOverlays.publicCameras ? [createPublicCameraLayer(publicCameras)] : []),
     ...createTourismHotspotLayer(tourismHotspots),
     ...createTrafficEventLayers(trafficEvents),
     ...(createFlightPathsLayer(flights) ?? []),
@@ -1655,6 +1657,7 @@ export default function BorderMap({
         location: object.locationLabel,
         notes: object.strategicNote,
         externalUrl: object.accessUrl ?? undefined,
+        embedUrl: object.embedUrl ?? undefined,
         source: `${object.provider} / ${object.focusArea}`,
       });
       return;
@@ -2090,6 +2093,7 @@ export default function BorderMap({
             {[
               { id: "himawariCloud" as const, label: "Himawari" },
               { id: "precipitationRadar" as const, label: "Radar" },
+              { id: "publicCameras" as const, label: "Webcams" },
               { id: "aqiFlag" as const, label: "AQI" },
               { id: "waterways" as const, label: "Waterways" },
               { id: "roadNetwork" as const, label: "Roads" },
