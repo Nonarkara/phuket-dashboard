@@ -28,6 +28,17 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3 border-t border-[rgba(15,23,42,0.12)] py-1.5 first:border-t-0">
+      <div className="w-[64px] shrink-0 pt-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
+        {label}
+      </div>
+      <div className="min-w-0 flex-1 text-[11px] leading-4 text-[var(--ink)]">{children}</div>
+    </div>
+  );
+}
+
 /**
  * The Slope Story — the signature analytical moment.
  *
@@ -46,21 +57,12 @@ export default function CorridorRiskReveal({ blackspot, peak, twinCount, onClose
   const peakLabel = peak ? `${pad2(peak.hour)}:00` : "this evening";
 
   const why = steep
-    ? `A ${blackspot.slopeDeg}° descent — among the steepest roads on the island. In rain, two-wheel braking distance collapses on the grade.`
+    ? `${blackspot.slopeDeg.toFixed(1)}° continuous slope meets wet road; descent energy overcomes scooter braking limits.`
     : `${KIND_LABEL[blackspot.kind] ?? "Conflict"} point on the ${blackspot.corridor} corridor, which carries the island's heaviest motorcycle mix.`;
 
   const action = steep
     ? `Wet-surface warning + speed enforcement on the descent. Pre-position patrol from ${peakLabel}.`
     : `Signal & signage audit; visible patrol from ${peakLabel}.`;
-
-  const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex gap-3 border-t border-[rgba(15,23,42,0.12)] py-1.5 first:border-t-0">
-      <div className="w-[64px] shrink-0 pt-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-        {label}
-      </div>
-      <div className="min-w-0 flex-1 text-[11px] leading-4 text-[var(--ink)]">{children}</div>
-    </div>
-  );
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-3 sm:justify-start sm:px-4 sm:pb-4">

@@ -69,10 +69,11 @@ import {
 } from "../../services/map-engine";
 import {
   createSatelliteTileLayer,
+  createHimawariLayer,
+  buildHimawariSource,
   fetchRainViewerLatest,
   freshnessLabel as satelliteFreshnessLabel,
   freshnessTier as satelliteFreshnessTier,
-  buildGistdaOceanMeta,
   GISTDA_OCEAN_WMS_BASE,
   GISTDA_OCEAN_LAYERS,
 } from "../../services/satellite-layers";
@@ -313,6 +314,7 @@ function detectWebglSupport() {
 type GridScale = "off" | "1km" | "5km" | "10km";
 
 type OverlayState = {
+  himawariCloud: boolean;
   precipitationRadar: boolean;
   waterways: boolean;
   aqiFlag: boolean;
@@ -762,6 +764,7 @@ export default function BorderMap({
   const maritimeVesselsRef = useRef<MaritimeVessel[]>(maritimeSecurityFeed?.vessels ?? []);
   const [animationNow, setAnimationNow] = useState(() => Date.now());
   const [enabledOverlays, setEnabledOverlays] = useState<OverlayState>(() => ({
+    himawariCloud: false,
     precipitationRadar: false,
     waterways: true,
     aqiFlag: false,
@@ -1013,7 +1016,6 @@ export default function BorderMap({
       if (mlMap.getLayer(BLACKSPOT_HALO)) mlMap.setLayoutProperty(BLACKSPOT_HALO, "visibility", "none");
       if (mlMap.getLayer(BLACKSPOT_CORE)) mlMap.setLayoutProperty(BLACKSPOT_CORE, "visibility", "none");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // stable — reads is3DRef, not is3D directly
 
   // Re-sync building layer whenever is3D toggles
@@ -1217,7 +1219,7 @@ export default function BorderMap({
   const animatedPksbBuses = interpolateMotionFrame(
     previousPksbBuses,
     pksbBuses,
-    (animationNow - busFrameStartedAt) / 15000,
+    (animationNow - busFrameStartedAt) / 5000,
   );
   const animatedMaritimeVessels = interpolateMotionFrame(
     previousMaritimeVessels,
@@ -1506,7 +1508,7 @@ export default function BorderMap({
 
   useEffect(() => {
     void loadPksbBuses();
-    const interval = window.setInterval(() => void loadPksbBuses(), 15000);
+    const interval = window.setInterval(() => void loadPksbBuses(), 5000);
 
     return () => {
       busRequestIdRef.current += 1;
@@ -1553,9 +1555,12 @@ export default function BorderMap({
         : enabledOverlays.gridScale === "10km"
           ? 10
           : null;
+  const himawariSource = useMemo(
+    () => (enabledOverlays.himawariCloud ? buildHimawariSource() : null),
+    [enabledOverlays.himawariCloud],
+  );
   const precipitationSource =
     enabledOverlays.precipitationRadar && rainViewerSource ? rainViewerSource : null;
-  const gistdaOceanDate = buildGistdaOceanMeta().capturedAt;
   const layers = [
     // ── GISTDA ocean WMS overlays (raster — bottommost so operational layers sit on top) ──
     ...(enabledOverlays.sstAndaman
@@ -1564,6 +1569,9 @@ export default function BorderMap({
     ...(enabledOverlays.chlAndaman
       ? [createWmsTileLayer({ id: "gistda-chl", baseUrl: GISTDA_OCEAN_WMS_BASE, layers: GISTDA_OCEAN_LAYERS.chl, maxZoom: 10, opacity: 0.68 })]
       : []),
+    // ── Satellite / radar rasters ──
+    ...(himawariSource ? [createHimawariLayer(himawariSource)] : []),
+    ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
     // ── User-toggleable overlays (above basemap, below operational layers) ──
     ...(enabledOverlays.urbanFabric && urbanFabricGeoJson ? [createUrbanFabricLayer(urbanFabricGeoJson)] : []),
     ...(enabledOverlays.riskTwins && riskTwinsGeoJson ? [createRiskTwinsLayer(riskTwinsGeoJson)] : []),
@@ -1574,7 +1582,6 @@ export default function BorderMap({
     createLocalGovLayer(localGovs, enabledOverlays.adminBoundaries, setScope),
     createScopeHighlightLayer(activeGeometry),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
-    ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
     ...(enabledOverlays.waterways ? createWaterwaysLayer(realWaterwaysGeoJson ?? PHUKET_WATERWAYS) : []),
     ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
     ...(enabledOverlays.roadNetwork && roadsData ? createRoadNetworkLayer(roadsData) : []),
@@ -1985,9 +1992,9 @@ export default function BorderMap({
             <div className="ml-auto flex items-center gap-1.5">
               <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">View</span>
               {([
-                { id: "flat" as const, label: "2D", title: "Flat chart, top-down — distances in kilometres" },
+                { id: "flat" as const, label: "2D", title: "Flat 2D chart, top-down view — pitch 0°" },
                 { id: "nautical" as const, label: "NM", title: "Nautical view, perspectival — distances in nautical miles" },
-                { id: "3d" as const, label: "3D", title: "3D — buildings extrude (auto-zooms to a useful level)" },
+                { id: "3d" as const, label: "3D", title: "3D island elevation & building extrusions" },
               ]).map((m) => (
                 <button
                   key={m.id}
@@ -1996,19 +2003,12 @@ export default function BorderMap({
                   data-control-classification="changes view"
                   onClick={() => {
                     setViewMode(m.id);
-                    if (m.id === "3d" && viewMode !== "3d") {
-                      // Fly to Patong at zoom 14.5 — the hotel canyon / valley bowl
-                      // becomes dramatically visible with terrain at this zoom + pitch
-                      setViewState({
-                        longitude: 98.295,
-                        latitude: 7.896,
-                        zoom: 14.5,
-                        pitch: 70,
-                        bearing: -25,
-                        minZoom: PHUKET_MIN_ZOOM,
-                        maxZoom: PHUKET_MAX_ZOOM,
-                      });
-                    }
+                    setViewState((prev) => ({
+                      ...prev,
+                      pitch: m.id === "3d" ? 58 : m.id === "nautical" ? 45 : 0,
+                      bearing: m.id === "3d" ? -15 : m.id === "nautical" ? -5 : 0,
+                      transitionDuration: 800,
+                    }));
                   }}
                   title={m.title}
                   className={`border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
@@ -2088,8 +2088,9 @@ export default function BorderMap({
               Overlays
             </span>
             {[
+              { id: "himawariCloud" as const, label: "Himawari" },
+              { id: "precipitationRadar" as const, label: "Radar" },
               { id: "aqiFlag" as const, label: "AQI" },
-              { id: "precipitationRadar" as const, label: "Precipitation" },
               { id: "waterways" as const, label: "Waterways" },
               { id: "roadNetwork" as const, label: "Roads" },
               { id: "canalsDrainage" as const, label: "Canals" },
@@ -2166,9 +2167,9 @@ export default function BorderMap({
               </a>
             </div>
           )}
-          {precipitationSource && (
+          {(himawariSource || precipitationSource) && (
             <div className="mt-2 hidden space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2 sm:block">
-              {[precipitationSource]
+              {[himawariSource, precipitationSource]
                 .filter((s): s is SatelliteSource => Boolean(s))
                 .map((s) => {
                   const tier = satelliteFreshnessTier(s.capturedAt, s.cadence);

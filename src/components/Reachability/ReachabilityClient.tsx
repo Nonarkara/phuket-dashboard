@@ -50,7 +50,7 @@ export default function ReachabilityClient() {
   const originMarker = useRef<Marker | null>(null);
   const destMarker   = useRef<Marker | null>(null);
   const [origin, setOrigin]   = useState<{ lat: number; lng: number } | null>(null);
-  const [dest, setDest]       = useState<{ lat: number; lng: number } | null>(null);
+  const [_dest, setDest]      = useState<{ lat: number; lng: number } | null>(null);
   const [bands, setBands]     = useState<IsoBand[]>([]);
   const [route, setRoute]     = useState<RouteResponse | null>(null);
   const [mode, setMode]       = useState<"car" | "pedestrian">("car");
@@ -287,7 +287,7 @@ export default function ReachabilityClient() {
           REACHABILITY · PHUKET
         </div>
         <div style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.4 }}>
-          Click anywhere on Phuket to see what's reachable in <span style={{ color: "#f59e0b" }}>15 / 30 / 60 min</span> by real road network.
+          Click anywhere on Phuket to see what&apos;s reachable in <span style={{ color: "#f59e0b" }}>15 / 30 / 60 min</span> by real road network.
         </div>
         <div style={{ display: "flex", gap: 1, background: "rgba(230,237,243,0.18)", marginBottom: 10 }}>
           {(["iso", "route"] as const).map((t) => (

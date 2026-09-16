@@ -1,20 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "phuket-dark-mode";
 
-export function useDarkMode() {
-  const [isDark, setIsDark] = useState(false);
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored !== null) {
-      setIsDark(stored === "true");
-    } else {
-      setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
-    }
-  }, []);
+function getSnapshot(): boolean {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored !== null) return stored === "true";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+export function useDarkMode() {
+  const isDark = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
     const el = document.querySelector<HTMLElement>("[data-surface='phuket-dashboard']");
@@ -23,11 +29,9 @@ export function useDarkMode() {
   }, [isDark]);
 
   const toggle = useCallback(() => {
-    setIsDark((prev) => {
-      const next = !prev;
-      localStorage.setItem(STORAGE_KEY, String(next));
-      return next;
-    });
+    const next = !getSnapshot();
+    localStorage.setItem(STORAGE_KEY, String(next));
+    window.dispatchEvent(new Event("storage"));
   }, []);
 
   return [isDark, toggle] as const;

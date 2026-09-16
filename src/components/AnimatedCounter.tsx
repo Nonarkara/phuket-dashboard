@@ -34,8 +34,8 @@ export default function AnimatedCounter({ value, className = "" }: AnimatedCount
 
     const numericMatch = value.match(/^(\d+)/);
     if (!numericMatch) {
-      setDisplay(value);
-      return;
+      const id = requestAnimationFrame(() => setDisplay(value));
+      return () => cancelAnimationFrame(id);
     }
 
     const target = parseInt(numericMatch[1], 10);
@@ -53,8 +53,10 @@ export default function AnimatedCounter({ value, className = "" }: AnimatedCount
       if (progress < 1) raf = requestAnimationFrame(animate);
     };
 
-    setDisplay(`0${suffix}`);
-    raf = requestAnimationFrame(animate);
+    raf = requestAnimationFrame((now) => {
+      setDisplay(`0${suffix}`);
+      animate(now);
+    });
     return () => cancelAnimationFrame(raf);
   }, [visible, value]);
 

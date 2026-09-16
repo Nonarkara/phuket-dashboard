@@ -15,6 +15,7 @@ import { createRasterTileLayer } from "./map-engine";
 export type SatelliteId =
   | "viirs-truecolor"
   | "modis-truecolor"
+  | "himawari-cloud"
   | "imerg-precip"
   | "rainviewer-radar"
   | "gistda-sst"
@@ -81,6 +82,18 @@ export function buildDailyGibsSources(): SatelliteSource[] {
       cadence: "daily",
     },
     {
+      id: "himawari-cloud",
+      label: "Himawari-9 AHI clean infrared (clouds)",
+      shortLabel: "Himawari",
+      description:
+        "Clean infrared brightness temp from JMA Himawari-9 AHI via NASA GIBS, ~2km resolution.",
+      capturedAt: date,
+      tileTemplate: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Himawari_AHI_Band13_Clean_Infrared/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+      maxZoom: 8,
+      attribution: "NASA GIBS · JMA Himawari-9",
+      cadence: "daily",
+    },
+    {
       id: "imerg-precip",
       label: "IMERG precipitation rate (GPM)",
       shortLabel: "Precip",
@@ -93,6 +106,22 @@ export function buildDailyGibsSources(): SatelliteSource[] {
       cadence: "daily",
     },
   ];
+}
+
+export function buildHimawariSource(daysAgo = 1): SatelliteSource {
+  const date = utcDateOffset(daysAgo);
+  return {
+    id: "himawari-cloud",
+    label: "Himawari-9 AHI clean infrared (clouds)",
+    shortLabel: "Himawari",
+    description:
+      "Clean infrared brightness temp from JMA Himawari-9 AHI via NASA GIBS, ~2km resolution.",
+    capturedAt: date,
+    tileTemplate: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Himawari_AHI_Band13_Clean_Infrared/default/${date}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+    maxZoom: 8,
+    attribution: "NASA GIBS · JMA Himawari-9",
+    cadence: "daily",
+  };
 }
 
 export interface RainViewerFrame {
@@ -194,3 +223,14 @@ export function createSatelliteTileLayer(source: SatelliteSource) {
     opacity: source.cadence === "minute" ? 0.65 : 0.85,
   });
 }
+
+export function createHimawariLayer(source?: SatelliteSource) {
+  const src = source ?? buildHimawariSource(1);
+  return createRasterTileLayer({
+    id: `satellite-${src.id}`,
+    data: src.tileTemplate,
+    maxZoom: src.maxZoom,
+    opacity: 0.65,
+  });
+}
+
