@@ -4,6 +4,7 @@ import { loadRainfallPoints } from "./rainfall";
 import type {
   ExecutiveStatus,
   GovernorScenarioId,
+  HeatIndexCategory,
   MarineStatusResponse,
   MetricEvidence,
   OperationalWeatherResponse,
@@ -26,20 +27,87 @@ function weatherCodeLabel(code: number | null) {
   return "Clear to mixed";
 }
 
+// ─── Heat index ("feels like") ──────────────────────────────────
+// NOAA/NWS Rothfusz regression (Steadman 1979 / Rothfusz 1990), the
+// standard public formula behind US and (via the same physiology)
+// most tropical heat-stress advisories. Phuket sits in the exact band
+// this formula is tuned for: 27-34C air temp with 65-95% humidity,
+// where "feels like" runs well above the thermometer reading and is
+// the number that actually predicts heat-stress risk for outdoor
+// tourists, tour operators, and beach/marine staff.
+//
+// Computed in Fahrenheit internally (the regression's native units),
+// returned in Celsius for the Thai-facing UI.
+function computeHeatIndexC(tempC: number, humidityPct: number): number {
+  const T = tempC * 1.8 + 32;
+  const RH = Math.min(100, Math.max(0, humidityPct));
+
+  // Below ~80F/27C heat index tracks close to air temperature — NOAA's
+  // simple averaging formula, not the full regression. The official
+  // switchover test averages this simple estimate with T itself.
+  const simple = 0.5 * (T + 61 + (T - 68) * 1.2 + RH * 0.094);
+  let hiF = simple;
+
+  if ((simple + T) / 2 >= 80) {
+    hiF =
+      -42.379 +
+      2.04901523 * T +
+      10.14333127 * RH -
+      0.22475541 * T * RH -
+      0.00683783 * T * T -
+      0.05481717 * RH * RH +
+      0.00122874 * T * T * RH +
+      0.00085282 * T * RH * RH -
+      0.00000199 * T * T * RH * RH;
+
+    if (RH < 13 && T >= 80 && T <= 112) {
+      hiF -= ((13 - RH) / 4) * Math.sqrt((17 - Math.abs(T - 95)) / 17);
+    } else if (RH > 85 && T >= 80 && T <= 87) {
+      hiF += ((RH - 85) / 10) * ((87 - T) / 5);
+    }
+  }
+
+  return (hiF - 32) / 1.8;
+}
+
+// NWS heat-index advisory bands (80/90/103/125F thresholds, converted
+// to Celsius). "Caution" is where sustained outdoor activity starts to
+// carry fatigue risk; "Danger"+ is where it becomes an operational call
+// (shade breaks, hydration stations, event postponement).
+function classifyHeatIndex(heatIndexC: number): HeatIndexCategory {
+  if (heatIndexC >= 51) return "extreme-danger";
+  if (heatIndexC >= 39) return "danger";
+  if (heatIndexC >= 32) return "extreme-caution";
+  if (heatIndexC >= 27) return "caution";
+  return "normal";
+}
+
 function deriveStatus({
   rainfallMm,
   windKph,
   warningCount,
+  heatIndexCategory,
 }: {
   rainfallMm: number | null;
   windKph: number | null;
   warningCount: number;
+  heatIndexCategory: HeatIndexCategory | null;
 }): ExecutiveStatus {
-  if (warningCount > 0 || (rainfallMm ?? 0) >= 45 || (windKph ?? 0) >= 35) {
+  if (
+    warningCount > 0 ||
+    (rainfallMm ?? 0) >= 45 ||
+    (windKph ?? 0) >= 35 ||
+    heatIndexCategory === "danger" ||
+    heatIndexCategory === "extreme-danger"
+  ) {
     return "intervene";
   }
 
-  if ((rainfallMm ?? 0) >= 20 || (windKph ?? 0) >= 20) {
+  if (
+    (rainfallMm ?? 0) >= 20 ||
+    (windKph ?? 0) >= 20 ||
+    heatIndexCategory === "extreme-caution"
+  ) {
     return "watch";
   }
 
@@ -140,6 +208,34 @@ function localRainfallPeak(rainfall: RainfallPoint[]) {
   return values.length > 0 ? Math.max(...values) : null;
 }
 
+function buildWeatherSummary(
+  status: ExecutiveStatus,
+  rainfallMm: number | null,
+  windKph: number | null,
+  heatIndexCategory: HeatIndexCategory | null,
+): string {
+  const heatDriven =
+    (heatIndexCategory === "danger" || heatIndexCategory === "extreme-danger") &&
+    (rainfallMm ?? 0) < 45 &&
+    (windKph ?? 0) < 35;
+  const heatWatch =
+    heatIndexCategory === "extreme-caution" && (rainfallMm ?? 0) < 20 && (windKph ?? 0) < 20;
+
+  if (status === "intervene") {
+    return heatDriven
+      ? "Heat index is in the danger band — shift outdoor tour and beach staff to shade/hydration protocol, not just rain and wind."
+      : "Weather pressure is strong enough to threaten road timing, pier departures, or visible queue discipline.";
+  }
+
+  if (status === "watch") {
+    return heatWatch
+      ? "Heat index is running well above air temperature — brief outdoor operators before midday exposure, alongside the rain and wind picture."
+      : "Rain and wind need to stay in the transfer picture, but the corridor is still manageable.";
+  }
+
+  return "Weather pressure is present but not the lead operational constraint right now.";
+}
+
 function buildSourceSummary(
   mode: OperationalWeatherResponse["mode"],
   freshness: OperationalWeatherResponse["freshness"],
@@ -214,10 +310,17 @@ export async function loadOperationalWeather(options?: {
     condition = "Stable recovery";
   }
 
+  const heatIndexC =
+    temperatureC !== null && humidityPct !== null
+      ? Math.round(computeHeatIndexC(temperatureC, humidityPct) * 10) / 10
+      : null;
+  const heatIndexCategory = heatIndexC !== null ? classifyHeatIndex(heatIndexC) : null;
+
   const status = deriveStatus({
     rainfallMm,
     windKph,
     warningCount: scenarioMode ? 0 : warningCount,
+    heatIndexCategory,
   });
   const seaState = summarizeSeaState(marine);
   const mode = scenarioMode ? "modeled" : currentWeather ? "live" : "hybrid";
@@ -258,16 +361,13 @@ export async function loadOperationalWeather(options?: {
     mode,
     status,
     condition,
-    summary:
-      status === "intervene"
-        ? "Weather pressure is strong enough to threaten road timing, pier departures, or visible queue discipline."
-        : status === "watch"
-          ? "Rain and wind need to stay in the transfer picture, but the corridor is still manageable."
-          : "Weather pressure is present but not the lead operational constraint right now.",
+    summary: buildWeatherSummary(status, rainfallMm, windKph, heatIndexCategory),
     temperatureC,
     humidityPct,
     rainfallMm,
     windKph,
+    heatIndexC,
+    heatIndexCategory,
     seaState,
     sourceSummary: buildSourceSummary(mode, freshness, warningCount, scenario),
     freshness,

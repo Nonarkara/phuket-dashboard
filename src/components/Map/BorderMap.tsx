@@ -78,6 +78,8 @@ import {
 } from "../../services/satellite-layers";
 import type { SatelliteSource } from "../../services/satellite-layers";
 import { createWmsTileLayer, createTambonLayer, createAqiColumnLayers, createUrbanFabricLayer, createRiskTwinsLayer } from "../../services/map-engine";
+import { createRasterOverlayLayer } from "../../services/map-engine";
+import { buildMapOverlayCatalog } from "../../lib/map-overlays";
 import type { AccidentForecast } from "../../types/feeds";
 import { PHUKET_FLOOD_ZONES } from "../../data/phuket-flood-zones";
 import { blackspotsGeoJSON, PHUKET_BLACKSPOTS } from "../../data/phuket-blackspots";
@@ -301,6 +303,16 @@ function subscribeToClientState() {
   return () => {};
 }
 
+// GIBS "dated" daily composites (VIIRS/MODIS/AOD) always publish yesterday's
+// UTC scan — matches lib/map-overlays.ts getSafeDate(). Noon UTC keeps the
+// instant stable regardless of when in the day this runs.
+function gibsYesterdayIso(): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 1);
+  d.setUTCHours(12, 0, 0, 0);
+  return d.toISOString();
+}
+
 function detectWebglSupport() {
   if (typeof document === "undefined") {
     return true;
@@ -330,6 +342,7 @@ type OverlayState = {
   aqiColumns: boolean;
   urbanFabric: boolean;
   riskTwins: boolean;
+  aerosolHaze: boolean;
 };
 
 function interpolateMotionFrame<
@@ -778,6 +791,7 @@ export default function BorderMap({
     aqiColumns: false,
     urbanFabric: false,
     riskTwins: false,
+    aerosolHaze: false,
     gridScale: "off",
   }));
 
@@ -1569,6 +1583,14 @@ export default function BorderMap({
   const precipitationSource =
     enabledOverlays.precipitationRadar && rainViewerSource ? rainViewerSource : null;
   const gistdaOceanDate = buildGistdaOceanMeta().capturedAt;
+  // Aerosol/haze: NASA GIBS MODIS Combined AOD, dated daily. Catalog entry
+  // already existed (lib/map-overlays.ts) but was never wired to a live
+  // layer — burning-season haze (Sumatra/local) is exactly the kind of
+  // thing an operator needs on the wall, not buried in a reference catalog.
+  const aerosolOverlay = useMemo(
+    () => buildMapOverlayCatalog().overlays.find((o) => o.id === "aerosolOpticalDepth") ?? null,
+    [],
+  );
   const layers = [
     // ── GISTDA ocean WMS overlays (raster — bottommost so operational layers sit on top) ──
     ...(enabledOverlays.sstAndaman
@@ -1588,6 +1610,7 @@ export default function BorderMap({
     createScopeHighlightLayer(activeGeometry),
     ...(enabledOverlays.aqiColumns && is3D ? createAqiColumnLayers(airQuality) : []),
     ...(precipitationSource ? [createSatelliteTileLayer(precipitationSource)] : []),
+    ...(enabledOverlays.aerosolHaze && aerosolOverlay ? [createRasterOverlayLayer(aerosolOverlay)] : []),
     ...(enabledOverlays.waterways ? createWaterwaysLayer(realWaterwaysGeoJson ?? PHUKET_WATERWAYS) : []),
     ...(enabledOverlays.aqiFlag ? createAqiFlagLayers(airQuality) : []),
     ...(enabledOverlays.roadNetwork && roadsData ? createRoadNetworkLayer(roadsData) : []),
@@ -2134,6 +2157,7 @@ export default function BorderMap({
             {[
               { id: "aqiFlag" as const, label: "AQI" },
               { id: "precipitationRadar" as const, label: "Precipitation" },
+              { id: "aerosolHaze" as const, label: "Haze" },
               { id: "waterways" as const, label: "Waterways" },
               { id: "roadNetwork" as const, label: "Roads" },
               { id: "canalsDrainage" as const, label: "Canals" },
@@ -2210,11 +2234,37 @@ export default function BorderMap({
               </a>
             </div>
           )}
-          {precipitationSource && (
+          {(precipitationSource || (enabledOverlays.aerosolHaze && aerosolOverlay)) && (
             <div className="mt-2 space-y-1 border-t border-[rgba(15,111,136,0.18)] pt-2">
-              {[precipitationSource]
-                .filter((s): s is SatelliteSource => Boolean(s))
-                .map((s) => {
+              {[
+                ...(precipitationSource
+                  ? [{
+                      id: precipitationSource.id,
+                      kind: precipitationSource.cadence === "minute" ? "Radar" : "Satellite",
+                      shortLabel: precipitationSource.shortLabel,
+                      capturedAt: precipitationSource.capturedAt,
+                      cadence: precipitationSource.cadence,
+                      attribution: precipitationSource.attribution,
+                    }]
+                  : []),
+                ...(enabledOverlays.aerosolHaze && aerosolOverlay
+                  ? [{
+                      id: aerosolOverlay.id,
+                      kind: "Satellite",
+                      shortLabel: aerosolOverlay.shortLabel,
+                      // MapOverlay.updatedAt is the catalog-build timestamp, not
+                      // the satellite scan date — GIBS "dated" composites are
+                      // always yesterday's UTC scan (see lib/map-overlays.ts
+                      // getSafeDate). Report that real capture date, not "now".
+                      capturedAt:
+                        aerosolOverlay.timeMode === "dated"
+                          ? gibsYesterdayIso()
+                          : aerosolOverlay.updatedAt,
+                      cadence: "daily" as const,
+                      attribution: aerosolOverlay.source,
+                    }]
+                  : []),
+              ].map((s) => {
                   const tier = satelliteFreshnessTier(s.capturedAt, s.cadence);
                   return (
                     <div
@@ -2222,7 +2272,7 @@ export default function BorderMap({
                       className="flex flex-wrap items-center gap-1.5"
                     >
                       <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.16em] text-[var(--dim)]">
-                        {s.cadence === "minute" ? "Radar" : "Satellite"}
+                        {s.kind}
                       </span>
                       <span
                         className="shrink-0 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--ink)]"

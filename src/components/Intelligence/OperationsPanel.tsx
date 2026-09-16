@@ -165,10 +165,18 @@ function ConstraintCard({
     ? constraint.metrics
     : [
         { label: "Temp", value: constraint.temperatureC !== null ? `${constraint.temperatureC.toFixed(0)}C` : "--" },
+        { label: "Humidity", value: constraint.humidityPct !== null ? `${constraint.humidityPct.toFixed(0)}%` : "--" },
         { label: "Rain", value: constraint.rainfallMm !== null ? `${constraint.rainfallMm.toFixed(1)} mm` : "--" },
         { label: "Wind", value: constraint.windKph !== null ? `${constraint.windKph.toFixed(0)} kph` : "--" },
       ];
   const label = "metrics" in constraint ? constraint.label : constraint.condition;
+  const heatWarning =
+    "heatIndexCategory" in constraint &&
+    constraint.heatIndexCategory !== null &&
+    constraint.heatIndexCategory !== "normal" &&
+    constraint.heatIndexCategory !== "caution"
+      ? constraint.heatIndexCategory
+      : null;
 
   return (
     <section className={`overflow-hidden border ${theme.border} px-3 py-3`}>
@@ -194,8 +202,8 @@ function ConstraintCard({
           </div>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--line)] pt-2 text-[10px]">
-        {metrics.slice(0, 3).map((metric) => (
+      <div className={`mt-3 grid ${metrics.length >= 4 ? "grid-cols-4" : "grid-cols-3"} gap-2 border-t border-[var(--line)] pt-2 text-[10px]`}>
+        {metrics.slice(0, 4).map((metric) => (
           <div key={`${title}-${metric.label}`}>
             <div className="text-[7px] uppercase tracking-[0.16em] text-[var(--dim)]">
               {metric.label}
@@ -209,6 +217,18 @@ function ConstraintCard({
       {"seaState" in constraint && (
         <div className="mt-2 text-[8px] uppercase tracking-[0.16em] text-[var(--dim)]">
           Sea state: <span className="font-mono text-[var(--ink)]">{constraint.seaState}</span>
+        </div>
+      )}
+      {heatWarning && "heatIndexC" in constraint && (
+        <div
+          className={`mt-2 text-[8px] font-bold uppercase tracking-[0.16em] ${
+            heatWarning === "extreme-caution" ? "text-[#f59e0b]" : "text-[#ef4444]"
+          }`}
+        >
+          Heat index {constraint.heatIndexC?.toFixed(0)}C —{" "}
+          {heatWarning === "extreme-caution"
+            ? "brief outdoor staff before midday exposure"
+            : "shade / hydration protocol for outdoor operators"}
         </div>
       )}
       <p className="mt-2 text-[10px] leading-4 text-[var(--muted)]">

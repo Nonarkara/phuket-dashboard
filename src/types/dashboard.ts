@@ -314,6 +314,13 @@ export interface InterchangeTouchpoint {
   updatedAt: string;
 }
 
+export type HeatIndexCategory =
+  | "normal"
+  | "caution"
+  | "extreme-caution"
+  | "danger"
+  | "extreme-danger";
+
 export interface OperationalWeatherResponse {
   generatedAt: string;
   mode: FeedMode;
@@ -324,6 +331,9 @@ export interface OperationalWeatherResponse {
   humidityPct: number | null;
   rainfallMm: number | null;
   windKph: number | null;
+  /** NOAA/NWS heat index ("feels like"), computed from temperature + humidity. */
+  heatIndexC: number | null;
+  heatIndexCategory: HeatIndexCategory | null;
   seaState: string;
   sourceSummary: SourceSummary;
   freshness: DataFreshness;
