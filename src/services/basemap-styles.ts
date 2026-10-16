@@ -68,7 +68,7 @@ function utcDateOffset(daysAgo: number): string {
 export function basemapStyle(id: BasemapId): string | MaplibreRasterStyle {
   switch (id) {
     case "street":
-      return "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+      return "https://tiles.openfreemap.org/styles/positron";
 
     case "satellite":
       return singleRaster(
