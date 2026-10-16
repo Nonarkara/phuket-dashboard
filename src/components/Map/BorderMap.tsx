@@ -1767,7 +1767,7 @@ export default function BorderMap({
                   layers={[
                     createRasterTileLayer({
                       id: "wireframe-carto",
-                      data: "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+                      data: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                       maxZoom: 19,
                     }),
                     ...createPksbBusLayers(animatedPksbBuses),
