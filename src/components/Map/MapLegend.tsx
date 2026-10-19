@@ -66,8 +66,8 @@ export default function MapLegend() {
         aria-label="Toggle map legend"
       >
         <Layers size={12} className="text-[var(--cool)]" />
-        Map Legend & Explanations
-        {open ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+        <span className="map-legend-label">Map Legend & Explanations</span>
+        <span className="map-legend-label">{open ? <ChevronDown size={10} /> : <ChevronUp size={10} />}</span>
       </button>
 
       {open && (

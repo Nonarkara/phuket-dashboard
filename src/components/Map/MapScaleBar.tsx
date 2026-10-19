@@ -40,7 +40,7 @@ export default function MapScaleBar({ zoom, latitude, pitch, unit }: Props) {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-0.5"
+      className="map-scale-bar pointer-events-none absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-0.5"
       aria-label={`Map scale: ${label}${unit === "nm" ? " (nautical miles)" : " (kilometres)"}`}
     >
       <div className="flex items-end gap-1.5 border border-[var(--line)] bg-[var(--bg-surface)]/85 px-2 py-1 backdrop-blur-md">

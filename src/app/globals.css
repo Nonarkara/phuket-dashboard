@@ -89,6 +89,18 @@ html {
   }
 }
 
+/* Portrait widths where a 246px legend and a 224px scope share one row.
+   Shorten the legend to a 44px tap and lift the scale bar above that row. */
+@media (max-width: 520px) {
+  .map-legend-label {
+    display: none;
+  }
+
+  .map-scale-bar {
+    bottom: calc(0.75rem + 44px + 0.5rem);
+  }
+}
+
 body {
   min-height: 100%;
   overflow-x: hidden;

@@ -264,17 +264,17 @@ async function verifyPhoneGlance(browser) {
     {
       lang: "en",
       phrases: ["Arrivals in the next 60 minutes", "Buses moving", "Road events", "Boat contacts"],
-      stress: ["128/60m", "42 bus", "16 rd", "28 boat"],
+      stress: ["888/60m", "888 bus", "888 rd", "888 boat"],
     },
     {
       lang: "th",
       phrases: ["ผู้โดยสารถึงใน 60 นาที", "รถโดยสารที่กำลังวิ่ง", "เหตุการณ์บนถนน", "เรือที่ติดต่อได้"],
-      stress: ["128/60น", "42 รถ", "16 ถนน", "28 เรือ"],
+      stress: ["888/60น", "888 รถ", "888 ถนน", "888 เรือ"],
     },
     {
       lang: "zh",
       phrases: ["未来60分钟进港", "行驶中的巴士", "道路事件", "船舶联系"],
-      stress: ["128/60分", "42巴", "16路", "28船"],
+      stress: ["888/60分", "888巴", "888路", "888船"],
     },
   ];
 
@@ -282,6 +282,7 @@ async function verifyPhoneGlance(browser) {
     for (const viewport of [
       { width: 360, height: 780 },
       { width: 390, height: 844 },
+      { width: 430, height: 932 },
     ]) {
       const page = await browser.newPage({ viewport });
       await page.goto(`${BASE_URL}/?lang=${item.lang}`, { waitUntil: "domcontentloaded" });
@@ -390,21 +391,101 @@ async function verifyPhoneGlance(browser) {
   }
   await landscape.close();
 
+  for (const viewport of [
+    { width: 360, height: 780 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+    { width: 844, height: 390 },
+  ]) {
+    const page = await browser.newPage({ viewport });
+    await page.goto(`${BASE_URL}/?lang=en`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('button[aria-label="Toggle map legend"]');
+    await page.waitForSelector('button[aria-label="Select administrative scope"]');
+    await page.waitForSelector('[aria-label^="Map scale"]');
+    const boxes = await page.evaluate(() => {
+      const rect = (el) => {
+        const box = el.getBoundingClientRect();
+        return { x: box.x, y: box.y, w: box.width, h: box.height, r: box.right, b: box.bottom };
+      };
+      const legend = document.querySelector('button[aria-label="Toggle map legend"]');
+      const scope = document.querySelector('button[aria-label="Select administrative scope"]');
+      const scale = document.querySelector('[aria-label^="Map scale"]');
+      return {
+        legend: rect(legend),
+        scope: rect(scope),
+        scale: rect(scale),
+        header: Math.round(document.querySelector("header.phone-topbar").getBoundingClientRect().height),
+        dock: Math.round(document.querySelector("[data-phone-dock]").getBoundingClientRect().height),
+      };
+    });
+    const hits = (a, b) => a.x < b.r - 0.5 && b.x < a.r - 0.5 && a.y < b.b - 0.5 && b.y < a.b - 0.5;
+    if (hits(boxes.legend, boxes.scope) || hits(boxes.legend, boxes.scale) || hits(boxes.scope, boxes.scale)) {
+      fail(`${viewport.width} map controls overlap: ${JSON.stringify(boxes)}.`);
+    }
+    for (const [name, box] of [["legend", boxes.legend], ["scope", boxes.scope]]) {
+      if (box.w < 44 || box.h < 44) {
+        fail(`${viewport.width} ${name} tap is ${Math.round(box.w)}×${Math.round(box.h)}.`);
+      }
+    }
+    if (boxes.scale.w < 24 || boxes.scale.h < 8) {
+      fail(`${viewport.width} scale bar is hidden: ${JSON.stringify(boxes.scale)}.`);
+    }
+    if (boxes.header !== 45 || boxes.dock !== 56) {
+      fail(`${viewport.width} chrome drifted: header ${boxes.header} dock ${boxes.dock}.`);
+    }
+    await page.close();
+  }
+
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await openWarRoom(desktop);
   await desktop.waitForSelector(".map-kpi-cover", { state: "visible" });
-  const desk = await desktop.evaluate(() => ({
-    header: Math.round(document.querySelector("header").getBoundingClientRect().height),
-    glance: getComputedStyle(document.querySelector(".phone-glance")).display,
-    kpi: getComputedStyle(document.querySelector(".map-kpi-cover")).display,
-    admin: (() => {
-      const button = [...document.querySelectorAll("header button")].find((node) => node.textContent.trim() === "Admin");
-      const rect = button.getBoundingClientRect();
-      return { w: Math.round(rect.width), h: Math.round(rect.height) };
-    })(),
-  }));
-  if (desk.header !== 71 || desk.glance !== "none" || desk.kpi !== "block" || desk.admin.w !== 63 || desk.admin.h !== 24) {
+  await desktop.waitForFunction(() => {
+    const status = document.querySelector("header [role='status']");
+    const label = status?.textContent?.trim() ?? "";
+    return label.length > 12 && label !== "Loading";
+  });
+  const desk = await desktop.evaluate(() => {
+    const status = document.querySelector("header [role='status']");
+    const chip = status.parentElement;
+    const range = document.createRange();
+    range.selectNodeContents(status);
+    const title = document.querySelector(".phone-war-title");
+    const postureWord = [...document.querySelectorAll("header span")].find((node) => node.textContent.trim() === "Posture");
+    const admin = [...document.querySelectorAll("header button")].find((node) => node.textContent.trim() === "Admin");
+    const legend = document.querySelector('button[aria-label="Toggle map legend"]');
+    const scope = document.querySelector('button[aria-label="Select administrative scope"]');
+    const size = (el) => {
+      const box = el.getBoundingClientRect();
+      return { w: Math.round(box.width), h: Math.round(box.height) };
+    };
+    return {
+      header: Math.round(document.querySelector("header").getBoundingClientRect().height),
+      titleRow: Math.round(document.querySelector("header").firstElementChild.getBoundingClientRect().height),
+      glance: getComputedStyle(document.querySelector(".phone-glance")).display,
+      kpi: getComputedStyle(document.querySelector(".map-kpi-cover")).display,
+      admin: size(admin),
+      legend: size(legend),
+      scope: size(scope),
+      titleW: Math.round(title.parentElement.getBoundingClientRect().width),
+      titleLine: getComputedStyle(title).lineHeight,
+      postureX: Math.round(chip.getBoundingClientRect().x),
+      postureWordX: Math.round(postureWord.getBoundingClientRect().x),
+      postureLines: range.getClientRects().length,
+      postureLabel: status.textContent.trim(),
+    };
+  });
+  if (desk.titleRow !== 32 || desk.glance !== "none" || desk.kpi !== "block" || desk.admin.w !== 63 || desk.admin.h !== 24) {
     fail(`Desktop chrome changed: ${JSON.stringify(desk)}.`);
+  }
+  if (desk.legend.w !== 246 || desk.legend.h !== 28 || desk.scope.w !== 224 || desk.scope.h !== 40) {
+    fail(`Desktop map controls changed: ${JSON.stringify(desk)}.`);
+  }
+  if (desk.postureLines !== 1 || Math.abs(desk.titleW - 145) > 8 || Math.abs(desk.postureWordX - 320) > 6 || Math.abs(desk.postureX - 320) > 16) {
+    fail(`Desktop posture drifted from main: ${JSON.stringify(desk)}.`);
+  }
+  const titleLine = parseFloat(desk.titleLine);
+  if (!(titleLine >= 19 && titleLine <= 21)) {
+    fail(`Desktop title line-height is ${desk.titleLine}, main is 20px.`);
   }
   await desktop.close();
 }

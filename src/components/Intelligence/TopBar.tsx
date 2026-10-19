@@ -203,10 +203,10 @@ export default function TopBar({
             />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
-          <div className="w-full min-w-0">
+          <div className="w-full min-w-0 xl:w-auto">
             <div className="phone-topbar-version truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
             <GlanceLine glance={operatorGlance} lang={glanceLang} />
-            <div className="phone-war-title truncate text-[12px] font-bold leading-[13px] tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] min-[3000px]:leading-normal sm:text-[13px]">
+            <div className="phone-war-title truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] min-[3000px]:leading-normal sm:text-[13px]">
               Governor War Room
             </div>
           </div>
