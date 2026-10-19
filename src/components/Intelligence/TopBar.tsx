@@ -141,7 +141,7 @@ export default function TopBar({
     visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 min-[3000px]:py-2 backdrop-blur-xl sm:px-5">
+    <header className="max-h-14 shrink-0 border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1 backdrop-blur-xl sm:max-h-none sm:px-5 sm:py-1.5 min-[3000px]:py-2">
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">

@@ -18,6 +18,8 @@ interface SignalTickerProps {
   mediaWatch: MediaWatchResponse | null;
   disaster?: DisasterFeedResponse | null;
   cameraCount?: number;
+  /** Single scrolling row that stays inside a 56px phone dock. */
+  scroll?: boolean;
 }
 
 function toneFromStatus(status: ExecutiveStatus) {
@@ -33,6 +35,7 @@ export default function SignalTicker({
   mediaWatch,
   disaster,
   cameraCount,
+  scroll = false,
 }: SignalTickerProps) {
   const is4K = useWarRoomScale();
   const topMarine = marine?.corridors[0];
@@ -124,7 +127,14 @@ export default function SignalTicker({
   const items = is4K ? [...coreItems, ...extraItems] : coreItems;
 
   return (
-    <section aria-live="polite" className="no-scrollbar flex h-[48px] overflow-x-auto bg-[var(--bg-raised)] min-[3000px]:h-[48px] sm:grid sm:h-[28px] sm:grid-cols-2 sm:overflow-visible sm:bg-[var(--bg-surface)] lg:grid-cols-4 min-[3000px]:grid-cols-8">
+    <section
+      aria-live="polite"
+      className={
+        scroll
+          ? "no-scrollbar flex h-full min-h-0 items-center overflow-x-auto bg-[var(--bg-raised)]"
+          : "no-scrollbar flex h-[48px] overflow-x-auto bg-[var(--bg-raised)] min-[3000px]:h-[48px] sm:grid sm:h-[28px] sm:grid-cols-2 sm:overflow-visible sm:bg-[var(--bg-surface)] lg:grid-cols-4 min-[3000px]:grid-cols-8"
+      }
+    >
       {items.map((item) => {
         const toneClass =
           item.tone === "up"

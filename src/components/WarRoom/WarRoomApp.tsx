@@ -70,7 +70,7 @@ function WarRoomShell({
   const [selectedProvince, setSelectedProvince] =
     useState<ProvinceSelection | null>(null);
   const [selectedCorridorId, setSelectedCorridorId] = useState("airport-patong");
-  const [mobileTab, setMobileTab] = useState<"brief" | "news">("brief");
+  const [mobileSheet, setMobileSheet] = useState<"brief" | "news" | null>(null);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isDataExplorerOpen, setIsDataExplorerOpen] = useState(false);
@@ -211,6 +211,19 @@ function WarRoomShell({
     };
   }, [scenarioId]);
 
+  useEffect(() => {
+    if (!mobileSheet) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileSheet(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileSheet]);
+
+  const toggleMobileSheet = (next: "brief" | "news") => {
+    setMobileSheet((current) => (current === next ? null : next));
+  };
+
   const openManual = () => {
     setIsArchitectureOpen(false);
     setIsDataExplorerOpen(false);
@@ -234,7 +247,7 @@ function WarRoomShell({
       id="main-content"
       tabIndex={-1}
       data-surface="phuket-dashboard"
-      className="relative flex min-h-[100dvh] w-screen flex-col overflow-x-hidden bg-[var(--bg)] text-[var(--ink)] xl:h-[100dvh] xl:overflow-hidden"
+      className="relative flex h-[100dvh] max-h-[100dvh] w-screen flex-col overflow-hidden bg-[var(--bg)] text-[var(--ink)]"
     >
       <TopBar
         brief={brief}
@@ -249,7 +262,7 @@ function WarRoomShell({
 
       <OpsControlStrip operations={operations} cameraFeed={cameraPayload} />
 
-      <section className="relative flex min-h-0 flex-none overflow-hidden border-t border-[var(--line)] xl:flex-1">
+      <section className="relative flex min-h-0 flex-1 overflow-hidden border-t border-[var(--line)]">
         <aside
           aria-label="Regional intelligence stream"
           className="hidden w-[260px] shrink-0 xl:block 2xl:w-[300px] min-[3000px]:w-[520px]"
@@ -259,7 +272,7 @@ function WarRoomShell({
 
         <section
           aria-label="Operational map"
-          className="relative h-[44dvh] min-h-[330px] min-w-0 flex-none overflow-hidden sm:h-[48dvh] sm:min-h-[380px] xl:h-auto xl:min-h-0 xl:flex-1"
+          className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden"
         >
           <BorderMap
             onProvinceSelect={setSelectedProvince}
@@ -281,58 +294,72 @@ function WarRoomShell({
         </aside>
       </section>
 
-      <section
-        aria-label="Mobile intelligence stack"
-        className="flex h-[68dvh] min-h-[560px] max-h-[760px] flex-col overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)] xl:hidden"
-      >
+      <div className="relative z-[60] shrink-0 xl:hidden">
+        {mobileSheet ? (
+          <div
+            id="phone-intel-sheet"
+            role="region"
+            aria-label={mobileSheet === "brief" ? "Brief" : "News"}
+            className="absolute inset-x-0 bottom-full flex h-[min(46dvh,420px)] max-h-[calc(100dvh-8rem)] flex-col overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)]"
+          >
+            {mobileSheet === "brief" ? (
+              <OperationsPanel data={operations} brief={brief} />
+            ) : (
+              <NewsSidebar />
+            )}
+          </div>
+        ) : null}
         <div
-          role="tablist"
-          aria-label="Switch panel"
-          className="flex shrink-0 border-b border-[var(--line)] bg-[var(--bg-raised)]"
+          data-phone-dock=""
+          className="flex h-14 max-h-14 min-h-0 items-stretch overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)]"
         >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mobileTab === "brief"}
-            onClick={() => setMobileTab("brief")}
-            className={`flex min-h-[44px] flex-1 items-center justify-center gap-2 border-r border-[var(--line)] px-3 text-[10px] font-bold uppercase tracking-[0.18em] transition-colors ${
-              mobileTab === "brief"
-                ? "bg-[var(--bg-raised)] text-[var(--ink)]"
-                : "text-[var(--dim)] hover:text-[var(--ink)]"
-            }`}
-          >
-            Brief
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                mobileTab === "brief" ? "bg-[var(--cool)]" : "bg-[var(--line)]"
-              }`}
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <SignalTicker
+              scroll
+              brief={brief}
+              marine={marine}
+              cityVibes={cityVibes}
+              mediaWatch={mediaWatch}
+              disaster={disaster}
+              cameraCount={cameraPayload?.cameras?.length ?? 0}
             />
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mobileTab === "news"}
-            onClick={() => setMobileTab("news")}
-            className={`flex min-h-[44px] flex-1 items-center justify-center gap-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] transition-colors ${
-              mobileTab === "news"
-                ? "bg-[var(--bg-raised)] text-[var(--ink)]"
-                : "text-[var(--dim)] hover:text-[var(--ink)]"
-            }`}
+          </div>
+          <div
+            role="group"
+            aria-label="Open brief or news"
+            className="flex shrink-0 border-l border-[var(--line)]"
           >
-            News
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                mobileTab === "news" ? "bg-[var(--cool)]" : "bg-[var(--line)]"
+            <button
+              type="button"
+              aria-expanded={mobileSheet === "brief"}
+              aria-controls="phone-intel-sheet"
+              onClick={() => toggleMobileSheet("brief")}
+              className={`flex h-full w-[4.5rem] items-center justify-center border-r border-[var(--line)] px-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                mobileSheet === "brief"
+                  ? "bg-[var(--ink)] text-[var(--bg)]"
+                  : "text-[var(--ink)]"
               }`}
-            />
-          </button>
+            >
+              Brief
+            </button>
+            <button
+              type="button"
+              aria-expanded={mobileSheet === "news"}
+              aria-controls="phone-intel-sheet"
+              onClick={() => toggleMobileSheet("news")}
+              className={`flex h-full w-[4.5rem] items-center justify-center px-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                mobileSheet === "news"
+                  ? "bg-[var(--ink)] text-[var(--bg)]"
+                  : "text-[var(--ink)]"
+              }`}
+            >
+              News
+            </button>
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden bg-[var(--bg-raised)]">
-          {mobileTab === "brief" ? <OperationsPanel data={operations} brief={brief} /> : <NewsSidebar />}
-        </div>
-      </section>
+      </div>
 
-      <div className="sticky bottom-0 z-50 shrink-0 border-t border-[var(--line)] xl:static">
+      <div className="hidden shrink-0 border-t border-[var(--line)] xl:block">
         <SignalTicker
           brief={brief}
           marine={marine}
