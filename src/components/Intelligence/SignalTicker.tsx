@@ -131,7 +131,7 @@ export default function SignalTicker({
       aria-live="polite"
       className={
         scroll
-          ? "no-scrollbar flex h-full min-h-0 items-center overflow-x-auto bg-[var(--bg-raised)]"
+          ? "no-scrollbar flex h-full min-h-0 w-full min-w-0 max-w-full items-center overflow-x-auto bg-[var(--bg-raised)]"
           : "no-scrollbar flex h-[48px] overflow-x-auto bg-[var(--bg-raised)] min-[3000px]:h-[48px] sm:grid sm:h-[28px] sm:grid-cols-2 sm:overflow-visible sm:bg-[var(--bg-surface)] lg:grid-cols-4 min-[3000px]:grid-cols-8"
       }
     >

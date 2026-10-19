@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import DashboardArchitectureModal from "../Intelligence/DashboardArchitectureModal";
 import DatabaseExplorerModal from "../Intelligence/DatabaseExplorerModal";
@@ -71,6 +71,15 @@ function WarRoomShell({
     useState<ProvinceSelection | null>(null);
   const [selectedCorridorId, setSelectedCorridorId] = useState("airport-patong");
   const [mobileSheet, setMobileSheet] = useState<"brief" | "news" | null>(null);
+  const [operatorGlance, setOperatorGlance] = useState<{
+    corridor: string;
+    arrivals: number;
+    buses: number;
+    roads: number;
+    boats: number;
+  } | null>(null);
+  const sheetPushedRef = useRef(false);
+  const mobileSheetRef = useRef<"brief" | "news" | null>(null);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isDataExplorerOpen, setIsDataExplorerOpen] = useState(false);
@@ -211,18 +220,73 @@ function WarRoomShell({
     };
   }, [scenarioId]);
 
-  useEffect(() => {
-    if (!mobileSheet) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileSheet(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileSheet]);
+  const closeMobileSheet = useCallback(() => {
+    setMobileSheet(null);
+    if (sheetPushedRef.current) {
+      sheetPushedRef.current = false;
+      history.back();
+    }
+  }, []);
 
   const toggleMobileSheet = (next: "brief" | "news") => {
-    setMobileSheet((current) => (current === next ? null : next));
+    if (mobileSheetRef.current === next) {
+      closeMobileSheet();
+      return;
+    }
+    if (mobileSheetRef.current === null) {
+      history.pushState({ phoneSheet: next }, "");
+      sheetPushedRef.current = true;
+    } else {
+      history.replaceState({ phoneSheet: next }, "");
+    }
+    setMobileSheet(next);
   };
+
+  const onOperatorGlance = useCallback(
+    (glance: {
+      corridor: string;
+      arrivals: number;
+      buses: number;
+      roads: number;
+      boats: number;
+    }) => {
+      setOperatorGlance((current) => {
+        if (
+          current &&
+          current.corridor === glance.corridor &&
+          current.arrivals === glance.arrivals &&
+          current.buses === glance.buses &&
+          current.roads === glance.roads &&
+          current.boats === glance.boats
+        ) {
+          return current;
+        }
+        return glance;
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    mobileSheetRef.current = mobileSheet;
+  }, [mobileSheet]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && mobileSheetRef.current) closeMobileSheet();
+    };
+    const onPop = () => {
+      if (!sheetPushedRef.current) return;
+      sheetPushedRef.current = false;
+      setMobileSheet(null);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("popstate", onPop);
+    };
+  }, [closeMobileSheet]);
 
   const openManual = () => {
     setIsArchitectureOpen(false);
@@ -258,6 +322,7 @@ function WarRoomShell({
         onOpenModuleSelector={() => setIsModuleSelectorOpen(true)}
         isDark={isDark}
         onToggleDark={toggleDark}
+        operatorGlance={operatorGlance}
       />
 
       <OpsControlStrip operations={operations} cameraFeed={cameraPayload} />
@@ -283,6 +348,7 @@ function WarRoomShell({
             cameraFeed={cameraPayload}
             tourismFeed={tourismHotspots}
             scenarioId={scenarioId}
+            onOperatorGlance={onOperatorGlance}
           />
         </section>
 
@@ -311,7 +377,7 @@ function WarRoomShell({
         ) : null}
         <div
           data-phone-dock=""
-          className="flex h-14 max-h-14 min-h-0 items-stretch overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)]"
+          className="phone-dock flex h-14 max-h-14 min-h-0 w-full min-w-0 max-w-full items-stretch overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)]"
         >
           <div className="min-w-0 flex-1 overflow-hidden">
             <SignalTicker

@@ -15,6 +15,13 @@ import type {
 interface TopBarProps {
   brief: GovernorBrief | null;
   visitorOrigins: PhuketVisitorOriginsResponse | null;
+  operatorGlance?: {
+    corridor: string;
+    arrivals: number;
+    buses: number;
+    roads: number;
+    boats: number;
+  } | null;
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
@@ -61,6 +68,7 @@ function statusClasses(status: ExecutiveStatus) {
 export default function TopBar({
   brief,
   visitorOrigins,
+  operatorGlance,
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
@@ -141,12 +149,12 @@ export default function TopBar({
     visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
-    <header className="max-h-14 shrink-0 border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1 backdrop-blur-xl sm:max-h-none sm:px-5 sm:py-1.5 min-[3000px]:py-2">
+    <header className="phone-topbar max-h-14 shrink-0 border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1 backdrop-blur-xl sm:max-h-none sm:px-5 sm:py-1.5 min-[3000px]:py-2">
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           {/* Logos */}
-          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+          <div className="phone-hide-logos hidden sm:flex items-center gap-1.5 shrink-0">
             <Image
               src={assetPath("/logos/slic.jpg")}
               alt="SLIC"
@@ -171,7 +179,12 @@ export default function TopBar({
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
           <div className="min-w-0">
-            <div className="truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
+            <div className="phone-topbar-version truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
+            <div className="phone-glance truncate text-[10px] font-semibold leading-4 text-[var(--muted)]">
+              {operatorGlance
+                ? `${operatorGlance.corridor} · ${operatorGlance.arrivals} arr · ${operatorGlance.buses} bus · ${operatorGlance.roads} rd · ${operatorGlance.boats} boat`
+                : "Corridor watch"}
+            </div>
             <div className="truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] sm:text-[13px]">
               Governor War Room
             </div>
@@ -346,7 +359,7 @@ export default function TopBar({
               aria-expanded={showAdminMenu}
               aria-haspopup="menu"
               data-control-classification="opens panel"
-              className="border border-[var(--line)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)] sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em]"
+              className="tap-44 border border-[var(--line)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)] sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em]"
             >
               Admin
             </button>

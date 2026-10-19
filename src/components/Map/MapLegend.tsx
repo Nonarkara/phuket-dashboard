@@ -61,7 +61,7 @@ export default function MapLegend() {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 border border-[var(--line-bright)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--ink)] backdrop-blur-xl transition-colors hover:border-[var(--ink)] shadow-md"
+        className="tap-44 flex items-center gap-1.5 border border-[var(--line-bright)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--ink)] backdrop-blur-xl transition-colors hover:border-[var(--ink)] shadow-md"
         aria-expanded={open}
         aria-label="Toggle map legend"
       >
