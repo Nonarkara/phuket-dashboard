@@ -37,6 +37,68 @@
 
 html {
   min-height: 100%;
+  overflow-x: hidden;
+}
+
+.phone-glance {
+  display: none;
+}
+
+/* Portrait phones and short landscape phones. Desktop keeps the map KPI panel.
+   Safe-area padding sits outside the 56px content budget. */
+@media (max-width: 760px), ((orientation: landscape) and (max-height: 500px)) {
+  .map-kpi-cover,
+  .ops-control-strip,
+  .phone-hide-logos,
+  .phone-topbar-version {
+    display: none;
+  }
+
+  .phone-glance {
+    display: block;
+    font-family: var(--font-ui), "Noto Sans Thai", "Droid Sans Fallback", sans-serif;
+    font-size: 11px;
+    line-height: 12px;
+  }
+
+  .phone-war-title {
+    line-height: 13px;
+  }
+
+  .phone-topbar {
+    box-sizing: border-box;
+    max-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: 0;
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  }
+
+  .phone-dock {
+    box-sizing: border-box;
+    height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    max-height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .tap-44 {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Portrait widths where a 246px legend and a 224px scope share one row.
+   Shorten the legend to a 44px tap and lift the scale bar above that row. */
+@media (max-width: 520px) {
+  .map-legend-label {
+    display: none;
+  }
+
+  .map-scale-bar {
+    bottom: calc(0.75rem + 44px + 0.5rem);
+  }
 }
 
 body {

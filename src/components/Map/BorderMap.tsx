@@ -643,10 +643,18 @@ export default function BorderMap({
   cameraFeed,
   tourismFeed,
   scenarioId,
+  onOperatorGlance,
 }: {
   onProvinceSelect?: (province: ProvinceSelection) => void;
   selectedCorridorId?: string;
   onCorridorSelect?: (corridorId: string) => void;
+  onOperatorGlance?: (glance: {
+    corridor: string;
+    arrivals: number;
+    buses: number;
+    roads: number;
+    boats: number;
+  }) => void;
   disasterFeed?: DisasterFeedResponse | null;
   maritimeSecurityFeed?: MaritimeSecurityResponse | null;
   cameraFeed?: PublicCameraResponse | null;
@@ -1237,6 +1245,23 @@ export default function BorderMap({
   const activeCorridor = selectedCorridorId
     ? findCorridorById(selectedCorridorId)
     : GOVERNOR_CORRIDORS[0];
+
+  useEffect(() => {
+    onOperatorGlance?.({
+      corridor: activeCorridor?.label ?? "Phuket",
+      arrivals: arrivalsNext60Count,
+      buses: movingBusCount,
+      roads: trafficEvents.length,
+      boats: maritimeVesselCount,
+    });
+  }, [
+    activeCorridor?.label,
+    arrivalsNext60Count,
+    maritimeVesselCount,
+    movingBusCount,
+    onOperatorGlance,
+    trafficEvents.length,
+  ]);
   const mapStyle = basemapStyle(activeBasemap);
   const fallbackBackgroundClass =
     "bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.08),_rgba(8,20,34,0.95)_62%)]";
@@ -1850,7 +1875,7 @@ export default function BorderMap({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 p-2 sm:p-3 xl:p-4">
+      <div className="map-kpi-cover pointer-events-none absolute inset-x-0 top-0 z-40 p-2 sm:p-3 xl:p-4">
         <section
           className="pointer-events-auto max-h-[calc(100%-1rem)] w-full max-w-[620px] overflow-y-auto border border-[rgba(15,23,42,0.16)] bg-[#f1ede2] px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3"
           style={{

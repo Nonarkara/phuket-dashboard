@@ -11,10 +11,19 @@ import type {
   GovernorNarrativeResponse,
   PhuketVisitorOriginsResponse,
 } from "../../types/dashboard";
+import { glancePresentation, type GlanceLang } from "../../lib/phone-glance";
 
 interface TopBarProps {
   brief: GovernorBrief | null;
   visitorOrigins: PhuketVisitorOriginsResponse | null;
+  operatorGlance?: {
+    corridor: string;
+    arrivals: number;
+    buses: number;
+    roads: number;
+    boats: number;
+  } | null;
+  glanceLang?: GlanceLang;
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
@@ -58,9 +67,33 @@ function statusClasses(status: ExecutiveStatus) {
   return "border-[var(--line)] bg-[rgba(15,111,136,0.05)] text-[var(--cool)]";
 }
 
+function GlanceLine({
+  glance,
+  lang,
+}: {
+  glance: TopBarProps["operatorGlance"];
+  lang: GlanceLang;
+}) {
+  const view = glancePresentation(lang, glance ?? null);
+  return (
+    <div className="phone-glance w-full min-w-0 text-[var(--muted)]" lang={lang} title={view.aria} aria-label={view.aria}>
+      <div className="truncate">{view.corridor}</div>
+      <div data-glance-counts="" className="flex w-full min-w-0 gap-1 whitespace-nowrap tabular-nums">
+        {view.counts.map((count, index) => (
+          <span key={index} className="shrink-0">
+            {count}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TopBar({
   brief,
   visitorOrigins,
+  operatorGlance,
+  glanceLang = "en",
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
@@ -141,12 +174,12 @@ export default function TopBar({
     visitorOrigins?.sources.join(" / ") ?? "Curated Phuket feeder ranking";
 
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 min-[3000px]:py-2 backdrop-blur-xl sm:px-5">
+    <header className="phone-topbar max-h-14 shrink-0 border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1 backdrop-blur-xl sm:max-h-none sm:px-5 sm:py-1.5 min-[3000px]:py-2">
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Title + posture */}
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           {/* Logos */}
-          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+          <div className="phone-hide-logos hidden sm:flex items-center gap-1.5 shrink-0">
             <Image
               src={assetPath("/logos/slic.jpg")}
               alt="SLIC"
@@ -170,9 +203,10 @@ export default function TopBar({
             />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
-          <div className="min-w-0">
-            <div className="truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
-            <div className="truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] sm:text-[13px]">
+          <div className="w-full min-w-0 xl:w-auto">
+            <div className="phone-topbar-version truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
+            <GlanceLine glance={operatorGlance} lang={glanceLang} />
+            <div className="phone-war-title truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] min-[3000px]:leading-normal sm:text-[13px]">
               Governor War Room
             </div>
           </div>
@@ -346,7 +380,7 @@ export default function TopBar({
               aria-expanded={showAdminMenu}
               aria-haspopup="menu"
               data-control-classification="opens panel"
-              className="border border-[var(--line)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)] sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em]"
+              className="tap-44 border border-[var(--line)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] text-[var(--ink)] transition-colors hover:border-[var(--line-bright)] hover:bg-[rgba(17,17,17,0.04)] sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em]"
             >
               Admin
             </button>
