@@ -11,6 +11,7 @@ import type {
   GovernorNarrativeResponse,
   PhuketVisitorOriginsResponse,
 } from "../../types/dashboard";
+import { glancePresentation, type GlanceLang } from "../../lib/phone-glance";
 
 interface TopBarProps {
   brief: GovernorBrief | null;
@@ -22,6 +23,7 @@ interface TopBarProps {
     roads: number;
     boats: number;
   } | null;
+  glanceLang?: GlanceLang;
   onOpenManual: () => void;
   onOpenArchitecture: () => void;
   onOpenDataExplorer: () => void;
@@ -65,10 +67,33 @@ function statusClasses(status: ExecutiveStatus) {
   return "border-[var(--line)] bg-[rgba(15,111,136,0.05)] text-[var(--cool)]";
 }
 
+function GlanceLine({
+  glance,
+  lang,
+}: {
+  glance: TopBarProps["operatorGlance"];
+  lang: GlanceLang;
+}) {
+  const view = glancePresentation(lang, glance ?? null);
+  return (
+    <div className="phone-glance w-full min-w-0 text-[var(--muted)]" lang={lang} title={view.aria} aria-label={view.aria}>
+      <div className="truncate">{view.corridor}</div>
+      <div data-glance-counts="" className="flex w-full min-w-0 gap-1 whitespace-nowrap tabular-nums">
+        {view.counts.map((count, index) => (
+          <span key={index} className="shrink-0">
+            {count}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TopBar({
   brief,
   visitorOrigins,
   operatorGlance,
+  glanceLang = "en",
   onOpenManual,
   onOpenArchitecture,
   onOpenDataExplorer,
@@ -178,14 +203,10 @@ export default function TopBar({
             />
           </div>
           <div className="hidden h-8 w-[1px] bg-[var(--line)] sm:block" />
-          <div className="min-w-0">
+          <div className="w-full min-w-0">
             <div className="phone-topbar-version truncate text-[7px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] min-[3000px]:text-[12px] sm:text-[8px]">Phuket Dashboard v7.0</div>
-            <div className="phone-glance truncate text-[10px] font-semibold leading-4 text-[var(--muted)]">
-              {operatorGlance
-                ? `${operatorGlance.corridor} · ${operatorGlance.arrivals} arr · ${operatorGlance.buses} bus · ${operatorGlance.roads} rd · ${operatorGlance.boats} boat`
-                : "Corridor watch"}
-            </div>
-            <div className="truncate text-[12px] font-bold tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] sm:text-[13px]">
+            <GlanceLine glance={operatorGlance} lang={glanceLang} />
+            <div className="phone-war-title truncate text-[12px] font-bold leading-[13px] tracking-tight text-[var(--ink)] min-[3000px]:text-[22px] min-[3000px]:leading-normal sm:text-[13px]">
               Governor War Room
             </div>
           </div>

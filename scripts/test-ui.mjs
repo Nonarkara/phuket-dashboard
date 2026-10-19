@@ -258,6 +258,157 @@ async function verifyShowcase(browser) {
   await page.close();
 }
 
+async function verifyPhoneGlance(browser) {
+  logStep("Verifying phone glance shows four counts at 11px");
+  const cases = [
+    {
+      lang: "en",
+      phrases: ["Arrivals in the next 60 minutes", "Buses moving", "Road events", "Boat contacts"],
+      stress: ["128/60m", "42 bus", "16 rd", "28 boat"],
+    },
+    {
+      lang: "th",
+      phrases: ["ผู้โดยสารถึงใน 60 นาที", "รถโดยสารที่กำลังวิ่ง", "เหตุการณ์บนถนน", "เรือที่ติดต่อได้"],
+      stress: ["128/60น", "42 รถ", "16 ถนน", "28 เรือ"],
+    },
+    {
+      lang: "zh",
+      phrases: ["未来60分钟进港", "行驶中的巴士", "道路事件", "船舶联系"],
+      stress: ["128/60分", "42巴", "16路", "28船"],
+    },
+  ];
+
+  for (const item of cases) {
+    for (const viewport of [
+      { width: 360, height: 780 },
+      { width: 390, height: 844 },
+    ]) {
+      const page = await browser.newPage({ viewport });
+      await page.goto(`${BASE_URL}/?lang=${item.lang}`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(
+        (needle) => (document.querySelector(".phone-glance")?.getAttribute("aria-label") || "").includes(needle),
+        item.phrases[0],
+        { timeout: 20000 },
+      );
+      await page.waitForSelector(".map-kpi-cover", { state: "attached", timeout: 20000 });
+      const measured = await page.evaluate((stress) => {
+        const glance = document.querySelector(".phone-glance");
+        const counts = document.querySelector("[data-glance-counts]");
+        const style = getComputedStyle(glance);
+        const box = counts.getBoundingClientRect();
+        const spans = [...counts.querySelectorAll("span")].map((span) => {
+          const rect = span.getBoundingClientRect();
+          return rect.width > 0 && rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5;
+        });
+        const probe = document.createElement("div");
+        probe.style.cssText = `position:absolute;visibility:hidden;display:flex;gap:4px;white-space:nowrap;font:${style.font};`;
+        for (const token of stress) {
+          const span = document.createElement("span");
+          span.textContent = token;
+          probe.appendChild(span);
+        }
+        document.body.appendChild(probe);
+        const probeW = probe.scrollWidth;
+        probe.remove();
+        return {
+          font: style.fontSize,
+          countsSW: counts.scrollWidth,
+          countsCW: counts.clientWidth,
+          spans,
+          probeW,
+          header: Math.round(document.querySelector("header.phone-topbar").getBoundingClientRect().height),
+          dock: Math.round(document.querySelector("[data-phone-dock]").getBoundingClientRect().height),
+          kpi: getComputedStyle(document.querySelector(".map-kpi-cover")).display,
+          aria: glance.getAttribute("aria-label") || "",
+          title: glance.getAttribute("title") || "",
+          htmlLang: document.documentElement.lang,
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      }, item.stress);
+      if (parseFloat(measured.font) < 11) {
+        fail(`${item.lang} ${viewport.width} glance font is ${measured.font}, expected at least 11px.`);
+      }
+      if (measured.countsSW > measured.countsCW) {
+        fail(`${item.lang} ${viewport.width} glance counts overflow ${measured.countsSW}>${measured.countsCW}.`);
+      }
+      if (measured.spans.length !== 4 || measured.spans.some((visible) => !visible)) {
+        fail(`${item.lang} ${viewport.width} glance did not paint all four counts.`);
+      }
+      if (measured.probeW > measured.countsCW) {
+        fail(`${item.lang} ${viewport.width} three-digit glance is ${measured.probeW}px inside ${measured.countsCW}px.`);
+      }
+      if (measured.header !== 45 || measured.dock !== 56) {
+        fail(`${item.lang} ${viewport.width} chrome is header ${measured.header} dock ${measured.dock}.`);
+      }
+      if (measured.kpi !== "none" || measured.overflow !== 0 || measured.htmlLang !== item.lang) {
+        fail(`${item.lang} ${viewport.width} kpi ${measured.kpi} overflow ${measured.overflow} lang ${measured.htmlLang}.`);
+      }
+      if (measured.title !== measured.aria || item.phrases.some((phrase) => !measured.aria.includes(phrase))) {
+        fail(`${item.lang} ${viewport.width} glance aria is missing a qualifier.`);
+      }
+      await page.getByRole("button", { name: "Brief", exact: true }).click();
+      await page.waitForSelector("#phone-intel-sheet");
+      const briefText = await page.locator("#phone-intel-sheet").innerText();
+      if (item.phrases.some((phrase) => !briefText.includes(phrase))) {
+        fail(`${item.lang} ${viewport.width} Brief is missing a qualifier.`);
+      }
+      const clipped = await page.evaluate(() =>
+        [...document.querySelectorAll("#phone-intel-sheet dt")].some((node) => node.scrollWidth > node.clientWidth + 1),
+      );
+      if (clipped) {
+        fail(`${item.lang} ${viewport.width} Brief qualifier is truncated.`);
+      }
+      await page.keyboard.press("Escape");
+      await page.waitForSelector("#phone-intel-sheet", { state: "detached" });
+      await page.close();
+    }
+  }
+
+  const landscape = await browser.newPage({ viewport: { width: 844, height: 390 } });
+  await landscape.goto(`${BASE_URL}/?lang=en`, { waitUntil: "domcontentloaded" });
+  await landscape.waitForFunction(
+    () => (document.querySelector(".phone-glance")?.getAttribute("aria-label") || "").includes("Arrivals in the next 60 minutes"),
+  );
+  await landscape.waitForSelector(".map-kpi-cover", { state: "attached" });
+  const land = await landscape.evaluate(() => ({
+    header: Math.round(document.querySelector("header.phone-topbar").getBoundingClientRect().height),
+    dock: Math.round(document.querySelector("[data-phone-dock]").getBoundingClientRect().height),
+    kpi: getComputedStyle(document.querySelector(".map-kpi-cover")).display,
+    font: getComputedStyle(document.querySelector(".phone-glance")).fontSize,
+    countsSW: document.querySelector("[data-glance-counts]").scrollWidth,
+    countsCW: document.querySelector("[data-glance-counts]").clientWidth,
+  }));
+  if (land.header !== 45 || land.dock !== 56 || land.kpi !== "none" || parseFloat(land.font) < 11 || land.countsSW > land.countsCW) {
+    fail(`Landscape phone chrome changed: ${JSON.stringify(land)}.`);
+  }
+  await landscape.getByRole("button", { name: "Brief", exact: true }).click();
+  await landscape.waitForSelector("#phone-intel-sheet");
+  await landscape.goBack();
+  await landscape.waitForSelector("#phone-intel-sheet", { state: "detached" });
+  if (!landscape.url().includes(new URL(BASE_URL).host)) {
+    fail(`Back left the war room: ${landscape.url()}.`);
+  }
+  await landscape.close();
+
+  const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await openWarRoom(desktop);
+  await desktop.waitForSelector(".map-kpi-cover", { state: "visible" });
+  const desk = await desktop.evaluate(() => ({
+    header: Math.round(document.querySelector("header").getBoundingClientRect().height),
+    glance: getComputedStyle(document.querySelector(".phone-glance")).display,
+    kpi: getComputedStyle(document.querySelector(".map-kpi-cover")).display,
+    admin: (() => {
+      const button = [...document.querySelectorAll("header button")].find((node) => node.textContent.trim() === "Admin");
+      const rect = button.getBoundingClientRect();
+      return { w: Math.round(rect.width), h: Math.round(rect.height) };
+    })(),
+  }));
+  if (desk.header !== 71 || desk.glance !== "none" || desk.kpi !== "block" || desk.admin.w !== 63 || desk.admin.h !== 24) {
+    fail(`Desktop chrome changed: ${JSON.stringify(desk)}.`);
+  }
+  await desktop.close();
+}
+
 async function verifyResponsiveLayout(browser) {
   logStep("Verifying responsive layout");
   const wall = await browser.newPage({ viewport: { width: 3840, height: 2160 } });
@@ -284,6 +435,7 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   await verifyBaseUrl();
+  await verifyPhoneGlance(browser);
   await verifyApiScenarios();
   await verifyShowcase(browser);
 

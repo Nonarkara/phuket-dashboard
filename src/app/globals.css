@@ -56,6 +56,13 @@ html {
 
   .phone-glance {
     display: block;
+    font-family: var(--font-ui), "Noto Sans Thai", "Droid Sans Fallback", sans-serif;
+    font-size: 11px;
+    line-height: 12px;
+  }
+
+  .phone-war-title {
+    line-height: 13px;
   }
 
   .phone-topbar {

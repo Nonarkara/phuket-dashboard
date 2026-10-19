@@ -19,6 +19,12 @@ import {
   fetchJsonOrNull,
   isAbortError,
 } from "../../lib/client-requests";
+import {
+  glanceLangFromParam,
+  glancePresentation,
+  type GlanceLang,
+  type OperatorGlance,
+} from "../../lib/phone-glance";
 import type {
   CityVibesResponse,
   DisasterFeedResponse,
@@ -35,49 +41,54 @@ import type {
 
 export default function WarRoomApp() {
   const [scenarioId, setScenarioId] = useState<string | null>(null);
+  const [glanceLang, setGlanceLang] = useState<GlanceLang>("en");
 
   return (
     <>
       <Suspense fallback={null}>
-        <ScenarioParamBridge onScenarioChange={setScenarioId} />
+        <ScenarioParamBridge onScenarioChange={setScenarioId} onLangChange={setGlanceLang} />
       </Suspense>
-      <WarRoomShell scenarioId={scenarioId} />
+      <WarRoomShell scenarioId={scenarioId} glanceLang={glanceLang} />
     </>
   );
 }
 
 function ScenarioParamBridge({
   onScenarioChange,
+  onLangChange,
 }: {
   onScenarioChange: (scenarioId: string | null) => void;
+  onLangChange: (lang: GlanceLang) => void;
 }) {
   const searchParams = useSearchParams();
   const scenarioId = searchParams.get("scenario");
+  const lang = glanceLangFromParam(searchParams.get("lang")) ?? "en";
 
   useEffect(() => {
     onScenarioChange(scenarioId);
   }, [onScenarioChange, scenarioId]);
+
+  useEffect(() => {
+    onLangChange(lang);
+    document.documentElement.lang = lang;
+  }, [lang, onLangChange]);
 
   return null;
 }
 
 function WarRoomShell({
   scenarioId,
+  glanceLang,
 }: {
   scenarioId: string | null;
+  glanceLang: GlanceLang;
 }) {
   const [isDark, toggleDark] = useDarkMode();
   const [selectedProvince, setSelectedProvince] =
     useState<ProvinceSelection | null>(null);
   const [selectedCorridorId, setSelectedCorridorId] = useState("airport-patong");
   const [mobileSheet, setMobileSheet] = useState<"brief" | "news" | null>(null);
-  const [operatorGlance, setOperatorGlance] = useState<{
-    corridor: string;
-    arrivals: number;
-    buses: number;
-    roads: number;
-    boats: number;
-  } | null>(null);
+  const [operatorGlance, setOperatorGlance] = useState<OperatorGlance | null>(null);
   const sheetPushedRef = useRef(false);
   const mobileSheetRef = useRef<"brief" | "news" | null>(null);
   const [isManualOpen, setIsManualOpen] = useState(false);
@@ -323,6 +334,7 @@ function WarRoomShell({
         isDark={isDark}
         onToggleDark={toggleDark}
         operatorGlance={operatorGlance}
+        glanceLang={glanceLang}
       />
 
       <OpsControlStrip operations={operations} cameraFeed={cameraPayload} />
@@ -369,7 +381,12 @@ function WarRoomShell({
             className="absolute inset-x-0 bottom-full flex h-[min(46dvh,420px)] max-h-[calc(100dvh-8rem)] flex-col overflow-hidden border-t border-[var(--line)] bg-[var(--bg-raised)]"
           >
             {mobileSheet === "brief" ? (
-              <OperationsPanel data={operations} brief={brief} />
+              <div className="flex h-full min-h-0 flex-col">
+                <GlanceBrief glance={operatorGlance} lang={glanceLang} />
+                <div className="min-h-0 flex-1">
+                  <OperationsPanel data={operations} brief={brief} />
+                </div>
+              </div>
             ) : (
               <NewsSidebar />
             )}
@@ -456,5 +473,25 @@ function WarRoomShell({
         <ModuleSelector onClose={() => setIsModuleSelectorOpen(false)} />
       ) : null}
     </main>
+  );
+}
+
+function GlanceBrief({
+  glance,
+  lang,
+}: {
+  glance: OperatorGlance | null;
+  lang: GlanceLang;
+}) {
+  const view = glancePresentation(lang, glance);
+  return (
+    <dl className="shrink-0 border-b border-[var(--line)] px-3 py-2 text-[11px] leading-4">
+      {view.brief.map((row) => (
+        <div key={row.label} className="flex items-baseline justify-between gap-3 py-0.5">
+          <dt className="min-w-0 text-[var(--muted)]">{row.label}</dt>
+          <dd className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-[var(--ink)]">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
