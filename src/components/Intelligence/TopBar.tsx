@@ -333,6 +333,14 @@ export default function TopBar({
             </button>
           )}
           <Link
+            href="/walkthrough"
+            className="hidden border border-[var(--cool)] bg-[rgba(15,111,136,0.06)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--cool)] transition-colors hover:bg-[var(--cool)] hover:text-white sm:flex sm:items-center sm:gap-1.5"
+            title="Location Scout 3D — manga & line-art neighborhood walkthrough of Phuket Old Town & Patong"
+          >
+            <span>探</span>
+            <span>Location Scout 3D</span>
+          </Link>
+          <Link
             href="/showcase"
             className="hidden border border-[var(--line)] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--dim)] transition-colors hover:border-[var(--line-bright)] hover:text-[var(--ink)] sm:block"
             title="Narrative showcase — design philosophy and scenario guide"
@@ -355,6 +363,14 @@ export default function TopBar({
                 role="menu"
                 className="absolute right-0 top-full z-50 mt-1 min-w-[180px] border border-[var(--line)] bg-[var(--bg-raised)] p-1.5"
               >
+                <Link
+                  href="/walkthrough"
+                  onClick={() => setShowAdminMenu(false)}
+                  role="menuitem"
+                  className="block w-full border border-transparent px-2 py-1.5 text-left text-[10px] font-medium text-[var(--cool)] transition-colors hover:border-[var(--line)] hover:bg-[rgba(15,111,136,0.06)]"
+                >
+                  探 Location Scout 3D Walkthrough
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

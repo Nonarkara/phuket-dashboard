@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { apiUrl } from "../../lib/asset-path";
 import MapLegend from "./MapLegend";
 import MapScaleBar from "./MapScaleBar";
@@ -2023,6 +2024,14 @@ export default function BorderMap({
                   {m.label}
                 </button>
               ))}
+              <Link
+                href="/walkthrough"
+                title="Location Scout 3D — Manga & Comic Walkthrough of Phuket Old Town & Patong"
+                className="flex items-center gap-1 border border-[var(--line)] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--cool)] transition-all duration-300 hover:border-[var(--cool)] hover:bg-[rgba(15,111,136,0.1)]"
+              >
+                <span>探</span>
+                <span>Scout</span>
+              </Link>
             </div>
           </div>
 
