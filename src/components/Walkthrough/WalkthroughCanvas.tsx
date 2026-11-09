@@ -8,6 +8,8 @@ import {
   Eye,
   Footprints,
   Maximize2,
+  Building2,
+  Layers,
 } from "lucide-react";
 import type {
   WalkthroughPlace,
@@ -15,6 +17,7 @@ import type {
   RenderShaderStyle,
   TimeOfDay,
 } from "../../lib/phuket-walkthrough-data";
+import { ThreeWalkthroughEngine } from "./ThreeWalkthroughEngine";
 
 interface WalkthroughCanvasProps {
   neighborhood: WalkthroughNeighborhood;
@@ -53,9 +56,26 @@ export default function WalkthroughCanvas({
 }: WalkthroughCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [viewEngine, setViewEngine] = useState<"three-street" | "maplibre-aerial">("three-street");
   const [isWarping, setIsWarping] = useState(false);
   const [viewPreset, setViewPreset] = useState<"eye" | "scout" | "aerial">("eye");
   const markersRef = useRef<maplibregl.Marker[]>([]);
+
+  // Synchronize player movement from ThreeWalkthroughEngine with parent coordinates
+  const handleThreePlayerMove = useCallback(
+    (state: { x: number; z: number; headingDeg: number; pitchDeg: number }) => {
+      const centerLat = neighborhood.center[0];
+      const centerLng = neighborhood.center[1];
+      const metersPerDegLat = 111320;
+      const metersPerDegLng = 111320 * Math.cos((centerLat * Math.PI) / 180);
+
+      const newLat = centerLat - state.z / metersPerDegLat;
+      const newLng = centerLng + state.x / metersPerDegLng;
+
+      onCameraChange([newLat, newLng], state.headingDeg, state.pitchDeg);
+    },
+    [neighborhood.center, onCameraChange]
+  );
 
   // Calculate focal length perspective scale for comic lens warping
   const lensTransform = useMemo(() => {
@@ -475,10 +495,28 @@ export default function WalkthroughCanvas({
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#e8e6df] select-none">
-      {/* 3D Map Viewport with CSS Comic Lens Warping */}
+      {/* 3D Walkthrough Viewport: Three.js Procedural Sino-Portuguese Old Town */}
+      <div className={`h-full w-full ${viewEngine === "three-street" ? "block" : "hidden"}`}>
+        <ThreeWalkthroughEngine
+          places={places}
+          selectedPlaceId={selectedPlace?.id}
+          onSelectPlace={(id) => {
+            const found = places.find((p) => p.id === id);
+            if (found) onSelectPlace(found);
+          }}
+          shaderStyle={shaderStyle}
+          timeOfDay={timeOfDay}
+          focalLengthMm={cameraFov}
+          onPlayerMove={handleThreePlayerMove}
+        />
+      </div>
+
+      {/* MapLibre 3D GIS & Satellite / Elevation Viewport */}
       <div
         ref={containerRef}
-        className="h-full w-full transition-transform duration-300"
+        className={`h-full w-full transition-transform duration-300 ${
+          viewEngine === "maplibre-aerial" ? "block" : "hidden"
+        }`}
         style={{
           transform: `perspective(${lensTransform.perspective}px) scale(${lensTransform.scale})`,
         }}
@@ -566,47 +604,85 @@ export default function WalkthroughCanvas({
         </div>
       )}
 
-      {/* Floating View Angle / Perspective Toolbar */}
-      <div className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-1 border border-[var(--line-bright)] bg-[var(--bg-raised)]/90 p-1 shadow-sm backdrop-blur-md">
+      {/* Floating View Engine & Angle Toolbar */}
+      <div className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-1 border border-[var(--line-bright)] bg-[var(--bg-raised)]/95 p-1 shadow-sm backdrop-blur-md">
+        {/* Engine switcher */}
         <button
           type="button"
-          onClick={() => handleViewPresetChange("eye")}
+          onClick={() => setViewEngine("three-street")}
           className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
-            viewPreset === "eye"
-              ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+            viewEngine === "three-street"
+              ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-xs"
               : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
           }`}
-          title="Pedestrian Eye Level (80° Pitch)"
+          title="Procedural Sino-Portuguese 3D Walkthrough with Arches, Shophouses & Screentone"
         >
-          <Footprints size={12} />
-          <span>Eye Level (Stand Here)</span>
+          <Building2 size={12} />
+          <span>3D Old Town Walk</span>
         </button>
         <button
           type="button"
-          onClick={() => handleViewPresetChange("scout")}
+          onClick={() => {
+            setViewEngine("maplibre-aerial");
+            setTimeout(() => mapRef.current?.resize(), 50);
+          }}
           className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
-            viewPreset === "scout"
-              ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+            viewEngine === "maplibre-aerial"
+              ? "border-[var(--cool)] bg-[var(--cool)] text-white shadow-xs"
               : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
           }`}
-          title="Location Scout Isometric (48° Pitch)"
+          title="Satellite & DEM Elevation Map"
         >
-          <Eye size={12} />
-          <span>Scout (45°)</span>
+          <Layers size={12} />
+          <span>Satellite & DEM</span>
         </button>
-        <button
-          type="button"
-          onClick={() => handleViewPresetChange("aerial")}
-          className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
-            viewPreset === "aerial"
-              ? "border-[var(--cool)] bg-[var(--cool)] text-white"
-              : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
-          }`}
-          title="Drone Top-Down Perspective"
-        >
-          <Maximize2 size={12} />
-          <span>Drone</span>
-        </button>
+
+        <div className="h-3 w-px bg-[var(--line)] mx-1" />
+
+        {/* Angle presets (for maplibre mode) */}
+        {viewEngine === "maplibre-aerial" && (
+          <>
+            <button
+              type="button"
+              onClick={() => handleViewPresetChange("eye")}
+              className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                viewPreset === "eye"
+                  ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+                  : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
+              }`}
+              title="Pedestrian Eye Level (80° Pitch)"
+            >
+              <Footprints size={12} />
+              <span>Eye (80°)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewPresetChange("scout")}
+              className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                viewPreset === "scout"
+                  ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+                  : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
+              }`}
+              title="Location Scout Isometric (48° Pitch)"
+            >
+              <Eye size={12} />
+              <span>Scout (45°)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewPresetChange("aerial")}
+              className={`flex items-center gap-1 border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                viewPreset === "aerial"
+                  ? "border-[var(--cool)] bg-[var(--cool)] text-white"
+                  : "border-transparent text-[var(--ink)] hover:border-[var(--line)]"
+              }`}
+              title="Drone Top-Down Perspective"
+            >
+              <Maximize2 size={12} />
+              <span>Drone</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Street Compass HUD & Controls legend */}
