@@ -11,6 +11,9 @@ import {
   CloudSun,
   Share2,
   Check,
+  MapPin,
+  List,
+  Compass,
 } from "lucide-react";
 import {
   PHUKET_WALKTHROUGH_NEIGHBORHOODS,
@@ -68,6 +71,8 @@ export default function WalkthroughApp({
     "all",
   );
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showInspector, setShowInspector] = useState(true);
+  const [mobileTab, setMobileTab] = useState<"canvas" | "places" | "inspector">("canvas");
 
   // Switch neighborhood
   const handleSwitchNeighborhood = (id: WalkthroughNeighborhoodId) => {
@@ -113,6 +118,7 @@ export default function WalkthroughApp({
     setSelectedPlace(place);
     setCameraPosition([place.lat, place.lng]);
     setCameraPitch(80); // Eye-level perspective
+    setMobileTab("canvas");
   };
 
   // Teleport from minimap click
@@ -287,6 +293,21 @@ export default function WalkthroughApp({
             </span>
           </div>
 
+          {/* Toggle Inspector / Radar Button */}
+          <button
+            type="button"
+            onClick={() => setShowInspector((prev) => !prev)}
+            className={`flex items-center gap-1 border px-2 py-1 font-bold uppercase tracking-wider text-[9px] transition-colors ${
+              showInspector
+                ? "border-[var(--cool)] bg-[rgba(15,111,136,0.1)] text-[var(--cool)]"
+                : "border-[var(--line)] text-[var(--dim)] hover:text-[var(--ink)]"
+            }`}
+            title="Toggle Neighborhood Radar & Place Inspector"
+          >
+            <Compass size={11} />
+            <span className="hidden sm:inline">Radar & Info</span>
+          </button>
+
           {/* Share Button */}
           <button
             type="button"
@@ -305,7 +326,9 @@ export default function WalkthroughApp({
         {/* ── LEFT PANEL: Candidates & Places Directory ── */}
         <aside
           aria-label="Neighborhood Places"
-          className="hidden md:flex w-[280px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-raised)] overflow-hidden"
+          className={`w-[280px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-raised)] overflow-hidden ${
+            mobileTab === "places" ? "flex" : "hidden md:flex"
+          }`}
         >
           {/* Panel header */}
           <div className="border-b border-[var(--line)] bg-[var(--bg)] px-3 py-2">
@@ -419,105 +442,152 @@ export default function WalkthroughApp({
         </main>
 
         {/* ── RIGHT PANEL: Region Minimap & Place Inspector ── */}
-        <aside
-          aria-label="Neighborhood Inspector"
-          className="hidden xl:flex w-[340px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto"
-        >
-          {/* Synchronized Radar Minimap */}
-          <div className="p-3 border-b border-[var(--line)]">
-            <WalkthroughMinimap
-              neighborhood={neighborhood}
-              places={neighborhood.places}
-              selectedPlace={selectedPlace}
-              cameraPosition={cameraPosition}
-              cameraBearing={cameraBearing}
-              cameraPitch={cameraPitch}
-              onSelectPlace={(p) => setSelectedPlace(p)}
-              onTeleportToCoord={handleTeleportToCoord}
-            />
-          </div>
-
-          {/* What to build toggles (Rokehan style) */}
-          <div className="border-b border-[var(--line)] bg-[var(--bg)] p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-bold uppercase tracking-wider text-[9px] text-[var(--dim)]">
-                What to build (การสร้างฉาก)
-              </span>
-              <span className="text-[8px] font-mono text-[var(--dim)]">
-                OSM + Terrarium
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[9px]">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showScreentone}
-                  onChange={(e) => setShowScreentone(e.target.checked)}
-                  className="accent-[var(--cool)]"
-                />
-                <span>Manga Tone</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showComicSoundEffects}
-                  onChange={(e) => setShowComicSoundEffects(e.target.checked)}
-                  className="accent-[var(--cool)]"
-                />
-                <span>Sound FX</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showOverheadWires}
-                  onChange={(e) => setShowOverheadWires(e.target.checked)}
-                  className="accent-[var(--cool)]"
-                />
-                <span>Overhead Wires</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showPolesAndSignals}
-                  onChange={(e) => setShowPolesAndSignals(e.target.checked)}
-                  className="accent-[var(--cool)]"
-                />
-                <span>Road Marks & Poles</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Live Street Statistics */}
-          <div className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2 text-[8px] text-[var(--dim)] space-y-0.5">
-            <div className="font-bold text-[var(--ink)]">
-              {neighborhood.name} ({neighborhood.nameTh})
-            </div>
-            <div>
-              {neighborhood.places.length} mapped gastronomy & heritage institutions
-            </div>
-            <div>
-              Elevation ~{neighborhood.groundElevationM}m (AWS Terrarium Tiles) · OpenFreeMap Planet
-            </div>
-          </div>
-
-          {/* Active Place Detail Card */}
-          {selectedPlace ? (
-            <div className="p-3">
-              <WalkthroughPlaceCard
-                place={selectedPlace}
+        {showInspector && (
+          <aside
+            aria-label="Neighborhood Inspector"
+            className={`w-[320px] 2xl:w-[360px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-raised)] overflow-y-auto ${
+              mobileTab === "inspector" ? "flex" : "hidden lg:flex"
+            }`}
+          >
+            {/* Synchronized Radar Minimap */}
+            <div className="p-3 border-b border-[var(--line)]">
+              <WalkthroughMinimap
+                neighborhood={neighborhood}
+                places={neighborhood.places}
+                selectedPlace={selectedPlace}
                 cameraPosition={cameraPosition}
                 cameraBearing={cameraBearing}
-                onTeleportToDoorstep={handleTeleportToPlace}
-                onClose={() => setSelectedPlace(null)}
+                cameraPitch={cameraPitch}
+                onSelectPlace={(p) => setSelectedPlace(p)}
+                onTeleportToCoord={handleTeleportToCoord}
               />
             </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center p-6 text-center text-[10px] text-[var(--dim)]">
-              Click any restaurant marker or candidates on the left to inspect signature dishes and neighborhood orientation.
+
+            {/* What to build toggles (Rokehan style) */}
+            <div className="border-b border-[var(--line)] bg-[var(--bg)] p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-bold uppercase tracking-wider text-[9px] text-[var(--dim)]">
+                  What to build (การสร้างฉาก)
+                </span>
+                <span className="text-[8px] font-mono text-[var(--dim)]">
+                  OSM + Terrarium
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[9px]">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showScreentone}
+                    onChange={(e) => setShowScreentone(e.target.checked)}
+                    className="accent-[var(--cool)]"
+                  />
+                  <span>Manga Tone</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showComicSoundEffects}
+                    onChange={(e) => setShowComicSoundEffects(e.target.checked)}
+                    className="accent-[var(--cool)]"
+                  />
+                  <span>Sound FX</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showOverheadWires}
+                    onChange={(e) => setShowOverheadWires(e.target.checked)}
+                    className="accent-[var(--cool)]"
+                  />
+                  <span>Overhead Wires</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showPolesAndSignals}
+                    onChange={(e) => setShowPolesAndSignals(e.target.checked)}
+                    className="accent-[var(--cool)]"
+                  />
+                  <span>Road Marks & Poles</span>
+                </label>
+              </div>
             </div>
-          )}
-        </aside>
+
+            {/* Live Street Statistics */}
+            <div className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-2 text-[8px] text-[var(--dim)] space-y-0.5">
+              <div className="font-bold text-[var(--ink)]">
+                {neighborhood.name} ({neighborhood.nameTh})
+              </div>
+              <div>
+                {neighborhood.places.length} mapped gastronomy & heritage institutions
+              </div>
+              <div>
+                Elevation ~{neighborhood.groundElevationM}m (AWS Terrarium Tiles) · OpenFreeMap Planet
+              </div>
+            </div>
+
+            {/* Active Place Detail Card */}
+            {selectedPlace ? (
+              <div className="p-3">
+                <WalkthroughPlaceCard
+                  place={selectedPlace}
+                  cameraPosition={cameraPosition}
+                  cameraBearing={cameraBearing}
+                  onTeleportToDoorstep={handleTeleportToPlace}
+                  onClose={() => setSelectedPlace(null)}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-6 text-center text-[10px] text-[var(--dim)]">
+                Click any restaurant marker or candidates on the left to inspect signature dishes and neighborhood orientation.
+              </div>
+            )}
+          </aside>
+        )}
       </div>
+
+      {/* ── MOBILE SCREEN NAVIGATION TABS (for screens where panels are collapsed) ── */}
+      <nav
+        aria-label="Walkthrough navigation"
+        className="flex md:hidden h-10 shrink-0 border-t border-[var(--line)] bg-[var(--bg-raised)] z-40"
+      >
+        <button
+          type="button"
+          onClick={() => setMobileTab("places")}
+          className={`flex-1 flex items-center justify-center gap-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+            mobileTab === "places"
+              ? "bg-[var(--cool)] text-white"
+              : "text-[var(--dim)] hover:text-[var(--ink)]"
+          }`}
+        >
+          <List size={12} />
+          <span>Places ({filteredPlaces.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("canvas")}
+          className={`flex-1 flex items-center justify-center gap-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+            mobileTab === "canvas"
+              ? "bg-[var(--cool)] text-white"
+              : "text-[var(--dim)] hover:text-[var(--ink)]"
+          }`}
+        >
+          <Compass size={12} />
+          <span>3D Street Scene</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("inspector")}
+          className={`flex-1 flex items-center justify-center gap-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+            mobileTab === "inspector"
+              ? "bg-[var(--cool)] text-white"
+              : "text-[var(--dim)] hover:text-[var(--ink)]"
+          }`}
+        >
+          <MapPin size={12} />
+          <span>Radar & Info</span>
+        </button>
+      </nav>
     </div>
   );
 }

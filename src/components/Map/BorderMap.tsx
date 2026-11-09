@@ -924,9 +924,7 @@ export default function BorderMap({
       if (!mlMap.getSource(BLDG_SRC)) {
         mlMap.addSource(BLDG_SRC, {
           type: "vector",
-          tiles: ["https://tiles.openfreemap.org/planet/{z}/{x}/{y}"],
-          minzoom: 0,
-          maxzoom: 14,
+          url: "https://tiles.openfreemap.org/planet",
           attribution: "© OpenFreeMap · © OpenStreetMap contributors",
         });
       }

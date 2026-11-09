@@ -137,14 +137,31 @@ export default function WalkthroughCanvas({
       terrainMap.setTerrain?.({ source: DEM_SRC, exaggeration: 1.2 });
 
       // 2. Vector Buildings (OpenFreeMap)
-      if (!map.getSource(BLDG_SRC)) {
+      // If the style already loaded openmaptiles, reuse it; otherwise load TileJSON url
+      const hasOpenMapTiles = Boolean(map.getSource("openmaptiles"));
+      const bldgSource = hasOpenMapTiles ? "openmaptiles" : BLDG_SRC;
+
+      if (!hasOpenMapTiles && !map.getSource(BLDG_SRC)) {
         map.addSource(BLDG_SRC, {
           type: "vector",
-          tiles: ["https://tiles.openfreemap.org/planet/{z}/{x}/{y}"],
-          minzoom: 0,
-          maxzoom: 14,
+          url: "https://tiles.openfreemap.org/planet",
         });
       }
+
+      // Hide 2D flat building layer so 3D extrusions shine
+      if (map.getLayer("building")) {
+        map.setLayoutProperty("building", "visibility", "none");
+      }
+
+      // Height expression: real height if tagged, otherwise procedural 9-13m shophouses
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const heightExpr: any = [
+        "case",
+        [">", ["to-number", ["coalesce", ["get", "render_height"], 0]], 0],
+        ["to-number", ["get", "render_height"]],
+        // Default shophouses to 9.5m (typical 2-storey Sino-Portuguese shophouse)
+        9.5,
+      ];
 
       // 3. Shading expression depending on shaderStyle
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,66 +170,37 @@ export default function WalkthroughCanvas({
 
       switch (shaderStyle) {
         case "screentone":
-          // Manga line art and screentone: high contrast monochrome
+          // Manga line art and screentone: high contrast monochrome with shophouse tones
           buildingColorExpr = [
             "interpolate",
             ["linear"],
-            [
-              "to-number",
-              [
-                "coalesce",
-                ["get", "render_height"],
-                ["get", "height"],
-                [
-                  "*",
-                  [
-                    "to-number",
-                    [
-                      "coalesce",
-                      ["get", "building:levels"],
-                      ["get", "levels"],
-                      0,
-                    ],
-                  ],
-                  3.2,
-                ],
-                6,
-              ],
-            ],
+            heightExpr,
             0,
-            "#f2f0e6", // ground walls
+            "#f4f1e8", // ground shophouse walls
             8,
-            "#e2ded0", // 2-3 storey shophouses
-            20,
-            "#bcb7a6", // mid-rise
-            50,
-            "#888372", // tall
+            "#e6e1d3", // 2-3 storey shophouses
+            15,
+            "#c8c1ae", // mid-rise
+            40,
+            "#88816f", // tall
           ];
-          buildingOpacity = 0.92;
+          buildingOpacity = 0.94;
           break;
 
         case "comic-pop":
-          // Vibrant comic book cel-shading
+          // Vibrant Sino-Portuguese pastel & comic book cel-shading
           buildingColorExpr = [
             "interpolate",
             ["linear"],
-            [
-              "to-number",
-              [
-                "coalesce",
-                ["get", "render_height"],
-                ["get", "height"],
-                6,
-              ],
-            ],
+            heightExpr,
             0,
-            "#fef08a", // pastel yellow
-            7,
-            "#7dd3fc", // pastel sky
+            "#fef08a", // pastel yellow shophouse
+            8,
+            "#7dd3fc", // pastel sky turquoise
             14,
-            "#fda4af", // pastel pink
+            "#fda4af", // pastel pink facade
             30,
-            "#f97316", // vibrant orange
+            "#f97316", // vibrant terracotta orange
             60,
             "#a855f7", // violet tower
           ];
@@ -220,7 +208,7 @@ export default function WalkthroughCanvas({
           break;
 
         case "architectural-ink":
-          // Architectural white clay model
+          // Architectural white clay model with crisp ink outlines
           buildingColorExpr = "#f8f9fa";
           buildingOpacity = 0.98;
           break;
@@ -230,15 +218,7 @@ export default function WalkthroughCanvas({
           buildingColorExpr = [
             "interpolate",
             ["linear"],
-            [
-              "to-number",
-              [
-                "coalesce",
-                ["get", "render_height"],
-                ["get", "height"],
-                6,
-              ],
-            ],
+            heightExpr,
             0,
             "#111827",
             10,
@@ -256,33 +236,12 @@ export default function WalkthroughCanvas({
         map.addLayer({
           id: BLDG_LAYER,
           type: "fill-extrusion",
-          source: BLDG_SRC,
+          source: bldgSource,
           "source-layer": "building",
-          minzoom: 12,
+          minzoom: 10,
           paint: {
             "fill-extrusion-color": buildingColorExpr,
-            "fill-extrusion-height": [
-              "to-number",
-              [
-                "coalesce",
-                ["get", "render_height"],
-                ["get", "height"],
-                [
-                  "*",
-                  [
-                    "to-number",
-                    [
-                      "coalesce",
-                      ["get", "building:levels"],
-                      ["get", "levels"],
-                      0,
-                    ],
-                  ],
-                  3.2,
-                ],
-                6,
-              ],
-            ],
+            "fill-extrusion-height": heightExpr,
             "fill-extrusion-base": [
               "to-number",
               ["coalesce", ["get", "render_min_height"], 0],
@@ -292,6 +251,7 @@ export default function WalkthroughCanvas({
         });
       } else {
         map.setPaintProperty(BLDG_LAYER, "fill-extrusion-color", buildingColorExpr);
+        map.setPaintProperty(BLDG_LAYER, "fill-extrusion-height", heightExpr);
         map.setPaintProperty(BLDG_LAYER, "fill-extrusion-opacity", buildingOpacity);
       }
 
