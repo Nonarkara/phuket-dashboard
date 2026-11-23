@@ -70,13 +70,10 @@ export default function ReachabilityClient() {
           carto: {
             type: "raster",
             tiles: [
-              "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+              "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
             ],
             tileSize: 256,
-            attribution: "© OpenStreetMap · © CARTO",
+            attribution: "&copy; Esri, HERE, Garmin &middot; &copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
           },
         },
         layers: [
@@ -287,7 +284,7 @@ export default function ReachabilityClient() {
           REACHABILITY · PHUKET
         </div>
         <div style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.4 }}>
-          Click anywhere on Phuket to see what's reachable in <span style={{ color: "#f59e0b" }}>15 / 30 / 60 min</span> by real road network.
+          Click anywhere on Phuket to see what&apos;s reachable in <span style={{ color: "#f59e0b" }}>15 / 30 / 60 min</span> by real road network.
         </div>
         <div style={{ display: "flex", gap: 1, background: "rgba(230,237,243,0.18)", marginBottom: 10 }}>
           {(["iso", "route"] as const).map((t) => (
