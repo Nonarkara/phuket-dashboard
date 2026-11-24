@@ -45,37 +45,55 @@ const BAA_LABELS: Record<number, { label: string; color: CoralWatchData["baaColo
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const data = await cached("coral-watch-andaman", 3600, async () => {
-    const res = await fetch(CRW_URL, {
-      signal: AbortSignal.timeout(10_000),
-      headers: { "Accept": "text/plain" },
+  try {
+    const data = await cached("coral-watch-andaman", 3600, async () => {
+      const res = await fetch(CRW_URL, {
+        signal: AbortSignal.timeout(10_000),
+        headers: { Accept: "text/plain" },
+      });
+      if (!res.ok) throw new Error(`NOAA CRW ${res.status}`);
+      const text = await res.text();
+      // Find last data row (skip header lines starting with non-digits)
+      const rows = text.split("\n").filter((l) => /^\d{4}/.test(l.trim()));
+      const last = rows[rows.length - 1]?.trim().split(/\s+/);
+      if (!last || last.length < 10) throw new Error("Unexpected CRW format");
+      return {
+        year: last[0],
+        month: last[1],
+        day: last[2],
+        sstMax: parseFloat(last[4]),
+        dhw: parseFloat(last[8]),
+        baa: parseInt(last[9], 10),
+      };
     });
-    if (!res.ok) throw new Error(`NOAA CRW ${res.status}`);
-    const text = await res.text();
-    // Find last data row (skip header lines starting with non-digits)
-    const rows = text.split("\n").filter((l) => /^\d{4}/.test(l.trim()));
-    const last = rows[rows.length - 1]?.trim().split(/\s+/);
-    if (!last || last.length < 10) throw new Error("Unexpected CRW format");
-    return {
-      year: last[0], month: last[1], day: last[2],
-      sstMax: parseFloat(last[4]),
-      dhw: parseFloat(last[8]),
-      baa: parseInt(last[9], 10),
+
+    const baaInfo = BAA_LABELS[Math.min(data.baa, 5)] ?? BAA_LABELS[0];
+    const response: CoralWatchData & { ok: boolean; reason: string | null; as_of: string } = {
+      ok: true,
+      reason: null,
+      as_of: `${data.year}-${data.month.padStart(2, "0")}-${data.day.padStart(2, "0")}`,
+      date: `${data.year}-${data.month.padStart(2, "0")}-${data.day.padStart(2, "0")}`,
+      sstMax: data.sstMax,
+      dhw: Math.round(data.dhw * 10) / 10,
+      baa: data.baa,
+      baaLabel: baaInfo.label,
+      baaColor: baaInfo.color,
+      isGovernorEvent: data.baa >= 3,
+      governorMessage: baaInfo.message,
+      source: "NOAA Coral Reef Watch",
     };
-  });
 
-  const baaInfo = BAA_LABELS[Math.min(data.baa, 5)] ?? BAA_LABELS[0];
-  const response: CoralWatchData = {
-    date: `${data.year}-${data.month.padStart(2, "0")}-${data.day.padStart(2, "0")}`,
-    sstMax: data.sstMax,
-    dhw: Math.round(data.dhw * 10) / 10,
-    baa: data.baa,
-    baaLabel: baaInfo.label,
-    baaColor: baaInfo.color,
-    isGovernorEvent: data.baa >= 3,
-    governorMessage: baaInfo.message,
-    source: "NOAA Coral Reef Watch",
-  };
-
-  return NextResponse.json(response);
+    return NextResponse.json(response, { status: 200 });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        reason: "upstream_unavailable",
+        as_of: null,
+        items: [],
+        source: "NOAA Coral Reef Watch",
+      },
+      { status: 200 },
+    );
+  }
 }

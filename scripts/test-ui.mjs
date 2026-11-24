@@ -558,7 +558,16 @@ async function verifyResponsiveLayout(browser) {
   await phone390.close();
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  args: [
+    "--enable-unsafe-swiftshader",
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-webgl",
+    "--ignore-gpu-blocklist",
+  ],
+});
 
 try {
   await verifyBaseUrl();
