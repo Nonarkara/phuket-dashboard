@@ -158,7 +158,7 @@ function modeDotClass(mode: FeedMode | "unavailable"): string {
 }
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 const MapboxMap = dynamic(() => import("react-map-gl/maplibre"), { ssr: false });
 const MAPBOX_TOKEN = getUsableMapboxToken(
