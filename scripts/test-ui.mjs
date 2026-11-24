@@ -518,6 +518,44 @@ async function verifyResponsiveLayout(browser) {
     "See Live War Room",
   );
   await mobile.close();
+
+  // Task 3 probe: 390x844 must have no horizontal overflow and no empty bordered cards under BRIEF
+  const phone390 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await openWarRoom(phone390);
+  await phone390.waitForTimeout(1500);
+  const overflow390 = await phone390.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  if (overflow390.scrollWidth > overflow390.innerWidth) {
+    fail(
+      `390x844 horizontal overflow: scrollWidth=${overflow390.scrollWidth} > innerWidth=${overflow390.innerWidth}`,
+    );
+  }
+  await phone390.getByRole("button", { name: "Brief", exact: true }).click();
+  await phone390.waitForTimeout(500);
+  const emptyCards = await phone390.evaluate(() => {
+    const sheet = document.getElementById("phone-intel-sheet");
+    if (!sheet) return -1;
+    let empty = 0;
+    for (const el of sheet.querySelectorAll("div, section, article")) {
+      const style = getComputedStyle(el);
+      const hasBorder =
+        parseFloat(style.borderTopWidth) > 0 &&
+        parseFloat(style.borderBottomWidth) > 0 &&
+        parseFloat(style.borderLeftWidth) > 0 &&
+        parseFloat(style.borderRightWidth) > 0;
+      const rect = el.getBoundingClientRect();
+      if (hasBorder && rect.height >= 40 && (el.textContent || "").trim().length === 0) {
+        empty += 1;
+      }
+    }
+    return empty;
+  });
+  if (emptyCards !== 0) {
+    fail(`390x844 BRIEF sheet rendered ${emptyCards} empty bordered card(s).`);
+  }
+  await phone390.close();
 }
 
 const browser = await chromium.launch({ headless: true });
