@@ -12,6 +12,7 @@ import type {
 interface OpsControlStripProps {
   operations: OperationsDashboardResponse | null;
   cameraFeed: PublicCameraResponse | null;
+  unavailable?: boolean;
 }
 
 interface FeedHealthItem {
@@ -116,6 +117,7 @@ function buildFeedHealth(
 export default function OpsControlStrip({
   operations,
   cameraFeed,
+  unavailable = false,
 }: OpsControlStripProps) {
   const actions = operations?.actions.slice(0, 3) ?? [];
   const feedHealth = buildFeedHealth(operations, cameraFeed);
@@ -142,6 +144,10 @@ export default function OpsControlStrip({
               {action}
             </div>
           ))
+        ) : unavailable ? (
+          <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[10px] text-[var(--muted)]">
+            No record from Operations feed right now.
+          </div>
         ) : (
           <SkeletonStrip />
         )}

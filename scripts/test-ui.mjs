@@ -90,6 +90,11 @@ async function verifyBaseUrl() {
     );
   }
 
+  const apiHealth = await fetchJson("/api/health");
+  if (apiHealth?.ok !== true || apiHealth?.service !== "phuket-dashboard" || !Array.isArray(apiHealth?.sources)) {
+    fail(`Expected /api/health to return valid JSON health payload, received ${JSON.stringify(apiHealth)}.`);
+  }
+
   const showcase = await fetchJson("/api/showcase");
   if (!Array.isArray(showcase?.scenarios) || showcase.scenarios.length !== 3) {
     fail("Expected showcase API to expose exactly three scenario cards.");
@@ -136,8 +141,11 @@ async function verifyApiScenarios() {
     fail("Scenario weather route must expose modeled mode.");
   }
 
-  if (!Array.isArray(liveBuses.buses) || liveBuses.buses.length === 0) {
-    fail("Expected the live/default bus feed to return at least one bus.");
+  if (!Array.isArray(liveBuses.buses) || typeof liveBuses.ok !== "boolean") {
+    fail("Expected the live/default bus feed to return an honest JSON payload with a buses array.");
+  }
+  if (liveBuses.ok === false && liveBuses.buses.length !== 0) {
+    fail("Unavailable live bus feed must not fabricate buses.");
   }
 
   if (

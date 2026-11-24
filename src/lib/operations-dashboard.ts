@@ -9,8 +9,9 @@ import {
   nextScheduledDepartureMinute,
   TOUCHPOINT_CONFIGS,
 } from "./operations-model";
-import { loadPksbBusPositions } from "./pksb-live";
+import { loadPksbBusPositions, buildUnavailablePksbBusResponse } from "./pksb-live";
 import { loadRainfallPoints } from "./rainfall";
+import { recordSourceHealth } from "./source-health";
 import { loadTrafficFeed } from "./traffic";
 import { loadMaritimeSecurity } from "./war-room-integrations";
 import { loadOperationalWeather } from "./weather-ops";
@@ -152,14 +153,16 @@ function buildCityTransferSnapshot(input: {
   buses: Awaited<ReturnType<typeof loadPksbBusPositions>>;
   trafficEventCount: number;
 }): DemandSupplySnapshot {
+  const isUnavailable = input.buses.ok === false || input.buses.mode === "degraded";
   const activeBuses = input.buses.buses.filter(
     (bus) => bus.status === "moving" || bus.status === "dwelling",
   ).length;
   const demandRate = input.airportDemand.demandRate;
-  const supplyRate = Math.round(activeBuses * 68 + 240);
+  const supplyRate = isUnavailable ? 0 : Math.round(activeBuses * 68 + 240);
   const gapRate = demandRate - supplyRate;
-  const status =
-    gapRate > 180 || input.trafficEventCount >= 3
+  const status = isUnavailable
+    ? "watch"
+    : gapRate > 180 || input.trafficEventCount >= 3
       ? "intervene"
       : gapRate > 0 || input.trafficEventCount > 0
         ? "watch"
@@ -169,8 +172,9 @@ function buildCityTransferSnapshot(input: {
     id: "city-transfer-supply",
     label: "City transfer supply",
     status,
-    summary:
-      status === "intervene"
+    summary: isUnavailable
+      ? "No record from Phuket Smart Bus right now."
+      : status === "intervene"
         ? "Transfer lift is lagging demand and needs active smoothing between airport, town, and piers."
         : status === "watch"
           ? "Transfer lift is still workable, but there is not much slack if weather or road friction worsens."
@@ -183,9 +187,11 @@ function buildCityTransferSnapshot(input: {
     sourceSummary: sourceSummaryWithMode(
       input.buses.sourceSummary,
       input.buses.mode,
-      input.buses.mode === "live"
-        ? "City lift is being estimated from active PKSB vehicles plus a fixed road-transfer buffer."
-        : "City lift is being estimated from modeled PKSB service plus a fixed road-transfer buffer.",
+      isUnavailable
+        ? "No record from Phuket Smart Bus right now."
+        : input.buses.mode === "live"
+          ? "City lift is being estimated from active PKSB vehicles plus a fixed road-transfer buffer."
+          : "City lift is being estimated from scenario PKSB service plus a fixed road-transfer buffer.",
     ),
     updatedAt: input.buses.generatedAt,
   };
@@ -561,17 +567,106 @@ function applyTouchpointScenario(
   });
 }
 
+export function buildUnavailableOperationsResponse(
+  reason = "upstream_unavailable",
+): OperationsDashboardResponse {
+  const generatedAt = new Date().toISOString();
+  const unavailableFreshness = buildFreshness({
+    checkedAt: generatedAt,
+    observedAt: null,
+    fallbackTier: "unavailable",
+    sourceIds: ["Operations upstream"],
+  });
+  const unavailableSummary: SourceSummary = {
+    label: "Operations upstream",
+    mode: "degraded",
+    sources: ["Operations upstream"],
+    note: "No record from Operations feed right now.",
+    freshness: unavailableFreshness,
+  };
+
+  return {
+    ok: false,
+    reason,
+    as_of: null,
+    items: [],
+    generatedAt,
+    mode: "degraded",
+    airportDemand: {
+      id: "airport-demand",
+      label: "Airport demand",
+      status: "watch",
+      summary: "No record from Phuket Airport arrivals right now.",
+      demandRate: 0,
+      supplyRate: 0,
+      gapRate: 0,
+      unit: "pax/hour",
+      windowLabel: "Next 2 hours",
+      sourceSummary: unavailableSummary,
+      updatedAt: generatedAt,
+    },
+    cityTransferSupply: {
+      id: "city-transfer-supply",
+      label: "City transfer supply",
+      status: "watch",
+      summary: "No record from Phuket Smart Bus right now.",
+      demandRate: 0,
+      supplyRate: 0,
+      gapRate: 0,
+      unit: "pax/hour",
+      windowLabel: "Current operating hour",
+      sourceSummary: unavailableSummary,
+      updatedAt: generatedAt,
+    },
+    trafficFriction: {
+      id: "traffic-friction",
+      label: "Traffic friction",
+      status: "watch",
+      summary: "No record from Longdo/ITIC traffic feed right now.",
+      metrics: [],
+      sourceSummary: unavailableSummary,
+      updatedAt: generatedAt,
+    },
+    weatherConstraint: {
+      generatedAt,
+      mode: "degraded",
+      status: "watch",
+      summary: "No record from TMD / Open-Meteo weather right now.",
+      metrics: [],
+      sourceSummary: unavailableSummary,
+      freshness: unavailableFreshness,
+      radarAvailable: false,
+      rainfallPoints: [],
+    } as unknown as OperationsDashboardResponse["weatherConstraint"],
+    marineConstraint: {
+      id: "marine-constraint",
+      label: "Marine constraint",
+      status: "watch",
+      summary: "No record from Andaman marine feed right now.",
+      metrics: [],
+      sourceSummary: unavailableSummary,
+      updatedAt: generatedAt,
+    },
+    touchpoints: [],
+    actions: [],
+    sources: [],
+    freshness: unavailableFreshness,
+  };
+}
+
 export async function loadOperationsDashboard(options?: {
   scenario?: GovernorScenarioId | null;
 }): Promise<OperationsDashboardResponse> {
   const scenario = options?.scenario ?? "live";
+  const generatedAtFallback = new Date().toISOString();
   const scenarioTraffic = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: generatedAtFallback,
     provider: "Longdo/ITIC",
     status: "scenario",
     events: [],
   };
-  const [arrivals, buses, traffic, rainfall, marine, maritime] = await Promise.all([
+
+  const results = await Promise.allSettled([
     loadFlightArrivals({ scenario }),
     loadPksbBusPositions({ scenario }),
     scenario === "live" ? loadTrafficFeed() : Promise.resolve(scenarioTraffic),
@@ -579,10 +674,84 @@ export async function loadOperationsDashboard(options?: {
     loadMarineStatus({ scenario }),
     loadMaritimeSecurity({ scenario }),
   ]);
-  const weather = await loadOperationalWeather({ rainfall, marine, scenario });
+
+  const allFailed = results.every((r) => r.status === "rejected");
+  if (allFailed) {
+    recordSourceHealth("operations", "unavailable");
+    return buildUnavailableOperationsResponse("upstream_unavailable");
+  }
+
+  const unavailableFreshness = buildFreshness({
+    checkedAt: generatedAtFallback,
+    observedAt: null,
+    fallbackTier: "unavailable",
+    sourceIds: ["Upstream unavailable"],
+  });
+  const unavailableSummary: SourceSummary = {
+    label: "Upstream unavailable",
+    mode: "degraded",
+    sources: [],
+    note: "No record from upstream source right now.",
+    freshness: unavailableFreshness,
+  };
+
+  const arrivals =
+    results[0].status === "fulfilled"
+      ? results[0].value
+      : {
+          generatedAt: generatedAtFallback,
+          mode: "degraded" as FeedMode,
+          arrivals: [],
+          sourceSummary: unavailableSummary,
+        };
+  const buses =
+    results[1].status === "fulfilled"
+      ? results[1].value
+      : buildUnavailablePksbBusResponse("upstream_unavailable");
+  const traffic =
+    results[2].status === "fulfilled"
+      ? results[2].value
+      : {
+          generatedAt: generatedAtFallback,
+          provider: "Longdo/ITIC",
+          status: "degraded",
+          events: [],
+        };
+  const rainfall = results[3].status === "fulfilled" ? results[3].value : [];
+  const marine =
+    results[4].status === "fulfilled"
+      ? results[4].value
+      : {
+          generatedAt: generatedAtFallback,
+          corridors: [],
+        };
+  const maritime: MaritimeSecurityResponse =
+    results[5].status === "fulfilled"
+      ? results[5].value
+      : {
+          generatedAt: generatedAtFallback,
+          mode: "degraded",
+          posture: "watch",
+          summary: "No record from Andaman maritime feed right now.",
+          vessels: [],
+          corridors: [],
+          sourceSummary: unavailableSummary,
+          freshness: unavailableFreshness,
+        } as unknown as MaritimeSecurityResponse;
+
+  let weather: OperationsDashboardResponse["weatherConstraint"];
+  try {
+    weather = await loadOperationalWeather({ rainfall, marine: marine as Awaited<ReturnType<typeof loadMarineStatus>>, scenario });
+  } catch {
+    weather = buildUnavailableOperationsResponse("upstream_unavailable").weatherConstraint;
+  }
+
   const nowMinutes = currentBangkokMinuteOfDay();
   const airportDemand = applyAirportScenario(
-    buildAirportDemandSnapshot({ arrivals, nowMinutes }),
+    buildAirportDemandSnapshot({
+      arrivals: arrivals as Awaited<ReturnType<typeof loadFlightArrivals>>,
+      nowMinutes,
+    }),
     scenario,
   );
   const cityTransferSupply = applyCityTransferScenario(buildCityTransferSnapshot({
@@ -595,7 +764,10 @@ export async function loadOperationsDashboard(options?: {
     eventCount: effectiveTrafficEvents,
     transferGap: cityTransferSupply.gapRate,
   });
-  const marineConstraint = buildMarineConstraint({ marine, maritime });
+  const marineConstraint = buildMarineConstraint({
+    marine: marine as Awaited<ReturnType<typeof loadMarineStatus>>,
+    maritime,
+  });
   const touchpoints = applyTouchpointScenario(buildTouchpoints({
     nowMinutes,
     airportDemand,
@@ -604,18 +776,43 @@ export async function loadOperationsDashboard(options?: {
     maritime,
   }), scenario);
   const generatedAt = new Date().toISOString();
+  const overallMode =
+    scenario === "live"
+      ? deriveOverallMode([
+          arrivals.mode,
+          buses.mode,
+          weather.mode,
+          maritime.mode,
+        ])
+      : "modeled";
+
+  const freshness =
+    scenario === "live"
+      ? summarizeFreshness(
+          [
+            arrivals.sourceSummary.freshness,
+            buses.freshness,
+            weather.freshness,
+            maritime.freshness,
+          ].filter(Boolean),
+          generatedAt,
+        )
+      : buildFreshness({
+          checkedAt: generatedAt,
+          observedAt: generatedAt,
+          fallbackTier: "scenario",
+          sourceIds: [`${scenario} operations drill`],
+        });
+
+  recordSourceHealth("operations", overallMode === "degraded" ? "degraded" : "ok", generatedAt);
 
   return {
+    ok: true,
+    reason: null,
+    as_of: freshness.observedAt ?? generatedAt,
+    items: touchpoints,
     generatedAt,
-    mode:
-      scenario === "live"
-        ? deriveOverallMode([
-            arrivals.mode,
-            buses.mode,
-            weather.mode,
-            maritime.mode,
-          ])
-        : "modeled",
+    mode: overallMode,
     airportDemand,
     cityTransferSupply,
     trafficFriction,
@@ -639,22 +836,6 @@ export async function loadOperationsDashboard(options?: {
         traffic.provider,
       ]),
     ),
-    freshness:
-      scenario === "live"
-        ? summarizeFreshness(
-            [
-              arrivals.sourceSummary.freshness,
-              buses.freshness,
-              weather.freshness,
-              maritime.freshness,
-            ].filter(Boolean),
-            generatedAt,
-          )
-        : buildFreshness({
-            checkedAt: generatedAt,
-            observedAt: generatedAt,
-            fallbackTier: "scenario",
-            sourceIds: [`${scenario} operations drill`],
-          }),
+    freshness,
   };
 }

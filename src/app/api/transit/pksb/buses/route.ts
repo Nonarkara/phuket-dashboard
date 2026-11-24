@@ -1,10 +1,24 @@
 import { NextResponse } from "next/server";
-import { loadPksbBusPositions } from "../../../../../lib/pksb-live";
+import {
+  buildUnavailablePksbBusResponse,
+  loadPksbBusPositions,
+} from "../../../../../lib/pksb-live";
+import { recordSourceHealth } from "../../../../../lib/source-health";
 import { resolveScenario } from "../../../../../lib/scenario";
 
 export const revalidate = 0;
 
 export async function GET(request: Request) {
-  const scenario = resolveScenario(new URL(request.url).searchParams.get("scenario"));
-  return NextResponse.json(await loadPksbBusPositions({ scenario }));
+  try {
+    const scenario = resolveScenario(
+      new URL(request.url).searchParams.get("scenario"),
+    );
+    const payload = await loadPksbBusPositions({ scenario });
+    return NextResponse.json(payload, { status: 200 });
+  } catch {
+    recordSourceHealth("pksb-buses", "unavailable");
+    return NextResponse.json(buildUnavailablePksbBusResponse("upstream_unavailable"), {
+      status: 200,
+    });
+  }
 }

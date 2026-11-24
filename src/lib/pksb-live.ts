@@ -1,5 +1,6 @@
 import { simulateBusPositions } from "./pksb-simulation";
 import { buildFreshness } from "./freshness";
+import { recordSourceHealth } from "./source-health";
 import type {
   FeedMode,
   GovernorScenarioId,
@@ -7,8 +8,6 @@ import type {
   PksbBusPositionResponse,
   SourceSummary,
 } from "../types/dashboard";
-
-const PKSB_API = process.env.PKSB_API_URL ?? "http://localhost:3099";
 
 interface SmartBusVehicle {
   id: string;
@@ -23,24 +22,31 @@ interface SmartBusVehicle {
 }
 
 interface SmartBusAllResponse {
-  vehicles: SmartBusVehicle[];
-  updatedAt: string;
+  vehicles?: SmartBusVehicle[];
+  updatedAt?: string;
 }
 
 function buildSourceSummary(
   mode: FeedMode,
   generatedAt: string,
+  observedAt: string | null,
   scenario: GovernorScenarioId,
 ): SourceSummary {
+  const fallbackTier =
+    mode === "live"
+      ? "live"
+      : mode === "degraded"
+        ? "unavailable"
+        : "scenario";
   const freshness = buildFreshness({
     checkedAt: generatedAt,
-    observedAt: generatedAt,
-    fallbackTier: mode === "live" ? "live" : "scenario",
+    observedAt: mode === "degraded" ? null : observedAt ?? generatedAt,
+    fallbackTier,
     sourceIds:
       mode === "live"
         ? ["PKSB live API"]
-        : scenario === "live"
-          ? ["PKSB modeled service"]
+        : mode === "degraded"
+          ? ["PKSB live API"]
           : ["PKSB scenario model"],
   });
 
@@ -48,39 +54,61 @@ function buildSourceSummary(
     label:
       mode === "live"
         ? "PKSB live vehicle feed"
-        : scenario === "live"
-          ? "PKSB modeled service clock"
-          : "PKSB scenario service clock",
+        : mode === "degraded"
+          ? "PKSB live vehicle feed"
+          : "PKSB scenario service clock (example)",
     mode,
     sources:
       mode === "live"
         ? ["PKSB live API", "Smart Bus vehicle tracker"]
-        : scenario === "live"
-          ? ["PKSB modeled service", "Public timetable fallback"]
-          : ["PKSB scenario model", "Public timetable fallback"],
+        : mode === "degraded"
+          ? ["PKSB live API"]
+          : ["PKSB scenario model", "Public timetable example"],
     note:
       mode === "live"
         ? "Vehicle locations are coming from the PKSB live feed."
-        : scenario === "live"
-          ? "PKSB live API is unavailable, so bus motion is running on the timetable model."
-          : "Bus motion is running on the scenario clock so the transfer drill stays deterministic.",
+        : mode === "degraded"
+          ? "No record from Phuket Smart Bus right now."
+          : `Bus motion is running on the ${scenario} scenario clock so the transfer drill stays deterministic.`,
     freshness,
   };
 }
 
-function normalizeLiveBuses(vehicles: SmartBusVehicle[]): PksbBusPosition[] {
-  return vehicles.map((vehicle) => ({
-    id: vehicle.id,
-    routeId: vehicle.routeId,
-    licensePlate: vehicle.licensePlate,
-    vehicleId: vehicle.vehicleId,
-    lng: vehicle.coordinates[1],
-    lat: vehicle.coordinates[0],
-    heading: vehicle.heading,
-    speedKph: vehicle.speedKph,
-    status: vehicle.status,
-    updatedAt: vehicle.updatedAt,
-  }));
+function normalizeLiveBuses(vehicles: unknown): PksbBusPosition[] {
+  if (!Array.isArray(vehicles)) {
+    return [];
+  }
+
+  return vehicles
+    .filter((vehicle): vehicle is SmartBusVehicle => {
+      if (!vehicle || typeof vehicle !== "object") return false;
+      const coords = (vehicle as SmartBusVehicle).coordinates;
+      return (
+        Array.isArray(coords) &&
+        coords.length >= 2 &&
+        typeof coords[0] === "number" &&
+        typeof coords[1] === "number" &&
+        Number.isFinite(coords[0]) &&
+        Number.isFinite(coords[1])
+      );
+    })
+    .map((vehicle) => ({
+      id: String(vehicle.id ?? vehicle.vehicleId ?? ""),
+      routeId: String(vehicle.routeId ?? "unknown"),
+      licensePlate: String(vehicle.licensePlate ?? ""),
+      vehicleId: String(vehicle.vehicleId ?? ""),
+      lng: vehicle.coordinates[1],
+      lat: vehicle.coordinates[0],
+      heading: typeof vehicle.heading === "number" ? vehicle.heading : 0,
+      speedKph: typeof vehicle.speedKph === "number" ? vehicle.speedKph : 0,
+      status:
+        vehicle.status === "moving" ||
+        vehicle.status === "dwelling" ||
+        vehicle.status === "unknown"
+          ? vehicle.status
+          : "unknown",
+      updatedAt: vehicle.updatedAt ?? new Date().toISOString(),
+    }));
 }
 
 function applyBusScenario(
@@ -122,55 +150,95 @@ function applyBusScenario(
   }));
 }
 
+export function buildUnavailablePksbBusResponse(
+  reason = "upstream_unavailable",
+): PksbBusPositionResponse {
+  const generatedAt = new Date().toISOString();
+  const sourceSummary = buildSourceSummary("degraded", generatedAt, null, "live");
+  return {
+    ok: false,
+    reason,
+    as_of: null,
+    items: [],
+    generatedAt,
+    buses: [],
+    mode: "degraded",
+    sourceSummary,
+    freshness: sourceSummary.freshness!,
+  };
+}
+
 export async function loadPksbBusPositions(options?: {
   scenario?: GovernorScenarioId | null;
+  apiUrl?: string | null;
+  fetchImpl?: typeof fetch;
 }): Promise<PksbBusPositionResponse> {
-  let buses: PksbBusPosition[];
-  let mode: FeedMode = "modeled";
-  let observedAt: string | null = null;
   const scenario = options?.scenario ?? "live";
-
-  if (scenario === "live") {
-    try {
-      const response = await fetch(`${PKSB_API}/api/vehicles/all`, {
-        signal: AbortSignal.timeout(5000),
-        cache: "no-store",
-      });
-
-      if (response.ok) {
-        const payload = (await response.json()) as SmartBusAllResponse;
-        buses = normalizeLiveBuses(payload.vehicles ?? []);
-        mode = buses.length > 0 ? "live" : "modeled";
-        observedAt = payload.updatedAt ?? payload.vehicles?.[0]?.updatedAt ?? null;
-      } else {
-        buses = simulateBusPositions();
-      }
-    } catch {
-      buses = simulateBusPositions();
-    }
-  } else {
-    buses = simulateBusPositions();
-  }
-
-  if (mode !== "live") {
-    buses = simulateBusPositions();
-  }
-
-  buses = applyBusScenario(buses, scenario);
-
   const generatedAt = new Date().toISOString();
-  const sourceSummary = buildSourceSummary(mode, generatedAt, scenario);
 
-  return {
-    generatedAt,
-    buses,
-    mode,
-    sourceSummary,
-    freshness: buildFreshness({
-      checkedAt: generatedAt,
-      observedAt: observedAt ?? generatedAt,
-      fallbackTier: mode === "live" ? "live" : "scenario",
-      sourceIds: sourceSummary.sources,
-    }),
-  };
+  // Explicit operator drill scenarios stay deterministic and labeled as modeled example data.
+  if (scenario !== "live") {
+    const simulated = applyBusScenario(
+      simulateBusPositions({ ignoreOperatingHours: true }),
+      scenario,
+    );
+    const sourceSummary = buildSourceSummary("modeled", generatedAt, generatedAt, scenario);
+    return {
+      ok: true,
+      reason: null,
+      as_of: generatedAt,
+      items: simulated,
+      generatedAt,
+      buses: simulated,
+      mode: "modeled",
+      sourceSummary,
+      freshness: sourceSummary.freshness!,
+    };
+  }
+
+  // Live mode: never fabricate buses. Return an honest empty state if upstream is unavailable.
+  const apiBase = options?.apiUrl !== undefined ? options.apiUrl : process.env.PKSB_API_URL;
+  if (!apiBase) {
+    recordSourceHealth("pksb-buses", "unavailable");
+    return buildUnavailablePksbBusResponse("upstream_unavailable");
+  }
+
+  const fetchFn = options?.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetchFn(`${apiBase.replace(/\/$/, "")}/api/vehicles/all`, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      recordSourceHealth("pksb-buses", "unavailable");
+      return buildUnavailablePksbBusResponse("upstream_unavailable");
+    }
+
+    const payload = (await response.json()) as SmartBusAllResponse;
+    const buses = normalizeLiveBuses(payload?.vehicles);
+    const observedAt = payload?.updatedAt ?? buses[0]?.updatedAt ?? generatedAt;
+
+    recordSourceHealth("pksb-buses", "ok", observedAt);
+    const sourceSummary = buildSourceSummary("live", generatedAt, observedAt, "live");
+    return {
+      ok: true,
+      reason: null,
+      as_of: observedAt,
+      items: buses,
+      generatedAt,
+      buses,
+      mode: "live",
+      sourceSummary,
+      freshness: sourceSummary.freshness!,
+    };
+  } catch {
+    recordSourceHealth("pksb-buses", "unavailable");
+    return buildUnavailablePksbBusResponse("upstream_unavailable");
+  } finally {
+    clearTimeout(timer);
+  }
 }

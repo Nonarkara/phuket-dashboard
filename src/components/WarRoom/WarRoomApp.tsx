@@ -110,6 +110,7 @@ function WarRoomShell({
     useState<PhuketVisitorOriginsResponse | null>(null);
   const [operations, setOperations] =
     useState<OperationsDashboardResponse | null>(null);
+  const [operationsSettled, setOperationsSettled] = useState(false);
   const tierOneControllerRef = useRef<AbortController | null>(null);
   const tierOneRequestIdRef = useRef(0);
   const tierTwoControllerRef = useRef<AbortController | null>(null);
@@ -202,8 +203,10 @@ function WarRoomShell({
       if (nextDisaster) setDisaster(nextDisaster);
       if (nextMaritimeSecurity) setMaritimeSecurity(nextMaritimeSecurity);
       if (nextOperations) setOperations(nextOperations);
+      setOperationsSettled(true);
     } catch (error) {
       if (isAbortError(error)) return;
+      setOperationsSettled(true);
     }
   });
 
@@ -337,7 +340,11 @@ function WarRoomShell({
         glanceLang={glanceLang}
       />
 
-      <OpsControlStrip operations={operations} cameraFeed={cameraPayload} />
+      <OpsControlStrip
+        operations={operations}
+        cameraFeed={cameraPayload}
+        unavailable={operationsSettled && (!operations || operations.ok === false)}
+      />
 
       <section className="relative flex min-h-0 flex-1 overflow-hidden border-t border-[var(--line)]">
         <aside
@@ -368,7 +375,11 @@ function WarRoomShell({
           aria-label="Operations desk"
           className="hidden w-[360px] shrink-0 xl:block 2xl:w-[420px] min-[3000px]:w-[520px]"
         >
-          <OperationsPanel data={operations} brief={brief} />
+          <OperationsPanel
+            data={operations}
+            brief={brief}
+            unavailable={operationsSettled && (!operations || operations.ok === false)}
+          />
         </aside>
       </section>
 
@@ -384,7 +395,11 @@ function WarRoomShell({
               <div className="flex h-full min-h-0 flex-col">
                 <GlanceBrief glance={operatorGlance} lang={glanceLang} />
                 <div className="min-h-0 flex-1">
-                  <OperationsPanel data={operations} brief={brief} />
+                  <OperationsPanel
+                    data={operations}
+                    brief={brief}
+                    unavailable={operationsSettled && (!operations || operations.ok === false)}
+                  />
                 </div>
               </div>
             ) : (
