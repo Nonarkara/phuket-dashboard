@@ -227,6 +227,10 @@ export type PksbStopFeature = Feature<Point, PksbStopProperties>;
 export type PksbStopCollection = FeatureCollection<Point, PksbStopProperties>;
 
 export interface PksbTransitResponse {
+  ok?: boolean;
+  reason?: string | null;
+  as_of?: string | null;
+  items?: PksbRouteFeature[];
   generatedAt: string;
   source: string[];
   routes: PksbRouteCollection;
@@ -247,6 +251,10 @@ export interface PksbBusPosition {
 }
 
 export interface PksbBusPositionResponse {
+  ok?: boolean;
+  reason?: string | null;
+  as_of?: string | null;
+  items?: PksbBusPosition[];
   generatedAt: string;
   buses: PksbBusPosition[];
   mode: FeedMode;
@@ -331,6 +339,10 @@ export interface OperationalWeatherResponse {
 }
 
 export interface OperationsDashboardResponse {
+  ok?: boolean;
+  reason?: string | null;
+  as_of?: string | null;
+  items?: InterchangeTouchpoint[];
   generatedAt: string;
   mode: FeedMode;
   airportDemand: DemandSupplySnapshot;

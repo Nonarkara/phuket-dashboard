@@ -47,7 +47,7 @@ export default function ScopeSelector({ scope, units, onSelect, loaded }: Props)
         disabled={!loaded}
         aria-expanded={open}
         aria-label="Select administrative scope"
-        className="pointer-events-auto flex min-h-[36px] w-full items-center justify-between gap-2 border border-[var(--line)] bg-[var(--bg-surface)]/90 px-2.5 py-1.5 text-left backdrop-blur-md transition-colors duration-150 ease-out hover:border-[var(--ink)] disabled:opacity-50"
+        className="tap-44 pointer-events-auto flex min-h-[36px] w-full items-center justify-between gap-2 border border-[var(--line)] bg-[var(--bg-surface)]/90 px-2.5 py-1.5 text-left backdrop-blur-md transition-colors duration-150 ease-out hover:border-[var(--ink)] disabled:opacity-50"
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <Layers size={11} className="shrink-0 text-[var(--cool)]" />

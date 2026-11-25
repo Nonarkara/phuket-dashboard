@@ -38,12 +38,8 @@ export function SkeletonCard() {
 
 export function SkeletonOpsPanel() {
   return (
-    <div className="flex h-full flex-col gap-3 overflow-hidden p-3" aria-hidden="true">
-      <Skeleton width="50%" height="10px" />
-      <SkeletonCard />
-      <SkeletonCard />
-      <SkeletonCard />
-      <SkeletonCard />
+    <div className="px-4 py-3 text-[12px] text-[var(--muted)]" role="status" aria-live="polite">
+      Loading operations brief…
     </div>
   );
 }

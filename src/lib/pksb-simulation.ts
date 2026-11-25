@@ -32,6 +32,26 @@ interface SimulatedBus {
 
 let cachedStops: Record<string, StopCoord[]> | null = null;
 
+const FALLBACK_STOPS: Record<string, StopCoord[]> = {
+  dragon_line: [
+    { lat: 7.8848, lng: 98.3892, name: "Phuket Old Town", no: 1 },
+    { lat: 7.8812, lng: 98.3921, name: "Limelight Avenue", no: 2 },
+    { lat: 7.8781, lng: 98.3953, name: "Saphan Hin", no: 3 },
+  ],
+  main_line: [
+    { lat: 8.1132, lng: 98.3169, name: "Phuket International Airport", no: 1 },
+    { lat: 7.9841, lng: 98.2995, name: "Bang Tao", no: 2 },
+    { lat: 7.8966, lng: 98.2965, name: "Patong Beach", no: 3 },
+    { lat: 7.8206, lng: 98.2992, name: "Kata Beach", no: 4 },
+    { lat: 7.7797, lng: 98.3253, name: "Rawai Beach", no: 5 },
+  ],
+  patong_line: [
+    { lat: 7.8837, lng: 98.3923, name: "Phuket Bus Terminal 1", no: 1 },
+    { lat: 7.9044, lng: 98.3489, name: "Kathu", no: 2 },
+    { lat: 7.8966, lng: 98.2965, name: "Patong Beach", no: 3 },
+  ],
+};
+
 function loadStops(): Record<string, StopCoord[]> {
   if (cachedStops) return cachedStops;
 
@@ -62,10 +82,11 @@ function loadStops(): Record<string, StopCoord[]> {
       byRoute[route].sort((a, b) => a.no - b.no);
     }
 
-    cachedStops = byRoute;
-    return byRoute;
+    cachedStops = Object.keys(byRoute).length > 0 ? byRoute : FALLBACK_STOPS;
+    return cachedStops;
   } catch {
-    return {};
+    cachedStops = FALLBACK_STOPS;
+    return cachedStops;
   }
 }
 
@@ -157,7 +178,9 @@ const ROUTE_CONFIGS: Array<{
   },
 ];
 
-export function simulateBusPositions(): SimulatedBus[] {
+export function simulateBusPositions(options?: {
+  ignoreOperatingHours?: boolean;
+}): SimulatedBus[] {
   const stops = loadStops();
   const now = new Date();
   // Convert to Bangkok time (UTC+7)
@@ -178,10 +201,15 @@ export function simulateBusPositions(): SimulatedBus[] {
     const serviceStart = startHour * 60;
     const serviceEnd = endHour * 60;
 
-    // Not in service hours
-    if (currentMinuteOfDay < serviceStart || currentMinuteOfDay >= serviceEnd) continue;
+    // Not in service hours (for explicit drill scenarios, pin to a midday drill clock)
+    const effectiveMinute =
+      options?.ignoreOperatingHours &&
+      (currentMinuteOfDay < serviceStart || currentMinuteOfDay >= serviceEnd)
+        ? Math.min(serviceStart + 180, serviceEnd - 30)
+        : currentMinuteOfDay;
+    if (effectiveMinute < serviceStart || effectiveMinute >= serviceEnd) continue;
 
-    const minutesSinceStart = currentMinuteOfDay - serviceStart;
+    const minutesSinceStart = effectiveMinute - serviceStart;
 
     // Time for one full trip (all stops, ~3 min per stop segment)
     const tripDuration = (routeStops.length - 1) * 3; // minutes

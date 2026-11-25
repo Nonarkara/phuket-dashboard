@@ -12,6 +12,7 @@ import type {
 interface OpsControlStripProps {
   operations: OperationsDashboardResponse | null;
   cameraFeed: PublicCameraResponse | null;
+  unavailable?: boolean;
 }
 
 interface FeedHealthItem {
@@ -116,12 +117,13 @@ function buildFeedHealth(
 export default function OpsControlStrip({
   operations,
   cameraFeed,
+  unavailable = false,
 }: OpsControlStripProps) {
   const actions = operations?.actions.slice(0, 3) ?? [];
   const feedHealth = buildFeedHealth(operations, cameraFeed);
 
   return (
-    <section className="border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 sm:bg-[var(--bg-surface)] sm:px-5">
+    <section className="ops-control-strip hidden border-b border-[var(--line)] bg-[var(--bg-raised)] px-3 py-1.5 sm:block sm:bg-[var(--bg-surface)] sm:px-5">
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
         <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5">
           <div className="flex items-center gap-1.5">
@@ -142,6 +144,10 @@ export default function OpsControlStrip({
               {action}
             </div>
           ))
+        ) : unavailable ? (
+          <div className="shrink-0 border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-[10px] text-[var(--muted)]">
+            No record from Operations feed right now.
+          </div>
         ) : (
           <SkeletonStrip />
         )}

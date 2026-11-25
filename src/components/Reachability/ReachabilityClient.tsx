@@ -11,7 +11,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import maplibregl, { Map as MaplibreMap, Marker, LngLatBoundsLike } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Map as MaplibreMap, Marker, LngLatBoundsLike } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { apiUrl } from "../../lib/asset-path";
 

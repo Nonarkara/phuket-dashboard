@@ -34,6 +34,7 @@ function modeDotClass(mode: FeedMode | undefined | null): string {
 interface OperationsPanelProps {
   data: OperationsDashboardResponse | null;
   brief?: GovernorBrief | null;
+  unavailable?: boolean;
 }
 
 function statusTheme(status: ExecutiveStatus) {
@@ -295,8 +296,33 @@ function TouchpointCard({ touchpoint }: { touchpoint: InterchangeTouchpoint }) {
   );
 }
 
-export default function OperationsPanel({ data, brief = null }: OperationsPanelProps) {
+export default function OperationsPanel({
+  data,
+  brief = null,
+  unavailable = false,
+}: OperationsPanelProps) {
   const is4K = useWarRoomScale();
+
+  if (unavailable || (data && data.ok === false)) {
+    return (
+      <aside className="flex h-full flex-col border-[var(--line)] bg-[var(--bg-raised)] xl:border-l">
+        <div className="border-b border-[var(--line)] px-4 py-3">
+          <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--dim)]">
+            Governor&apos;s desk
+          </div>
+          <div className="mt-0.5 text-[18px] font-bold tracking-tight text-[var(--ink)]">
+            Daily brief
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {brief ? <GovernorDailyBrief brief={brief} operations={null} /> : null}
+          <p className="px-4 py-3 text-[12px] text-[var(--muted)]">
+            No record from Operations feed right now.
+          </p>
+        </div>
+      </aside>
+    );
+  }
 
   if (!data) {
     return <SkeletonOpsPanel />;

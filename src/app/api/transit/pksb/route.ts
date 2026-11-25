@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import type { FeatureCollection, GeoJsonProperties, MultiLineString, Point } from "geojson";
+import { recordSourceHealth } from "../../../../lib/source-health";
 import type {
   PksbRouteCollection,
   PksbRouteFeature,
@@ -168,53 +169,78 @@ function normalizeStopFeatures(
 }
 
 export async function GET() {
-  const routePayloads = await Promise.all(
-    ROUTE_SOURCES.map(async (route) => {
-      const live =
-        (await fetchJson<FeatureCollection<MultiLineString, RawRouteProperties>>(
-          route.url,
-        )) ??
-        (await readFallbackJson<FeatureCollection<MultiLineString, RawRouteProperties>>(
-          route.fallbackFile,
-        ));
+  const generatedAt = new Date().toISOString();
+  try {
+    const routePayloads = await Promise.all(
+      ROUTE_SOURCES.map(async (route) => {
+        const live =
+          (await fetchJson<FeatureCollection<MultiLineString, RawRouteProperties>>(
+            route.url,
+          )) ??
+          (await readFallbackJson<FeatureCollection<MultiLineString, RawRouteProperties>>(
+            route.fallbackFile,
+          ));
 
-      return { route, payload: live };
-    }),
-  );
+        return { route, payload: live };
+      }),
+    );
 
-  const liveStops =
-    (await fetchJson<FeatureCollection<Point, RawStopProperties>>(STOPS_SOURCE.url)) ??
-    (await readFallbackJson<FeatureCollection<Point, RawStopProperties>>(
-      STOPS_SOURCE.fallbackFile,
-    ));
+    const liveStops =
+      (await fetchJson<FeatureCollection<Point, RawStopProperties>>(STOPS_SOURCE.url)) ??
+      (await readFallbackJson<FeatureCollection<Point, RawStopProperties>>(
+        STOPS_SOURCE.fallbackFile,
+      ));
 
-  const routes: PksbRouteCollection = {
-    type: "FeatureCollection",
-    features: routePayloads.flatMap(({ route, payload }) =>
-      payload && isFeatureCollection<RawRouteProperties>(payload)
-        ? normalizeRouteFeatures(route.id, payload as FeatureCollection<MultiLineString, RawRouteProperties>)
-        : [],
-    ),
-  };
+    const routes: PksbRouteCollection = {
+      type: "FeatureCollection",
+      features: routePayloads.flatMap(({ route, payload }) =>
+        payload && isFeatureCollection<RawRouteProperties>(payload)
+          ? normalizeRouteFeatures(route.id, payload as FeatureCollection<MultiLineString, RawRouteProperties>)
+          : [],
+      ),
+    };
 
-  const stops: PksbStopCollection = {
-    type: "FeatureCollection",
-    features:
-      liveStops && isFeatureCollection<RawStopProperties>(liveStops)
-        ? normalizeStopFeatures(liveStops as FeatureCollection<Point, RawStopProperties>)
-        : [],
-  };
+    const stops: PksbStopCollection = {
+      type: "FeatureCollection",
+      features:
+        liveStops && isFeatureCollection<RawStopProperties>(liveStops)
+          ? normalizeStopFeatures(liveStops as FeatureCollection<Point, RawStopProperties>)
+          : [],
+    };
 
-  const payload: PksbTransitResponse = {
-    generatedAt: new Date().toISOString(),
-    source: [
-      "Phuket Smart Bus public tracker",
-      "smartbus.phuket.cloud route GeoJSON",
-      "Local PKSB snapshot fallback",
-    ],
-    routes,
-    stops,
-  };
+    const hasData = routes.features.length > 0 || stops.features.length > 0;
+    recordSourceHealth("pksb-routes", hasData ? "ok" : "unavailable", hasData ? generatedAt : null);
 
-  return NextResponse.json(payload);
+    const payload: PksbTransitResponse = {
+      ok: hasData,
+      reason: hasData ? null : "upstream_unavailable",
+      as_of: hasData ? generatedAt : null,
+      items: routes.features,
+      generatedAt,
+      source: hasData
+        ? [
+            "Phuket Smart Bus public tracker",
+            "smartbus.phuket.cloud route GeoJSON",
+            "Local PKSB snapshot fallback",
+          ]
+        : ["Phuket Smart Bus public tracker"],
+      routes,
+      stops,
+    };
+
+    return NextResponse.json(payload, { status: 200 });
+  } catch {
+    recordSourceHealth("pksb-routes", "unavailable");
+    const emptyPayload: PksbTransitResponse = {
+      ok: false,
+      reason: "upstream_unavailable",
+      as_of: null,
+      items: [],
+      generatedAt,
+      source: ["Phuket Smart Bus public tracker"],
+      routes: { type: "FeatureCollection", features: [] },
+      stops: { type: "FeatureCollection", features: [] },
+    };
+    return NextResponse.json(emptyPayload, { status: 200 });
+  }
 }
