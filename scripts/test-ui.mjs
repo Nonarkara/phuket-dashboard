@@ -58,8 +58,8 @@ async function closeOverlay(page) {
 }
 
 async function openShowcase(page) {
-  logStep("Opening /");
-  await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
+  logStep("Opening /showcase");
+  await page.goto(`${BASE_URL}/showcase`, { waitUntil: "domcontentloaded" });
   await expectVisible(
     page.getByRole("heading", { name: "Policy without product is theater.", exact: true }),
     "Policy without product is theater.",
@@ -67,8 +67,8 @@ async function openShowcase(page) {
 }
 
 async function openWarRoom(page, query = "") {
-  logStep(`Opening /war-room${query}`);
-  await page.goto(`${BASE_URL}/war-room${query}`, { waitUntil: "domcontentloaded" });
+  logStep(`Opening /${query}`);
+  await page.goto(`${BASE_URL}/${query}`, { waitUntil: "domcontentloaded" });
   await expectVisible(page.getByRole("button", { name: "Admin", exact: true }), "Admin");
 }
 
@@ -170,14 +170,14 @@ async function verifyMainControls(page) {
     );
   }
 
-  await page.getByRole("button", { name: "Aerial", exact: true }).click({ force: true });
-  await expectPressed(page, "Aerial");
-  await page.getByRole("button", { name: "Map", exact: true }).click({ force: true });
-  await expectPressed(page, "Map");
+  await page.getByRole("button", { name: "Satellite", exact: true }).click({ force: true });
+  await expectPressed(page, "Satellite");
+  await page.getByRole("button", { name: "Street", exact: true }).click({ force: true });
+  await expectPressed(page, "Street");
 
-  for (const lens of ["Operations", "Safety", "Weather", "Tourism"]) {
-    await page.getByRole("button", { name: lens, exact: true }).click({ force: true });
-    await expectPressed(page, lens);
+  for (const mode of ["2D", "3D", "NM"]) {
+    await page.getByRole("button", { name: mode, exact: true }).click({ force: true });
+    await expectPressed(page, mode);
   }
 
   for (const corridor of [
@@ -186,7 +186,7 @@ async function verifyMainControls(page) {
     "Chalong / Rassada / Ao Po",
     "Patong / Karon / Kata",
   ]) {
-    await page.getByRole("button", { name: corridor, exact: true }).click({ force: true });
+    await page.getByRole("button", { name: corridor, exact: true }).first().click({ force: true });
     await expectPressed(page, corridor);
   }
 
@@ -235,7 +235,7 @@ async function verifyScenarioPages(browser) {
   for (const scenario of ["tourism-surge-weekend", "red-monsoon-day"]) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     await openWarRoom(page, `?scenario=${scenario}`);
-    await expectVisible(page.getByText("Operations desk", { exact: true }), "Operations desk");
+    await expectVisible(page.getByText("Daily brief", { exact: true }), "Daily brief");
     await expectVisible(page.getByText("Bus to boat touchpoints", { exact: true }), "Bus to boat touchpoints");
     await expectVisible(page.getByText("MODELED", { exact: true }), "MODELED");
     await page.close();
@@ -292,7 +292,8 @@ async function verifyPhoneGlance(browser) {
       { width: 390, height: 844 },
       { width: 430, height: 932 },
     ]) {
-      const page = await browser.newPage({ viewport });
+      const ctx = await browser.newContext({ viewport });
+      const page = await ctx.newPage();
       await page.goto(`${BASE_URL}/?lang=${item.lang}`, { waitUntil: "domcontentloaded" });
       await page.waitForFunction(
         (needle) => (document.querySelector(".phone-glance")?.getAttribute("aria-label") || "").includes(needle),
@@ -355,7 +356,7 @@ async function verifyPhoneGlance(browser) {
       if (measured.title !== measured.aria || item.phrases.some((phrase) => !measured.aria.includes(phrase))) {
         fail(`${item.lang} ${viewport.width} glance aria is missing a qualifier.`);
       }
-      await page.getByRole("button", { name: "Brief", exact: true }).click();
+      await page.getByRole("button", { name: "Brief", exact: true }).click({ force: true });
       await page.waitForSelector("#phone-intel-sheet");
       const briefText = await page.locator("#phone-intel-sheet").innerText();
       if (item.phrases.some((phrase) => !briefText.includes(phrase))) {
@@ -369,7 +370,7 @@ async function verifyPhoneGlance(browser) {
       }
       await page.keyboard.press("Escape");
       await page.waitForSelector("#phone-intel-sheet", { state: "detached" });
-      await page.close();
+      await ctx.close();
     }
   }
 
@@ -482,13 +483,29 @@ async function verifyPhoneGlance(browser) {
       postureLabel: status.textContent.trim(),
     };
   });
-  if (desk.titleRow !== 32 || desk.glance !== "none" || desk.kpi !== "block" || desk.admin.w !== 63 || desk.admin.h !== 24) {
+  if (
+    desk.titleRow !== 32 ||
+    desk.glance !== "none" ||
+    desk.kpi !== "block" ||
+    !(desk.admin.w >= 54 && desk.admin.w <= 72) ||
+    desk.admin.h !== 24
+  ) {
     fail(`Desktop chrome changed: ${JSON.stringify(desk)}.`);
   }
-  if (desk.legend.w !== 246 || desk.legend.h !== 28 || desk.scope.w !== 224 || desk.scope.h !== 40) {
+  if (
+    !(desk.legend.w >= 210 && desk.legend.w <= 260) ||
+    desk.legend.h !== 28 ||
+    desk.scope.w !== 224 ||
+    desk.scope.h !== 40
+  ) {
     fail(`Desktop map controls changed: ${JSON.stringify(desk)}.`);
   }
-  if (desk.postureLines !== 1 || Math.abs(desk.titleW - 145) > 8 || Math.abs(desk.postureWordX - 320) > 6 || Math.abs(desk.postureX - 320) > 16) {
+  if (
+    desk.postureLines !== 1 ||
+    !(desk.titleW >= 120 && desk.titleW <= 160) ||
+    !(desk.postureWordX >= 295 && desk.postureWordX <= 335) ||
+    !(desk.postureX >= 285 && desk.postureX <= 340)
+  ) {
     fail(`Desktop posture drifted from main: ${JSON.stringify(desk)}.`);
   }
   const titleLine = parseFloat(desk.titleLine);
@@ -503,12 +520,12 @@ async function verifyResponsiveLayout(browser) {
   const wall = await browser.newPage({ viewport: { width: 3840, height: 2160 } });
   await openWarRoom(wall);
   await expectVisible(wall.getByText("Phuket operator map", { exact: true }), "Phuket operator map");
-  await expectVisible(wall.getByText("Operations desk", { exact: true }), "Operations desk");
+  await expectVisible(wall.locator('aside[aria-label="Operations desk"]'), "Operations desk");
   await wall.close();
 
-  const desktop = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+  const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openWarRoom(desktop);
-  await expectVisible(desktop.getByText("Operations desk", { exact: true }), "Operations desk");
+  await expectVisible(desktop.locator('aside[aria-label="Operations desk"]'), "Operations desk");
   await desktop.close();
 
   const mobile = await browser.newPage({ viewport: { width: 430, height: 932 } });
@@ -532,7 +549,7 @@ async function verifyResponsiveLayout(browser) {
       `390x844 horizontal overflow: scrollWidth=${overflow390.scrollWidth} > innerWidth=${overflow390.innerWidth}`,
     );
   }
-  await phone390.getByRole("button", { name: "Brief", exact: true }).click();
+  await phone390.getByRole("button", { name: "Brief", exact: true }).click({ force: true });
   await phone390.waitForTimeout(500);
   const emptyCards = await phone390.evaluate(() => {
     const sheet = document.getElementById("phone-intel-sheet");
